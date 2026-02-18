@@ -727,52 +727,25 @@ export class SalesforceApiService {
     /**
      * Generic method to fetch picklist values using UI API
      */
-    getPicklistValues(objectApiName: string, recordTypeId: string, fieldApiName: string): Observable<any> {
-        const method = `SalesforceApiService.getPicklistValues(${fieldApiName})`;
-        const token = this.contextService.accessToken;
-        const baseUrl = this.contextService.apiBaseUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com';
-        const url = `${baseUrl}/services/data/v65.0/ui-api/object-info/${objectApiName}/picklist-values/${recordTypeId}/${fieldApiName}`;
+    getAllPicklistValues(objectApiName: string, recordTypeId: string): Observable<any> {
+    const method = `SalesforceApiService.getAllPicklistValues`;
+    const token = this.contextService.accessToken;
+    const baseUrl = this.contextService.apiBaseUrl;
 
-        console.log(`[API Request] ${method}`, { url });
+    const url = `${baseUrl}/services/data/v65.0/ui-api/object-info/${objectApiName}/picklist-values/${recordTypeId}`;
 
-        const headers = new HttpHeaders({
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-        });
+    console.log(`[API Request] ${method}`, { url });
 
-        return this.http.get(url, { headers }).pipe(
-            tap(response => console.log(`[API Response] ${method}`, response)),
-            catchError(err => {
-                // Return mock data if no token/offline for dev
-                if (!token && !((window as any).Visualforce)) {
-                    console.warn(`[API Mock] Returning mock values for ${fieldApiName}`);
-                    return of({
-                        values: [
-                            { label: 'Mock Option 1', value: 'Mock Option 1' },
-                            { label: 'Mock Option 2', value: 'Mock Option 2' }
-                        ]
-                    });
-                }
-                return this.handleError(method, err);
-            })
-        );
-    }
+    const headers = new HttpHeaders({
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+    });
 
-    getRegionPicklist(recordTypeId: string): Observable<any> {
-        return this.getPicklistValues('QuoteLineItem', recordTypeId, 'Looker_Region__c');
-    }
-
-    getBillingFrequencyPicklist(recordTypeId: string): Observable<any> {
-        return this.getPicklistValues('QuoteLineItem', recordTypeId, 'Billing_Frequency__c');
-    }
-
-    getOperationTypePicklist(recordTypeId: string): Observable<any> {
-        return this.getPicklistValues('QuoteLineItem', recordTypeId, 'Operation_Type__c');
-    }
-
-    getTermStartsOnPicklist(recordTypeId: string): Observable<any> {
-        return this.getPicklistValues('QuoteLineItem', recordTypeId, 'Term_Starts_On__c');
-    }
+    return this.http.get(url, { headers }).pipe(
+        tap(response => console.log(`[API Response] ${method}`, response)),
+        catchError(err => this.handleError(method, err))
+    );
+   }
 
     /**
      * Fetches Bundle Details (Product Component Groups)

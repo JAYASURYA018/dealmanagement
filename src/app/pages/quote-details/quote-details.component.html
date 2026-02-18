@@ -131,11 +131,12 @@
                                             Start
                                             Date</label>
                                         <div class="relative w-full flex items-center">
-                                            <input type="date" [(ngModel)]="startDate"
+                                            <input type="date" [(ngModel)]="termStartInput"
+                                                (ngModelChange)="updateExpirationDate()"
                                                 class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                                                 placeholder="Select">
                                             <div class="text-sm font-medium text-gray-900 leading-tight">
-                                                {{ startDate ? (startDate | date:'mediumDate') : 'Select' }}
+                                                {{ termStartInput ? (termStartInput | date:'mediumDate') : 'Select' }}
                                             </div>
                                             <span
                                                 class="material-icons-outlined text-gray-600 text-lg ml-auto pointer-events-none">calendar_today</span>
@@ -149,6 +150,7 @@
                                             Date</label>
                                         <div class="relative w-full flex items-center">
                                             <input type="date" [(ngModel)]="termEndDate"
+                                                (ngModelChange)="updateTermFromDates()"
                                                 class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                                                 placeholder="Select">
                                             <div class="text-sm font-medium text-gray-900 leading-tight">
@@ -428,7 +430,7 @@
                             <h4 class="text-gray-800 text-base font-bold mb-3">Quote details</h4>
                             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
                                 <!-- Primary Contact -->
-                                <div (click)="primaryContactOpen = !primaryContactOpen; $event.stopPropagation()"
+                                <div (click)="togglePrimaryContact(); $event.stopPropagation()"
                                     class="bg-gray-100 p-2 rounded-lg border-b-2 border-transparent hover:bg-gray-200 transition-colors relative group h-[52px] flex items-center cursor-pointer">
                                     <!-- <div class="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 mr-2">
                                        
@@ -458,7 +460,7 @@
                                 </div>
 
                                 <!-- Sales Channel -->
-                                <div (click)="salesChannelOpen = !salesChannelOpen; $event.stopPropagation()"
+                                <div (click)="toggleSalesChannel(); $event.stopPropagation()"
                                     class="bg-gray-100 p-2 rounded-lg border-b-2 border-transparent hover:bg-gray-200 transition-colors relative group h-[52px] flex flex-col justify-center cursor-pointer">
                                     <label
                                         class="block text-[10px] text-gray-500 mb-0.5 uppercase tracking-wide font-medium">Sales
@@ -480,7 +482,7 @@
                                 </div>
 
                                 <!-- Operation Type -->
-                                <div (click)="operationTypeOpen = !operationTypeOpen; $event.stopPropagation()"
+                                <div (click)="toggleOperationType(); $event.stopPropagation()"
                                     class="bg-gray-100 p-2 rounded-lg border-b-2 border-transparent hover:bg-gray-200 transition-colors relative group h-[52px] flex flex-col justify-center cursor-pointer">
                                     <label
                                         class="block text-[10px] text-gray-500 mb-0.5 uppercase tracking-wide font-medium">Operation
@@ -524,7 +526,7 @@
                             <h4 class="text-gray-800 text-base font-bold mb-3">Subscription details</h4>
                             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
                                 <!-- Billing Frequency -->
-                                <div (click)="billingFrequencyOpen = !billingFrequencyOpen; $event.stopPropagation()"
+                                <div (click)="toggleBillingFrequency(); $event.stopPropagation()"
                                     class="bg-gray-100 p-2 rounded-lg border-b-2 border-transparent hover:bg-gray-200 transition-colors relative group h-[52px] flex flex-col justify-center cursor-pointer">
                                     <label
                                         class="block text-[10px] text-gray-500 mb-0.5 uppercase tracking-wide font-medium">Billing
@@ -536,7 +538,7 @@
                                             class="material-icons-outlined text-sm text-gray-400">arrow_drop_down</span>
                                     </div>
                                     <div *ngIf="billingFrequencyOpen" (click)="$event.stopPropagation()"
-                                        class="absolute left-0 top-[60px] w-full bg-white rounded-lg shadow-xl border border-gray-100 z-[100] py-2">
+                                        class="absolute left-0 top-[60px] w-full bg-white rounded-lg shadow-xl border border-gray-100 z-[100] py-2 max-h-[200px] overflow-y-auto slim-scrollbar">
                                         <button *ngFor="let freq of billingFrequencyOptions"
                                             (click)="selectBillingFrequency(freq)"
                                             class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 transition-colors">
@@ -546,7 +548,7 @@
                                 </div>
 
                                 <!-- Term Starts on -->
-                                <div (click)="termStartsOnOpen = !termStartsOnOpen; $event.stopPropagation()"
+                                <div (click)="toggleTermStartsOn(); $event.stopPropagation()"
                                     class="bg-gray-100 p-2 rounded-lg border-b-2 border-transparent hover:bg-gray-200 transition-colors relative group h-[52px] flex flex-col justify-center cursor-pointer">
                                     <label
                                         class="block text-[10px] text-gray-500 mb-0.5 uppercase tracking-wide font-medium">Term
@@ -759,11 +761,11 @@
                         <div class="text-sm space-y-1">
                             <div class="flex justify-between gap-8">
                                 <span class="font-semibold">Date:</span>
-                                <span>{{ ((previewData.StartDate || startDate) | date:'MM-dd-yyyy') || '-' }}</span>
+                                <span>{{ ((startDate || previewData.StartDate) | date:'MM-dd-yyyy') || '-' }}</span>
                             </div>
                             <div class="flex justify-between gap-8">
                                 <span class="font-semibold">Expires On:</span>
-                                <span>{{ ((previewData.ExpirationDate || expirationDate) | date:'MM-dd-yyyy') || '-'
+                                <span>{{ ((expirationDate || previewData.ExpirationDate) | date:'MM-dd-yyyy') || '-'
                                     }}</span>
                             </div>
                         </div>

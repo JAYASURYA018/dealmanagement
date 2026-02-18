@@ -21,6 +21,22 @@ import { SubscriptionPeriodItemComponent, SubscriptionPeriod, ProductItem } from
     standalone: true,
     imports: [CommonModule, FormsModule, DiscountsIncentivesComponent, SubscriptionPeriodsModalComponent, SubscriptionPeriodItemComponent],
     templateUrl: './quote-details.component.html',
+    styles: [`
+        .slim-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .slim-scrollbar::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 4px;
+        }
+        .slim-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        .slim-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    `]
 })
 export class QuoteDetailsComponent implements OnInit {
     static lastInitTime = 0;
@@ -57,9 +73,16 @@ export class QuoteDetailsComponent implements OnInit {
     isGCP: boolean = false;
 
     // Dates
-    startDate: string = '';
-    expirationDate: string = '';
+    startDate: string = new Date().toISOString().split('T')[0]; // Default to Today
+    expirationDate: string = new Date(Date.now() + 45 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     previewCommitments: any[] = [];
+    todayDate: Date = new Date(); // Keep for explicit today reference if needed, but startDate is now separate
+
+    // Term Start Date (Separate from Quote Start Date)
+    termStartInput: string = '';
+
+    get termStartDate(): string { return this.termStartInput; }
+    set termStartDate(val: string) { this.termStartInput = val; }
 
     // Subscription Flow (Looker New RCA) Properties
     operationType: string = 'New';
@@ -93,9 +116,6 @@ export class QuoteDetailsComponent implements OnInit {
     // API Data for Save Logic
     existingQuoteLineItems: any[] = [];
     productRelationshipTypeId: string = '';
-
-    get termStartDate(): string { return this.startDate; }
-    set termStartDate(val: string) { this.startDate = val; }
 
 
     switchTab(tab: 'details' | 'discounts') {
@@ -230,9 +250,11 @@ export class QuoteDetailsComponent implements OnInit {
     }
 
     onSubscriptionPeriodsCreated(frequency: string) {
-        if (!this.startDate || !this.termEndDate) {
+        const effectiveStart = (this.isLookerSubscription && this.termStartInput) ? this.termStartInput : this.startDate;
+
+        if (!effectiveStart || !this.termEndDate) {
             // If dates are not set, just add one period or alert
-            if (!this.startDate) {
+            if (!effectiveStart) {
                 alert('Please select a Start Date first.');
                 this.closeSubscriptionModal();
                 return;
@@ -240,17 +262,17 @@ export class QuoteDetailsComponent implements OnInit {
             // If end date missing, maybe just add one year
         }
 
-        const totalStart = this.parseDate(this.startDate);
+        const totalStart = this.parseDate(effectiveStart);
         const totalEnd = this.termEndDate ? this.parseDate(this.termEndDate) : new Date(totalStart.getFullYear() + 1, totalStart.getMonth(), totalStart.getDate() - 1);
 
         if (totalStart > totalEnd) {
-            this.addOnePeriod(this.startDate, this.termEndDate || this.toIsoDateString(totalEnd));
+            this.addOnePeriod(effectiveStart, this.termEndDate || this.toIsoDateString(totalEnd));
             this.closeSubscriptionModal();
             return;
         }
 
         if (frequency === 'Custom') {
-            this.addOnePeriod(this.startDate, this.termEndDate || '');
+            this.addOnePeriod(effectiveStart, this.termEndDate || '');
         } else {
             this.subscriptionPeriods = [];
             let currentStart = new Date(totalStart);
@@ -343,9 +365,10 @@ export class QuoteDetailsComponent implements OnInit {
     }
 
     private getTermYears(): number {
-        if (!this.startDate || !this.termEndDate) return 0;
+        const startToUse = (this.isLookerSubscription && this.termStartInput) ? this.termStartInput : this.startDate;
+        if (!startToUse || !this.termEndDate) return 0;
         try {
-            const start = this.parseDate(this.startDate);
+            const start = this.parseDate(startToUse);
             const end = this.parseDate(this.termEndDate);
             if (isNaN(start.getTime()) || isNaN(end.getTime())) return 0;
             let months = (end.getFullYear() - start.getFullYear()) * 12;
@@ -449,6 +472,19 @@ export class QuoteDetailsComponent implements OnInit {
                             this.website = quote.Account.Website;
                         }
 
+                        if (quote.StartDate) {
+                            this.startDate = quote.StartDate;
+                        }
+
+                        if (quote.ExpirationDate) {
+                            this.expirationDate = quote.ExpirationDate;
+                        } else {
+                            // Default Expiration Date: Today + 45 days
+                            const date = new Date();
+                            date.setDate(date.getDate() + 45);
+                            this.expirationDate = this.toIsoDateString(date);
+                        }
+
 
                         if (quote.QuoteLineItems?.records?.length > 0) {
                             const lineItem = quote.QuoteLineItems.records[0];
@@ -484,86 +520,89 @@ export class QuoteDetailsComponent implements OnInit {
         });
 
         this.loadBundleDetails();
-        this.loadTermStartsOnFromAPI();
-        this.loadBillingFrequencyFromAPI();
-        this.loadOperationTypeFromAPI();
-        this.loadLookerRegionFromAPI();
+        this.loadAllPicklists();
     }
 
-    loadLookerRegionFromAPI() {
+    loadAllPicklists() {
         const recordTypeId = '012000000000000AAA';
-        this.sfApi.getRegionPicklist(recordTypeId).subscribe({
-            next: (data) => {
-                if (data && data.values) {
-                    this.lookerRegionOptions = data.values.map((v: any) => v.label);
-                }
-            },
-            error: (err) => {
-                console.error('Error loading Looker Region:', err);
-                // Fallback is already handled in service or we can keep defaults
+
+        this.sfApi.getAllPicklistValues('QuoteLineItem', recordTypeId)
+            .subscribe({
+                next: (response) => {
+
+                    const picklists = response.picklistFieldValues;
+
+                    this.loadLookerRegion(picklists);
+                    this.loadOperationType(picklists);
+                    this.loadBillingFrequency(picklists);
+                    this.loadTermStartsOn(picklists);
+
+                },
+                error: err => console.error('Error loading picklists:', err)
+            });
+    }
+    loadLookerRegion(picklists: any) {
+
+        const data = picklists.Looker_Region__c;
+
+        if (data?.values) {
+            this.lookerRegionOptions = data.values.map((v: any) => v.label);
+        }
+
+    }
+    loadOperationType(picklists: any) {
+
+        const data = picklists.Operation_Type__c;
+
+        if (data?.values) {
+
+            this.operationTypeOptions = data.values.map((v: any) => v.label);
+
+            if (!this.operationType && data.defaultValue) {
+                this.operationType = data.defaultValue.label;
             }
-        });
+            else if (!this.operationType && this.operationTypeOptions.length > 0) {
+                this.operationType = this.operationTypeOptions[0];
+            }
+        }
+    }
+    loadBillingFrequency(picklists: any) {
+
+        const data = picklists.Billing_Frequency__c;
+
+        if (data?.values) {
+
+            this.billingFrequencyOptions =
+                data.values
+                    .map((v: any) => v.label);
+
+
+            if (data.defaultValue?.label) {
+                this.billingFrequency = data.defaultValue.label;
+            }
+            else if (this.billingFrequencyOptions.length > 0) {
+                this.billingFrequency = this.billingFrequencyOptions[0];
+            }
+        }
+    }
+    loadTermStartsOn(picklists: any) {
+
+        const data = picklists.Term_Starts_On__c;
+
+        if (data?.values) {
+
+            this.termStartsOnOptions =
+                data.values.map((v: any) => v.label);
+
+            if (data.defaultValue?.label) {
+                this.termStartsOn = data.defaultValue.label;
+            }
+            else if (!this.termStartsOn && this.termStartsOnOptions.length > 0) {
+                this.termStartsOn = this.termStartsOnOptions[0];
+            }
+        }
     }
 
-    loadOperationTypeFromAPI() {
-        const recordTypeId = '012000000000000AAA';
-        this.sfApi.getOperationTypePicklist(recordTypeId).subscribe({
-            next: (data) => {
-                if (data && data.values) {
-                    this.operationTypeOptions = data.values.map((v: any) => v.label);
-                    if (!this.operationType && data.defaultValue) {
-                        this.operationType = data.defaultValue.label;
-                    } else if (!this.operationType && this.operationTypeOptions.length > 0) {
-                        this.operationType = this.operationTypeOptions[0];
-                    }
-                }
-            },
-            error: (err) => console.error('Error loading Operation Type:', err)
-        });
-    }
-
-    loadBillingFrequencyFromAPI() {
-        const recordTypeId = '012000000000000AAA';
-        this.sfApi.getBillingFrequencyPicklist(recordTypeId).subscribe({
-            next: (data) => {
-                if (data && data.values) {
-                    this.billingFrequencyOptions = data.values
-                        .map((v: any) => v.label)
-                        .filter((label: string) => label !== 'None');
-
-                    const targetDefault = 'Annual in Advance Anniversary';
-                    const foundDefault = this.billingFrequencyOptions.find(opt => opt.toLowerCase() === targetDefault.toLowerCase());
-
-                    if (foundDefault) {
-                        this.billingFrequency = foundDefault;
-                    } else if (data.defaultValue && data.defaultValue.label) {
-                        this.billingFrequency = data.defaultValue.label;
-                    } else if (this.billingFrequencyOptions.length > 0) {
-                        this.billingFrequency = this.billingFrequencyOptions[0];
-                    }
-                }
-            },
-            error: (err) => console.error('Error loading Billing Frequency:', err)
-        });
-    }
-
-    loadTermStartsOnFromAPI() {
-        const recordTypeId = '012000000000000AAA';
-        this.sfApi.getTermStartsOnPicklist(recordTypeId).subscribe({
-            next: (data) => {
-                if (data && data.values) {
-                    this.termStartsOnOptions = data.values.map((v: any) => v.label);
-
-                    if (data.defaultValue && data.defaultValue.label) {
-                        this.termStartsOn = data.defaultValue.label;
-                    } else if (!this.termStartsOn && this.termStartsOnOptions.length > 0) {
-                        this.termStartsOn = this.termStartsOnOptions[0];
-                    }
-                }
-            },
-            error: (err) => console.error('Error loading Term Starts On:', err)
-        });
-    }
 
 
 
@@ -836,10 +875,18 @@ export class QuoteDetailsComponent implements OnInit {
     }
 
     get totalTerms(): number {
-        if (this.activeTab === 'discounts' && this.isLookerSubscription) {
-            if (this.subscriptionPeriods.length > 0) {
-                return this.getTermYears() * 12;
-            }
+        if (this.isLookerSubscription) {
+            // Calculate actual months from term start/end for accuracy
+            const startToUse = this.termStartInput || this.startDate;
+            if (!startToUse || !this.termEndDate) return 0;
+            const start = this.parseDate(startToUse);
+            const end = this.parseDate(this.termEndDate);
+            if (isNaN(start.getTime()) || isNaN(end.getTime())) return 0;
+
+            const endAdjusted = new Date(end);
+            endAdjusted.setDate(endAdjusted.getDate() + 1);
+            let diffMonths = (endAdjusted.getFullYear() - start.getFullYear()) * 12 + (endAdjusted.getMonth() - start.getMonth());
+            return Math.max(1, diffMonths);
         }
         return this.commitmentPeriods.reduce((acc, curr) => acc + (parseInt(curr.months) || 0), 0);
     }
@@ -1040,6 +1087,9 @@ export class QuoteDetailsComponent implements OnInit {
         this.activeMenuIndex = null;
         this.primaryContactOpen = false;
         this.salesChannelOpen = false;
+        this.operationTypeOpen = false;
+        this.billingFrequencyOpen = false;
+        this.termStartsOnOpen = false;
     }
 
     checkCollapse(index: number, event: FocusEvent) { }
@@ -1060,6 +1110,20 @@ export class QuoteDetailsComponent implements OnInit {
             return;
         }
 
+        if (this.isLookerSubscription) {
+            if (!this.termStartInput) return; // Wait for term start
+            const [y, m, d] = this.termStartInput.split('-').map(Number);
+            const selectedDate = new Date(y, m - 1, d);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            if (selectedDate < today) {
+                this.toastService.show('You cannot select a term start date less than the current date.', 'warning');
+                this.termStartInput = '';
+                return;
+            }
+        }
+
         const totalMonths = this.totalTerms;
         if (totalMonths <= 0 && !this.isLookerSubscription) {
             this.expirationDate = '';
@@ -1077,16 +1141,33 @@ export class QuoteDetailsComponent implements OnInit {
         if (!this.isLookerSubscription) {
             this.expirationDate = isoDate;
         } else {
-            this.termEndDate = isoDate;
+            this.updateTermFromDates();
         }
     }
 
 
     updateTermFromDates() {
-        if (!this.startDate || !this.termEndDate) return;
+        if (!this.termStartInput || !this.termEndDate) return;
 
-        const start = new Date(this.startDate);
-        const end = new Date(this.termEndDate);
+        const startParts = this.termStartInput.split('-').map(Number);
+        const endParts = this.termEndDate.split('-').map(Number);
+
+        const start = new Date(startParts[0], startParts[1] - 1, startParts[2]);
+        const end = new Date(endParts[0], endParts[1] - 1, endParts[2]);
+
+        if (isNaN(start.getTime()) || isNaN(end.getTime())) return;
+
+        // Check if duration > 5 years
+        const limitDate = new Date(start);
+        limitDate.setFullYear(limitDate.getFullYear() + 5);
+
+        // If end date is strictly after limit date (start + 5 years), then it's > 5 years
+        // Example: Start 2026-01-01. Limit 2031-01-01. End 2031-01-02 is > 5 years.
+        if (end > limitDate) {
+            this.toastService.show('The duration between start and end dates cannot exceed 5 years.', 'warning');
+            this.termEndDate = '';
+            return;
+        }
 
         // Calculate difference in months
         let months = (end.getFullYear() - start.getFullYear()) * 12;
@@ -1100,7 +1181,6 @@ export class QuoteDetailsComponent implements OnInit {
         let diffMonths = (endAdjusted.getFullYear() - start.getFullYear()) * 12 + (endAdjusted.getMonth() - start.getMonth());
 
         if (diffMonths < 1) diffMonths = 1;
-
 
         if (this.commitmentPeriods.length === 0) {
             this.commitmentPeriods.push({ months: diffMonths, amount: null, isCollapsed: false });
@@ -1164,6 +1244,44 @@ export class QuoteDetailsComponent implements OnInit {
     }
 
     // Dropdown Helpers for Subscription Flow
+    closeAllDropdowns() {
+        this.operationTypeOpen = false;
+        this.billingFrequencyOpen = false;
+        this.termStartsOnOpen = false;
+        this.primaryContactOpen = false;
+        this.salesChannelOpen = false;
+    }
+
+    toggleOperationType() {
+        const wasOpen = this.operationTypeOpen;
+        this.closeAllDropdowns();
+        this.operationTypeOpen = !wasOpen;
+    }
+
+    toggleBillingFrequency() {
+        const wasOpen = this.billingFrequencyOpen;
+        this.closeAllDropdowns();
+        this.billingFrequencyOpen = !wasOpen;
+    }
+
+    toggleTermStartsOn() {
+        const wasOpen = this.termStartsOnOpen;
+        this.closeAllDropdowns();
+        this.termStartsOnOpen = !wasOpen;
+    }
+
+    togglePrimaryContact() {
+        const wasOpen = this.primaryContactOpen;
+        this.closeAllDropdowns();
+        this.primaryContactOpen = !wasOpen;
+    }
+
+    toggleSalesChannel() {
+        const wasOpen = this.salesChannelOpen;
+        this.closeAllDropdowns();
+        this.salesChannelOpen = !wasOpen;
+    }
+
     selectOperationType(type: string) {
         this.operationType = type;
         this.operationTypeOpen = false;
@@ -1259,12 +1377,20 @@ export class QuoteDetailsComponent implements OnInit {
                         "Term_Starts_On__c": this.termStartsOn,
                         "Operation_Type__c": this.operationType,
                         "Billing_Frequency__c": this.billingFrequency,
+                        "SubscriptionTerm": 1,
+                        "SubscriptionTermUnit": "Anual",
                         "PeriodBoundary": "Anniversary"
                     };
 
-                    if (this.startDate) lineUpdate["StartDate"] = this.startDate;
+                    if (this.isLookerSubscription && this.termStartInput) {
+                        lineUpdate["StartDate"] = this.termStartInput;
+                    } else if (this.startDate) {
+                        lineUpdate["StartDate"] = this.startDate;
+                    }
 
-                    if (this.expirationDate) {
+                    if (this.isLookerSubscription && firstPeriod.endDate) {
+                        lineUpdate["EndDate"] = firstPeriod.endDate;
+                    } else if (this.expirationDate) {
                         lineUpdate["EndDate"] = this.expirationDate;
                     } else if (firstPeriod.endDate) {
                         lineUpdate["EndDate"] = firstPeriod.endDate;
@@ -1455,6 +1581,8 @@ export class QuoteDetailsComponent implements OnInit {
                         "Billing_Frequency__c": this.billingFrequency,
                         "Operation_Type__c": this.operationType,
                         "Term_Starts_On__c": this.termStartsOn,
+                        "SubscriptionTerm": 1,
+                        "SubscriptionTermUnit": "Anual",
                         "PeriodBoundary": "Anniversary",
                         "QuoteLineGroupId": `@{${groupRef}.id}`
                     };
@@ -1539,7 +1667,8 @@ export class QuoteDetailsComponent implements OnInit {
                 "Product2Id": item.productId,
                 "PricebookEntryId": item.pricebookEntryId || '01uDz00000dqXP8IAM',
                 "Quantity": quantity,
-
+                "SubscriptionTerm": 1,
+                "SubscriptionTermUnit": "Anual",
                 "PeriodBoundary": "Anniversary",
                 "BillingFrequency": standardFreq,
                 "Billing_Frequency__c": this.billingFrequency,
@@ -1556,6 +1685,18 @@ export class QuoteDetailsComponent implements OnInit {
 
         if (discount > 0) {
             record.record["Discount"] = discount;
+        }
+
+        if (item.lookerInstanceId) {
+            record.record["Looker_Instance_Id__c"] = item.lookerInstanceId;
+        }
+
+        if (item.gcpProjectId) {
+            record.record["GCP_Project_Id__c"] = item.gcpProjectId;
+        }
+
+        if (item.region) {
+            record.record["Looker_Region__c"] = item.region;
         }
 
         records.push(record);
@@ -1575,8 +1716,8 @@ export class QuoteDetailsComponent implements OnInit {
     }
 
     resetForm() {
-        this.startDate = '';
-        this.expirationDate = '';
+        this.startDate = new Date().toISOString().split('T')[0];
+        this.expirationDate = new Date(Date.now() + 45 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
         this.commitmentPeriods = [{ months: null, amount: null, isCollapsed: false }];
         this.activeMenuIndex = null;
     }

@@ -128,7 +128,8 @@
                 <div
                     class="bg-white p-2 px-3 rounded-md border border-gray-300 hover:border-gray-400 transition-colors flex flex-col justify-center h-[56px] shadow-sm">
                     <label class="block text-[11px] text-gray-500 font-medium leading-none mb-1">Quantity</label>
-                    <input type="number" [(ngModel)]="row.quantity" (change)="productChanged.emit()"
+                    <input type="number" [(ngModel)]="row.quantity" min="0"
+                        (change)="row.quantity = (row.quantity ?? 0) < 0 ? 0 : (row.quantity ?? 0); productChanged.emit()"
                         class="w-full bg-transparent text-sm font-semibold text-gray-800 outline-none">
                 </div>
 
