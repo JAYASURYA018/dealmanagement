@@ -3,17 +3,16 @@ import { HttpClient, HttpParams, HttpHeaders } from '@angular/common/http';
 import { TwPkceService } from './tw-pkce.service';
 import { lastValueFrom, BehaviorSubject } from 'rxjs';
 import { Router } from '@angular/router';
+import { environment } from '../../environments/environment';
 
 @Injectable({ providedIn: 'root' })
 export class TwAuthService {
-    // Use config from existing project, but adapt for PKCE
-    private clientId = '3MVG95bilXG9ExQH_TkPtLtmcUcy0vRXpiTSVcpu_cEbS69a3fFQtNzIvO.Z9HRkVihoQWtIMtt3uGRY3mUxM';
-    // Use the sandbox domain detected
-    private loginUrl = 'https://vector--rcaagivant.sandbox.my.salesforce.com/services/oauth2/authorize';
-    private tokenUrl = 'https://vector--rcaagivant.sandbox.my.salesforce.com/services/oauth2/token';
+    // All OAuth config comes from environment — no secrets in source code.
+    private clientId = environment.salesforcePkce.clientId;
+    private loginUrl = environment.salesforcePkce.loginUrl;
+    private tokenUrl = environment.salesforcePkce.tokenUrl;
 
-    // Callback URL - must match what is in Connected App
-    // Using hash routing, so callback is at /#/callback
+    // Callback URL — must match what is registered in the Connected App
     private callbackUrl = window.location.origin + '/#/callback';
 
     private tokenSubject = new BehaviorSubject<string | null>(sessionStorage.getItem('access_token'));
@@ -91,7 +90,7 @@ export class TwAuthService {
     logout() {
         sessionStorage.removeItem('access_token');
         sessionStorage.removeItem('instance_url');
-        localStorage.removeItem('sf_access_token'); // Clear legacy if we set it
+        localStorage.removeItem('sf_access_token');
         this.tokenSubject.next(null);
         this.router.navigate(['/']);
     }

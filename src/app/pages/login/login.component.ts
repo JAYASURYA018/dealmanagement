@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { OAuthService } from '../../services/oauth.service';
+import { environment } from '../../../environments/environment';
 
 @Component({
     selector: 'app-login',
@@ -14,12 +15,14 @@ export class LoginComponent {
     private oauthService = inject(OAuthService);
     private router = inject(Router);
 
+    // Default values come from environment config (no secrets in source code).
+    // The user can override these in the login form at runtime.
     credentials = {
-        clientId: '3MVG9YFqzc_KnL.wMMu8VYv3FCif_NT_iDRNO0PvVu2Vc_hiMsDFvwKSFTSVgokLY1UZcYyBbT8Pf1.piml_d',
-        clientSecret: '58EBADED59483248A597131444DE984641B15071D0E8EF6124A816DA70042D1D',
-        username: 'jayasuryav@google.com',
-        password: 'Jayasuryaagivant@123',
-        loginUrl: 'https://vector--rcaagivant.sandbox.my.salesforce.com'
+        clientId: environment.salesforce.clientId,
+        clientSecret: environment.salesforce.clientSecret,
+        username: environment.salesforce.username,
+        password: '',
+        loginUrl: environment.salesforce.loginUrl
     };
 
     isLoading = false;
@@ -30,10 +33,10 @@ export class LoginComponent {
         const saved = localStorage.getItem('sf_dev_credentials');
         if (saved) {
             const parsed = JSON.parse(saved);
-            this.credentials.clientId = parsed.clientId || '';
-            this.credentials.clientSecret = parsed.clientSecret || '';
-            this.credentials.username = parsed.username || '';
-            this.credentials.loginUrl = parsed.loginUrl || 'https://test.salesforce.com';
+            this.credentials.clientId = parsed.clientId || this.credentials.clientId;
+            this.credentials.clientSecret = parsed.clientSecret || this.credentials.clientSecret;
+            this.credentials.username = parsed.username || this.credentials.username;
+            this.credentials.loginUrl = parsed.loginUrl || this.credentials.loginUrl;
         }
     }
 
