@@ -1,0 +1,9 @@
+<div class="flex flex-col gap-3.5 ">
+    <div *ngIf="filteredProducts.length > 0; else noProducts" class="flex flex-col gap-3.5">
+        <app-product-card *ngFor="let product of filteredProducts" [product]="product"></app-product-card>
+    </div>
+
+    <ng-template #noProducts>
+        <div class="text-center py-10 text-gray-400">No products found matching your criteria.</div>
+    </ng-template>
+</div>

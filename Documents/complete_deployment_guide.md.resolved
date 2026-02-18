@@ -1,0 +1,417 @@
+# Google Quote Creation - Complete Deployment Guide
+
+## 📋 Table of Contents
+1. [Prerequisites](#prerequisites)
+2. [Initial Setup](#initial-setup)
+3. [Deploy Apex Classes](#deploy-apex-classes)
+4. [Deploy Visualforce Pages](#deploy-visualforce-pages)
+5. [Build and Deploy Angular App](#build-and-deploy-angular-app)
+6. [Deploy Lightning Web Components](#deploy-lightning-web-components)
+7. [Add "New Quote" Button to Page Layout](#add-new-quote-button-to-page-layout)
+8. [Testing](#testing)
+9. [Updating the Application](#updating-the-application)
+
+---
+
+## Prerequisites
+
+### Required Tools
+- **Salesforce CLI** (sf) - Latest version
+- **Node.js** - v18 or higher
+- **Angular CLI** - v21 or higher
+- **Git** (optional)
+
+### Salesforce Org Setup
+- Developer Edition or Sandbox org
+- System Administrator access
+- Salesforce CLI authenticated to your org
+
+### Verify CLI Authentication
+```powershell
+sf org list
+```
+
+If not authenticated:
+```powershell
+sf org login web -a MyDevOrg
+```
+
+---
+
+## Initial Setup
+
+### 1. Clone/Download the Project
+```powershell
+cd "C:\Google Quote Creation"
+```
+
+### 2. Install Angular Dependencies
+```powershell
+cd google-quote-creation
+npm install
+```
+
+### 3. Verify Project Structure
+```
+google-quote-creation/
+├── src/                          # Angular application
+├── salesforce/
+│   └── force-app/
+│       └── main/
+│           └── default/
+│               ├── classes/      # Apex classes
+│               ├── pages/        # Visualforce pages
+│               ├── lwc/          # Lightning Web Components
+│               ├── staticresources/ # Angular build output
+│               └── objects/      # Object metadata
+└── sfdx-project.json
+```
+
+---
+
+## Deploy Apex Classes
+
+### What Gets Deployed
+- [QuoteController.cls](file:///c:/Google%20Quote%20Creation/google-quote-creation/salesforce/force-app/main/default/classes/QuoteController.cls) - Fetches Opportunity data and prepares context for Angular app
+
+### Deployment Command
+```powershell
+cd "C:\Google Quote Creation\google-quote-creation"
+sf project deploy start -d salesforce/force-app/main/default/classes -o MyDevOrg
+```
+
+### Verify Deployment
+```powershell
+sf project deploy start -d salesforce/force-app/main/default/classes -o MyDevOrg --dry-run
+```
+
+### Expected Output
+```
+✔ Preparing
+✔ Deploying Metadata
+✔ Done
+
+Deployed Source:
+  QuoteController.cls
+  QuoteController.cls-meta.xml
+```
+
+---
+
+## Deploy Visualforce Pages
+
+### What Gets Deployed
+- [GoogleQuoteAppVF.page](file:///c:/Google%20Quote%20Creation/google-quote-creation/salesforce/force-app/main/default/pages/GoogleQuoteAppVF.page) - Main Visualforce page that hosts the Angular app
+- Includes Google Fonts and Material Icons
+- Injects Salesforce context data into Angular
+
+### Deployment Command
+```powershell
+sf project deploy start -d salesforce/force-app/main/default/pages -o MyDevOrg
+```
+
+### Expected Output
+```
+✔ Preparing
+✔ Deploying Metadata
+✔ Done
+
+Deployed Source:
+  GoogleQuoteAppVF.page
+  GoogleQuoteAppVF.page-meta.xml
+```
+
+---
+
+## Build and Deploy Angular App
+
+### Step 1: Build the Angular Application
+```powershell
+cd "C:\Google Quote Creation\google-quote-creation"
+npm run build
+```
+
+This creates production-ready files in `dist/google-quote-creation/browser/`
+
+### Step 2: Create Static Resource Archive
+
+#### Option A: Using PowerShell (Recommended)
+```powershell
+# Navigate to the build output
+cd dist/google-quote-creation/browser
+
+# Create a zip file
+Compress-Archive -Path * -DestinationPath GoogleQuoteAppV2.zip -Force
+
+# Move to static resources folder
+Move-Item GoogleQuoteAppV2.zip ../../../salesforce/force-app/main/default/staticresources/ -Force
+```
+
+#### Option B: Manual Process
+1. Navigate to `dist/google-quote-creation/browser/`
+2. Select all files
+3. Right-click → Send to → Compressed (zipped) folder
+4. Rename to `GoogleQuoteAppV2.zip`
+5. Move to `salesforce/force-app/main/default/staticresources/`
+
+### Step 3: Deploy Static Resource
+```powershell
+cd "C:\Google Quote Creation\google-quote-creation"
+sf project deploy start -d salesforce/force-app/main/default/staticresources -o MyDevOrg
+```
+
+### Expected Output
+```
+✔ Preparing
+✔ Deploying Metadata
+✔ Done
+
+Deployed Source:
+  GoogleQuoteAppV2.resource
+  GoogleQuoteAppV2.resource-meta.xml
+  GoogleQuoteAppV2.zip
+```
+
+---
+
+## Deploy Lightning Web Components
+
+### What Gets Deployed
+- `quoteBridgeV3` - LWC that redirects from modal to full-page Visualforce app
+- Configured as a Record Action for Opportunity
+
+### Deployment Command
+```powershell
+sf project deploy start -d salesforce/force-app/main/default/lwc -o MyDevOrg
+```
+
+### Expected Output
+```
+✔ Preparing
+✔ Deploying Metadata
+✔ Done
+
+Deployed Source:
+  quoteBridgeV3/
+    quoteBridgeV3.html
+    quoteBridgeV3.js
+    quoteBridgeV3.js-meta.xml
+```
+
+---
+
+## Add "New Quote" Button to Page Layout
+
+### Step 1: Navigate to Page Layout Editor
+1. Go to **Setup** (gear icon)
+2. Search for **Object Manager**
+3. Click **Opportunity**
+4. Click **Page Layouts**
+5. Click **Edit** next to your active layout (e.g., "Opportunity Layout")
+
+### Step 2: Add the Action Button
+1. In the top palette, click **Mobile & Lightning Actions**
+2. Find **"quoteBridgeV3"** in the list
+3. Drag it into the **"Salesforce Mobile and Lightning Experience Actions"** section
+4. Position it where you want (e.g., after "New Case")
+5. Click **Save**
+
+### Step 3: Verify Button Appears
+1. Navigate to any Opportunity record
+2. Look for the **quoteBridgeV3** button in the action bar
+3. Click it to test
+
+---
+
+## Testing
+
+### Test the Complete Flow
+
+1. **Open an Opportunity**
+   - Navigate to any Opportunity record in Salesforce
+
+2. **Click the "quoteBridgeV3" Button**
+   - Should redirect to full-page quote app (not a popup)
+
+3. **Verify Data Loading**
+   - Check that Opportunity data is displayed correctly
+   - Verify Account Name, Website, Sales Channel
+   - Confirm Quote ID is showing
+
+4. **Test UI Interactions**
+   - Add/remove commitment periods
+   - Fill in months and amounts
+   - Test dropdown selections
+   - Verify button styling and colors
+
+### Common Issues and Solutions
+
+#### Button Not Appearing
+- **Solution**: Refresh the page layout or clear browser cache
+- Verify the LWC is deployed: `sf project deploy start -d salesforce/force-app/main/default/lwc/quoteBridgeV3 -o MyDevOrg`
+
+#### "Redirecting..." Message Appears
+- **Solution**: The LWC is working correctly - it redirects automatically
+- If stuck, check browser console for errors
+
+#### Data Not Loading
+- **Solution**: Verify Apex class is deployed
+- Check Opportunity has required fields (Account, Amount, etc.)
+- Review browser console for JavaScript errors
+
+#### Styling Issues
+- **Solution**: Rebuild and redeploy Angular app
+- Clear browser cache
+- Verify static resource is deployed correctly
+
+---
+
+## Updating the Application
+
+### When You Make Changes to Angular Code
+
+1. **Rebuild the Angular App**
+   ```powershell
+   cd "C:\Google Quote Creation\google-quote-creation"
+   npm run build
+   ```
+
+2. **Recreate Static Resource**
+   ```powershell
+   cd dist/google-quote-creation/browser
+   Compress-Archive -Path * -DestinationPath GoogleQuoteAppV2.zip -Force
+   Move-Item GoogleQuoteAppV2.zip ../../../salesforce/force-app/main/default/staticresources/ -Force
+   ```
+
+3. **Redeploy Static Resource**
+   ```powershell
+   cd "C:\Google Quote Creation\google-quote-creation"
+   sf project deploy start -d salesforce/force-app/main/default/staticresources -o MyDevOrg
+   ```
+
+4. **Clear Browser Cache**
+   - Hard refresh: `Ctrl + Shift + R` (Windows) or `Cmd + Shift + R` (Mac)
+
+### When You Make Changes to Apex
+
+```powershell
+sf project deploy start -d salesforce/force-app/main/default/classes -o MyDevOrg
+```
+
+### When You Make Changes to Visualforce
+
+```powershell
+sf project deploy start -d salesforce/force-app/main/default/pages -o MyDevOrg
+```
+
+### When You Make Changes to LWC
+
+```powershell
+sf project deploy start -d salesforce/force-app/main/default/lwc -o MyDevOrg
+```
+
+---
+
+## Quick Reference Commands
+
+### Full Deployment (All Components)
+```powershell
+# Deploy everything at once
+sf project deploy start -d salesforce/force-app/main/default -o MyDevOrg
+```
+
+### Build and Deploy Angular (Complete Flow)
+```powershell
+# 1. Build
+npm run build
+
+# 2. Package
+cd dist/google-quote-creation/browser
+Compress-Archive -Path * -DestinationPath GoogleQuoteAppV2.zip -Force
+Move-Item GoogleQuoteAppV2.zip ../../../salesforce/force-app/main/default/staticresources/ -Force
+cd ../../..
+
+# 3. Deploy
+sf project deploy start -d salesforce/force-app/main/default/staticresources -o MyDevOrg
+```
+
+### Check Deployment Status
+```powershell
+sf project deploy report -o MyDevOrg
+```
+
+### Validate Before Deploying
+```powershell
+sf project deploy start -d salesforce/force-app/main/default -o MyDevOrg --dry-run
+```
+
+---
+
+## Architecture Overview
+
+```mermaid
+graph TD
+    A[User Clicks quoteBridgeV3 Button] --> B[LWC Record Action Triggered]
+    B --> C[Redirect to GoogleQuoteAppVF Page]
+    C --> D[Visualforce Loads Angular App]
+    D --> E[Angular Bootstraps]
+    E --> F[Fetch Salesforce Context via postMessage]
+    F --> G[QuoteController.cls Fetches Opportunity Data]
+    G --> H[Data Injected into Angular]
+    H --> I[Quote Details Page Renders]
+```
+
+### Component Responsibilities
+
+| Component | Purpose |
+|-----------|---------|
+| **quoteBridgeV3 (LWC)** | Record Action that redirects to full-page app |
+| **GoogleQuoteAppVF (Visualforce)** | Hosts Angular app and injects Salesforce context |
+| **QuoteController (Apex)** | Fetches Opportunity/Account data from Salesforce |
+| **Angular App** | Main quote creation UI with forms and interactions |
+| **GoogleQuoteAppV2 (Static Resource)** | Compiled Angular application files |
+
+---
+
+## Troubleshooting
+
+### Deployment Fails with "Component Failures"
+- Run with `--json` flag to see detailed errors
+- Check file paths and naming conventions
+- Verify metadata XML files are valid
+
+### Angular App Shows Blank Page
+- Check browser console for errors
+- Verify static resource is deployed correctly
+- Ensure `GoogleQuoteAppVF.page` has correct resource name
+
+### Data Not Populating
+- Verify Opportunity has required fields
+- Check Apex class is deployed
+- Review browser console for `postMessage` errors
+
+### Button Opens in Popup Instead of New Tab
+- Verify `quoteBridgeV3.js` has correct redirect logic
+- Check LWC metadata has `lightning__RecordAction` target
+- Clear browser cache
+
+---
+
+## Support and Maintenance
+
+### Logs and Debugging
+- **Browser Console**: `F12` → Console tab
+- **Salesforce Debug Logs**: Setup → Debug Logs
+- **Deployment Logs**: Check terminal output after `sf project deploy`
+
+### Performance Optimization
+- Minimize Angular bundle size
+- Use lazy loading for routes
+- Optimize images and assets
+- Enable Salesforce caching
+
+### Security Considerations
+- Review Apex sharing rules
+- Validate user permissions
+- Sanitize user inputs
+- Use CSP headers in Visualforce

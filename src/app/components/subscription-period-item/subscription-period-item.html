@@ -1,0 +1,184 @@
+<div class="bg-white rounded-xl border border-gray-200 shadow-sm mb-4 transition-all hover:shadow-md">
+    <!-- Header -->
+    <div (click)="toggleExpand()" class="px-6 pt-5 pb-5 flex items-center justify-between cursor-pointer">
+        <div class="flex items-center gap-4">
+            <h4 class="text-[16px] font-semibold text-gray-800">{{ period.name }}</h4>
+        </div>
+
+        <div class="flex items-center gap-3">
+            <!-- Show dates only when collapsed, to the left of the dots -->
+            <div *ngIf="!period.isExpanded" class="flex items-center gap-6 mr-4 animate-in fade-in duration-300">
+                <div class="flex flex-col items-start">
+                    <span class="text-[12px] text-gray-600 tracking-wider leading-tight text-right">{{
+                        period.name }} Start date</span>
+                    <span class="text-sm font-medium text-gray-00">{{ formatDate(period.startDate) || '- - -'
+                        }}</span>
+                </div>
+                <div class="flex flex-col items-start">
+                    <span class="text-[12px] text-gray-600 tracking-wider leading-tight text-right">{{
+                        period.name }} End date</span>
+                    <span class="text-sm font-medium text-gray-700">{{ formatDate(period.endDate) || '- - -' }}</span>
+                </div>
+            </div>
+
+            <button (click)="remove.emit(); $event.stopPropagation()"
+                class="p-1 hover:bg-red-100 rounded-full transition-colors text-gray-400 hover:text-red-500">
+                <span class="material-icons-outlined text-lg">delete</span>
+            </button>
+            <span class="material-icons-outlined text-gray-800 transition-transform duration-300"
+                [class.rotate-180]="period.isExpanded">
+                expand_more
+            </span>
+        </div>
+    </div>
+
+    <!-- Content (Expanded) -->
+    <div *ngIf="period.isExpanded" class="animate-in slide-in-from-top-2 duration-200">
+        <!-- Main Form Fields -->
+        <div class="px-6 pt-3 pb-6">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="flex flex-col">
+                    <div
+                        class="bg-white p-2 px-3 rounded-lg border border-gray-300 hover:border-gray-400 transition-colors flex flex-col justify-center h-[56px] shadow-sm">
+                        <label class="block text-[11px] text-gray-500 font-medium leading-none mb-1">
+                            Platform
+                        </label>
+                        <div class="relative flex items-center">
+                            <select [(ngModel)]="period.productName" (change)="onProductChange(); productChanged.emit()"
+                                class="w-full bg-transparent text-sm font-semibold outline-none cursor-pointer appearance-none relative z-10 pr-8"
+                                [class.text-gray-400]="!period.productName" [class.text-gray-800]="period.productName">
+                                <option value="" disabled selected>Select</option>
+                                <option *ngFor="let p of products" [value]="p.name">{{ p.name }}</option>
+                            </select>
+                            <span
+                                class="material-icons-outlined text-gray-600 text-lg pointer-events-none absolute right-0 top-1/2 -translate-y-1/2">arrow_drop_down</span>
+                        </div>
+                    </div>
+                    <div *ngIf="period.unitPrice !== null && period.productName"
+                        class="text-[11px] text-gray-500 font-medium mt-1 ml-2 animate-in fade-in slide-in-from-top-1 duration-300">
+                        ${{ period.unitPrice | number:'1.0-2' }} / {{ (period.unitPriceFrequency || 'Year') | lowercase
+                        }}
+                    </div>
+                </div>
+
+                <!-- Start Date -->
+                <div
+                    class="bg-white p-2 px-3 rounded-lg border border-gray-300 hover:border-gray-400 transition-colors flex flex-col justify-center h-[56px] shadow-sm">
+                    <label class="block text-[11px] text-gray-500 font-medium leading-none mb-1">
+                        {{ period.name }} Start Date
+                    </label>
+                    <div class="relative w-full flex items-center">
+                        <input type="date" [(ngModel)]="period.startDate"
+                            class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+                        <div class="text-sm font-semibold text-gray-800">
+                            {{ formatDate(period.startDate) || 'Select' }}
+                        </div>
+                        <span
+                            class="material-icons-outlined text-gray-600 text-lg ml-auto pointer-events-none">calendar_today</span>
+                    </div>
+                </div>
+
+                <div class="flex flex-col">
+                    <div
+                        class="bg-white p-2 px-3 rounded-lg border border-gray-300 hover:border-gray-400 transition-colors flex flex-col justify-center h-[56px] shadow-sm">
+                        <label class="block text-[11px] text-gray-500 font-medium leading-none mb-1">
+                            {{ period.name }} End Date
+                        </label>
+                        <div class="relative w-full flex items-center">
+                            <input type="date" [(ngModel)]="period.endDate"
+                                class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+                            <div class="text-sm font-semibold text-gray-800">
+                                {{ formatDate(period.endDate) || 'Select' }}
+                            </div>
+                            <span
+                                class="material-icons-outlined text-gray-600 text-lg ml-auto pointer-events-none">calendar_today</span>
+                        </div>
+                    </div>
+                    <div *ngIf="period.productName && getDurationLabel()"
+                        class="text-[11px] text-gray-500 font-medium mt-1 ml-4 animate-in fade-in slide-in-from-top-1 duration-300">
+                        {{ getDurationLabel() }}
+                    </div>
+                </div>
+
+                <!-- Discount -->
+                <div
+                    class="bg-white p-2 px-3 rounded-lg border border-gray-300 hover:border-gray-400 transition-colors flex flex-col justify-center h-[56px] shadow-sm">
+                    <label class="block text-[11px] text-gray-500 font-medium leading-none mb-1">Discount (%)</label>
+                    <input type="number" [(ngModel)]="period.discount" placeholder="Enter"
+                        class="w-full bg-transparent text-sm font-semibold text-gray-800 outline-none">
+                </div>
+            </div>
+        </div>
+
+        <!-- User Rows Section (Full Width Background) -->
+        <div class="bg-slate-100 p-6 space-y-6">
+            <div *ngFor="let row of period.userRows; let i = index"
+                class="grid grid-cols-[160px_repeat(5,1fr)] gap-4 items-center">
+                <!-- Heading Column -->
+                <div class="flex flex-col">
+                    <h5 class="text-sm font-medium text-gray-800 leading-tight">{{ row.type }}</h5>
+                    <div *ngIf="row.price !== null && period.productName"
+                        class="text-[11px] text-gray-500 font-medium mt-1 animate-in fade-in slide-in-from-top-1 duration-300">
+                        ${{ row.price | number:'1.0-2' }} / {{ (row.frequency || 'Year') | lowercase }}
+                    </div>
+                </div>
+
+                <!-- Fields Column -->
+                <!-- Quantity -->
+                <div
+                    class="bg-white p-2 px-3 rounded-md border border-gray-300 hover:border-gray-400 transition-colors flex flex-col justify-center h-[56px] shadow-sm">
+                    <label class="block text-[11px] text-gray-500 font-medium leading-none mb-1">Quantity</label>
+                    <input type="number" [(ngModel)]="row.quantity" (change)="productChanged.emit()"
+                        class="w-full bg-transparent text-sm font-semibold text-gray-800 outline-none">
+                </div>
+
+                <!-- Region (Custom Dropdown) -->
+                <div (click)="toggleRegionDropdown(i); $event.stopPropagation()"
+                    class="bg-white p-2 px-3 rounded-md border border-gray-300 hover:border-gray-400 transition-colors flex flex-col justify-center h-[56px] shadow-sm relative cursor-pointer">
+                    <label class="block text-[11px] text-gray-500 font-medium leading-none mb-1">Region</label>
+                    <div class="flex items-center">
+                        <div class="text-sm font-semibold truncate pr-6" [class.text-gray-400]="!row.region"
+                            [class.text-gray-800]="row.region">
+                            {{ row.region || 'Select' }}
+                        </div>
+                        <span
+                            class="material-icons-outlined text-gray-600 text-lg absolute right-2 top-1/2 -translate-y-1/2">arrow_drop_down</span>
+                    </div>
+
+                    <!-- Custom Dropdown List -->
+                    <div *ngIf="activeRegionIndex === i" (click)="$event.stopPropagation()"
+                        class="absolute left-0 top-full mt-1 min-w-[280px] w-full bg-white rounded-lg shadow-2xl border border-gray-200 z-[9999] py-2 max-h-[250px] overflow-y-auto custom-scrollbar region-dropdown">
+                        <button *ngFor="let option of regionOptions" (click)="selectRegion(i, option)"
+                            class="w-full text-left px-4 py-2.5 text-[13px] text-gray-700 hover:bg-blue-50 transition-colors">
+                            {{ option }}
+                        </button>
+                    </div>
+                </div>
+                <!-- GCP Project ID -->
+                <div
+                    class="bg-white p-2 px-3 rounded-md border border-gray-300 hover:border-gray-400 transition-colors flex flex-col justify-center h-[56px] shadow-sm">
+                    <label class="block text-[11px] text-gray-500 font-medium leading-none mb-1">GCP Project ID</label>
+                    <input type="text" [(ngModel)]="row.gcpProjectId" placeholder="Enter"
+                        class="w-full bg-transparent text-sm font-semibold text-gray-800 outline-none">
+                </div>
+
+                <!-- Looker Instance ID -->
+                <div
+                    class="bg-white p-2 px-3 rounded-md border border-gray-300 hover:border-gray-400 transition-colors flex flex-col justify-center h-[56px] shadow-sm">
+                    <label class="block text-[11px] text-gray-500 font-medium leading-none mb-1">Looker Instance
+                        ID</label>
+                    <input type="text" [(ngModel)]="row.lookerInstanceId" placeholder="Enter"
+                        class="w-full bg-transparent text-sm font-semibold text-gray-800 outline-none">
+                </div>
+
+                <!-- Discount -->
+                <div
+                    class="bg-white p-2 px-3 rounded-md border border-gray-300 hover:border-gray-400 transition-colors flex flex-col justify-center h-[56px] shadow-sm">
+                    <label class="block text-[11px] text-gray-500 font-medium leading-none mb-1">Discount (%)</label>
+                    <input type="number" [(ngModel)]="row.discount" placeholder="Enter"
+                        class="w-full bg-transparent text-sm font-semibold text-gray-800 outline-none">
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

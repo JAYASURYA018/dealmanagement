@@ -1,0 +1,12 @@
+{
+    "packageDirectories": [
+        {
+            "path": "salesforce/force-app",
+            "default": true
+        }
+    ],
+    "name": "google-quote-creation",
+    "namespace": "",
+    "sfdcLoginUrl": "https://login.salesforce.com",
+    "sourceApiVersion": "60.0"
+}

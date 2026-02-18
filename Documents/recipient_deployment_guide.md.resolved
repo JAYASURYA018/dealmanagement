@@ -1,0 +1,835 @@
+# Google Quote Creation - Complete Deployment Guide for Recipients
+
+**Version**: 1.0.0  
+**Last Updated**: January 13, 2026  
+**Package Type**: Minimal Deployment Package
+
+---
+
+## 📋 Table of Contents
+
+1. [Before You Begin](#before-you-begin)
+2. [Prerequisites & Software Installation](#prerequisites--software-installation)
+3. [Authenticate to Your Salesforce Org](#authenticate-to-your-salesforce-org)
+4. [Extract the Package](#extract-the-package)
+5. [Deploy to Salesforce](#deploy-to-salesforce)
+6. [Configure the Opportunity Page Layout](#configure-the-opportunity-page-layout)
+7. [Test the Application](#test-the-application)
+8. [Troubleshooting](#troubleshooting)
+9. [Understanding What Was Deployed](#understanding-what-was-deployed)
+10. [FAQ](#faq)
+
+---
+
+## Before You Begin
+
+### What You Received
+
+You should have received a file or folder named **`GoogleQuoteCreation-Deploy`** (either as a [.zip](file:///C:/Google%20Quote%20Creation/google-quote-creation/GoogleQuoteAppV2.zip) file or a folder).
+
+This package contains:
+- ✅ Backend logic (Apex classes)
+- ✅ User interface (Angular application)
+- ✅ Navigation components (Lightning Web Components)
+- ✅ Page configurations (Visualforce pages)
+- ✅ Salesforce metadata
+
+### Time Required
+
+- **First-time setup**: 30-45 minutes
+- **Deployment only** (if tools already installed): 10-15 minutes
+
+### What You'll Need
+
+- A computer with Windows, Mac, or Linux
+- Internet connection
+- Salesforce org with System Administrator access
+- About 100 MB of free disk space
+
+---
+
+## Prerequisites & Software Installation
+
+### Step 1: Install Node.js (Required for Salesforce CLI)
+
+**Why**: The Salesforce CLI requires Node.js to run.
+
+#### Windows:
+1. Go to https://nodejs.org/
+2. Download the **LTS version** (recommended for most users)
+3. Run the installer
+4. Click "Next" through all prompts (use default settings)
+5. Click "Install"
+6. Wait for installation to complete
+7. Click "Finish"
+
+#### Mac:
+1. Go to https://nodejs.org/
+2. Download the **LTS version**
+3. Open the downloaded `.pkg` file
+4. Follow the installation wizard
+5. Enter your password when prompted
+
+#### Verify Installation:
+Open a terminal/command prompt and run:
+```bash
+node --version
+```
+
+You should see something like `v18.17.0` or higher.
+
+---
+
+### Step 2: Install Salesforce CLI
+
+**Why**: This is the tool that will deploy the application to your Salesforce org.
+
+#### Windows:
+1. Go to https://developer.salesforce.com/tools/salesforcecli
+2. Click **"Download for Windows"**
+3. Download the `.exe` installer
+4. Run the installer
+5. Follow the installation wizard (use default settings)
+6. Click "Finish"
+
+#### Mac:
+1. Go to https://developer.salesforce.com/tools/salesforcecli
+2. Click **"Download for macOS"**
+3. Download the `.pkg` installer
+4. Open the downloaded file
+5. Follow the installation wizard
+
+#### Linux:
+```bash
+npm install -g @salesforce/cli
+```
+
+#### Verify Installation:
+Open a **new** terminal/command prompt (important: close and reopen after installation) and run:
+```bash
+sf --version
+```
+
+You should see something like `@salesforce/cli/2.x.x`.
+
+**Troubleshooting**: If the command is not found:
+- **Windows**: Restart your computer
+- **Mac/Linux**: Close and reopen your terminal
+
+---
+
+## Authenticate to Your Salesforce Org
+
+### Step 1: Open Terminal/Command Prompt
+
+**Windows**:
+- Press `Windows Key + R`
+- Type `powershell`
+- Press Enter
+
+**Mac**:
+- Press `Cmd + Space`
+- Type `terminal`
+- Press Enter
+
+**Linux**:
+- Press `Ctrl + Alt + T`
+
+---
+
+### Step 2: Log In to Salesforce
+
+In your terminal, run this command:
+
+```bash
+sf org login web -a MyDevOrg
+```
+
+**What happens**:
+1. A browser window will open automatically
+2. You'll see the Salesforce login page
+3. Log in with your Salesforce credentials (username and password)
+4. Click "Allow" when asked to grant access
+5. You'll see a success message
+6. Close the browser tab
+7. Return to your terminal
+
+**Expected Output in Terminal**:
+```
+Successfully authorized [your-email]@[your-org] with org ID [org-id]
+```
+
+---
+
+### Step 3: Verify Authentication
+
+Run this command to verify you're logged in:
+
+```bash
+sf org list
+```
+
+**Expected Output**:
+```
+ Alias    Username                  Org ID              Status
+ ─────── ─────────────────────────  ──────────────────  ────────
+ MyDevOrg your-email@your-org.com  00D...              Connected
+```
+
+You should see a checkmark (✓) or "Connected" next to your org.
+
+**If you see an error**: Repeat Step 2.
+
+---
+
+## Extract the Package
+
+### Step 1: Locate the Package
+
+Find the file you received:
+- **If it's a [.zip](file:///C:/Google%20Quote%20Creation/google-quote-creation/GoogleQuoteAppV2.zip) file**: `GoogleQuoteCreation-Deploy.zip`
+- **If it's a folder**: `GoogleQuoteCreation-Deploy`
+
+---
+
+### Step 2: Extract (If It's a Zip File)
+
+**Windows**:
+1. Right-click on `GoogleQuoteCreation-Deploy.zip`
+2. Select **"Extract All..."**
+3. Choose a location (e.g., `C:\` or your Desktop)
+4. Click **"Extract"**
+5. Note the extraction path (e.g., `C:\GoogleQuoteCreation-Deploy`)
+
+**Mac**:
+1. Double-click `GoogleQuoteCreation-Deploy.zip`
+2. The folder will be extracted automatically
+3. Note the location (e.g., `/Users/YourName/GoogleQuoteCreation-Deploy`)
+
+**Linux**:
+```bash
+unzip GoogleQuoteCreation-Deploy.zip -d ~/GoogleQuoteCreation-Deploy
+```
+
+---
+
+### Step 3: Verify Package Contents
+
+Open the extracted folder. You should see this structure:
+
+```
+GoogleQuoteCreation-Deploy/
+├── salesforce/
+│   └── force-app/
+│       └── main/
+│           └── default/
+│               ├── classes/
+│               ├── pages/
+│               ├── lwc/
+│               ├── staticresources/
+│               └── objects/
+├── sfdx-project.json
+└── VERSION.txt
+```
+
+**Important Files to Check**:
+- ✅ `salesforce/force-app/main/default/staticresources/GoogleQuoteAppV2.zip` (~95 KB)
+- ✅ `sfdx-project.json` (in the root folder)
+- ✅ `VERSION.txt` (in the root folder)
+
+**If any files are missing**: Contact the person who sent you the package.
+
+---
+
+## Deploy to Salesforce
+
+### Step 1: Navigate to the Package Folder
+
+In your terminal, navigate to the extracted folder.
+
+**Windows Example**:
+```powershell
+cd C:\GoogleQuoteCreation-Deploy
+```
+
+**Mac Example**:
+```bash
+cd /Users/YourName/GoogleQuoteCreation-Deploy
+```
+
+**Linux Example**:
+```bash
+cd ~/GoogleQuoteCreation-Deploy
+```
+
+**Tip**: You can drag and drop the folder into the terminal to auto-fill the path.
+
+---
+
+### Step 2: Verify You're in the Right Folder
+
+Run this command:
+
+**Windows**:
+```powershell
+dir
+```
+
+**Mac/Linux**:
+```bash
+ls
+```
+
+**Expected Output**:
+You should see:
+- `salesforce` (folder)
+- `sfdx-project.json` (file)
+- `VERSION.txt` (file)
+
+**If you don't see these**: You're in the wrong folder. Use `cd` to navigate to the correct location.
+
+---
+
+### Step 3: Deploy All Components
+
+Run this command:
+
+```bash
+sf project deploy start -d salesforce/force-app/main/default -o MyDevOrg
+```
+
+**What this does**:
+- Deploys all Salesforce metadata to your org
+- Uploads the Angular application
+- Configures the backend logic
+- Sets up the navigation components
+
+**Expected Output**:
+```
+✔ Preparing
+✔ Deploying Metadata
+✔ Done
+
+Deployed Source:
+  classes/QuoteController.cls
+  classes/QuoteController.cls-meta.xml
+  pages/GoogleQuoteAppVF.page
+  pages/GoogleQuoteAppVF.page-meta.xml
+  lwc/quoteBridgeV3/quoteBridgeV3.html
+  lwc/quoteBridgeV3/quoteBridgeV3.js
+  lwc/quoteBridgeV3/quoteBridgeV3.js-meta.xml
+  staticresources/GoogleQuoteAppV2.zip
+  staticresources/GoogleQuoteAppV2.resource-meta.xml
+  objects/Opportunity/...
+```
+
+**Deployment Time**: 30-60 seconds
+
+---
+
+### Step 4: Verify Deployment Success
+
+Look for this message at the end:
+```
+✔ Done
+```
+
+**If you see errors**: Jump to the [Troubleshooting](#troubleshooting) section.
+
+---
+
+## Configure the Opportunity Page Layout
+
+Now you need to add the "New Quote" button to your Opportunity pages.
+
+### Step 1: Log In to Salesforce
+
+1. Open your browser
+2. Go to your Salesforce org URL (e.g., `https://yourorg.lightning.force.com`)
+3. Log in with your credentials
+
+---
+
+### Step 2: Open Setup
+
+1. Click the **gear icon** (⚙️) in the top-right corner
+2. Click **"Setup"**
+
+---
+
+### Step 3: Navigate to Object Manager
+
+1. In the **Quick Find** box (top-left), type: `Object Manager`
+2. Click **"Object Manager"** in the results
+
+---
+
+### Step 4: Open Opportunity Settings
+
+1. Scroll down and click **"Opportunity"**
+2. Click **"Page Layouts"** in the left sidebar
+
+---
+
+### Step 5: Edit Your Page Layout
+
+1. Find your active layout (usually named **"Opportunity Layout"**)
+   - Look for layouts without "(Master)" in the name
+   - If you're unsure, ask your Salesforce admin which layout is active
+2. Click **"Edit"** next to the layout name
+
+---
+
+### Step 6: Add the Button
+
+1. In the top palette, click **"Mobile & Lightning Actions"**
+2. Look for **"quoteBridgeV3"** in the list
+   - It should appear as a Lightning Component action
+   - If you don't see it, try refreshing the page
+3. **Drag** "quoteBridgeV3" into the **"Salesforce Mobile and Lightning Experience Actions"** section
+   - This is the gray box at the top of the layout
+   - You can place it anywhere in this section (e.g., after "New Task" or "New Event")
+4. Click **"Save"** in the top-left corner
+
+**Visual Guide**:
+```
+┌─────────────────────────────────────────────────────────┐
+│ Salesforce Mobile and Lightning Actions                │
+├─────────────────────────────────────────────────────────┤
+│ [New Task] [New Event] [Log a Call] [quoteBridgeV3] ← │
+└─────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Step 7: Verify Button Was Added
+
+1. After saving, you should see **"quoteBridgeV3"** in the actions section
+2. If you don't see it, repeat Step 6
+
+---
+
+## Test the Application
+
+### Step 1: Navigate to an Opportunity
+
+1. Click the **App Launcher** (9 dots icon) in the top-left
+2. Search for **"Opportunities"**
+3. Click **"Opportunities"**
+4. Open any existing Opportunity record
+   - If you don't have any, create a test Opportunity first
+
+---
+
+### Step 2: Find the Button
+
+1. Look for the **"quoteBridgeV3"** button in the action bar
+   - It's usually in the top-right area of the page
+   - It might be under a "Show more" dropdown (•••) if there are many actions
+
+**Where to look**:
+```
+┌──────────────────────────────────────────────────────┐
+│ Opportunity: Test Opportunity                        │
+│                                    [quoteBridgeV3] ← │
+└──────────────────────────────────────────────────────┘
+```
+
+---
+
+### Step 3: Click the Button
+
+1. Click **"quoteBridgeV3"**
+2. You should be redirected to a new page
+3. The page will load the Google Quote Creation interface
+
+**What you should see**:
+- Opportunity name and details
+- Account information
+- Quote creation form
+- Commitment period inputs
+- Action buttons ("Quote 1", "Preview approval", "Create contract")
+
+---
+
+### Step 4: Verify Data Loaded Correctly
+
+Check that the following information is displayed:
+
+✅ **Account Name**: Should match the Opportunity's Account  
+✅ **Website**: Should show the Account's website  
+✅ **Sales Channel**: Should be populated  
+✅ **Quote ID**: Should show a quote number  
+✅ **Contract Start Date**: Should be displayed  
+✅ **Total Contract Value**: Should be shown  
+
+---
+
+### Step 5: Test Functionality
+
+Try these actions to ensure everything works:
+
+1. **Add a Commitment Period**:
+   - Click the **"+"** button
+   - A new commitment period card should appear
+   - You should be able to add up to 3 periods
+
+2. **Remove a Commitment Period**:
+   - Click the **"-"** button
+   - The commitment period should be removed
+   - The button should be disabled when only 1 period remains
+
+3. **Fill in Commitment Period**:
+   - Click on "Months" and enter a number (e.g., 12)
+   - Click on "Amount" and enter a value (e.g., 50000)
+   - The values should be saved
+
+4. **Test Dropdowns**:
+   - Click on "Primary Contact" dropdown
+   - Select a contact
+   - Click on "Sales Channel" dropdown
+   - Select a channel
+
+---
+
+## Troubleshooting
+
+### Problem: "sf: command not found"
+
+**Solution**:
+1. Close your terminal completely
+2. Reopen a new terminal
+3. Try the command again
+4. If still not working, restart your computer
+5. Verify installation: `sf --version`
+
+---
+
+### Problem: "No org found with alias MyDevOrg"
+
+**Solution**:
+1. You're not authenticated to Salesforce
+2. Run: `sf org login web -a MyDevOrg`
+3. Log in when the browser opens
+4. Try deployment again
+
+---
+
+### Problem: Deployment fails with "Component Failures"
+
+**Possible Causes**:
+- Missing files in the package
+- Insufficient permissions
+- Conflicting metadata in your org
+
+**Solution**:
+1. Check the error message carefully
+2. Verify all files are present in the package
+3. Ensure you have System Administrator access
+4. Contact the person who sent you the package
+
+**Example Error**:
+```
+Component Failures [1]:
+  Type: ApexClass
+  Name: QuoteController
+  Problem: This Apex class already exists
+```
+
+**Fix**: The component already exists. You can either:
+- Delete the existing component in Salesforce
+- Skip this component
+- Contact your Salesforce admin
+
+---
+
+### Problem: "quoteBridgeV3" button not appearing
+
+**Solution**:
+1. Verify deployment was successful:
+   ```bash
+   sf project deploy start -d salesforce/force-app/main/default/lwc -o MyDevOrg
+   ```
+2. Refresh the page layout editor
+3. Clear your browser cache (Ctrl + Shift + R or Cmd + Shift + R)
+4. Verify you edited the correct page layout
+5. Check that the button was saved in the layout
+
+---
+
+### Problem: Button appears but nothing happens when clicked
+
+**Solution**:
+1. Open browser console (F12)
+2. Click the button again
+3. Look for error messages in the console
+4. Verify static resource deployed:
+   ```bash
+   sf project deploy start -d salesforce/force-app/main/default/staticresources -o MyDevOrg
+   ```
+5. Clear browser cache and try again
+
+---
+
+### Problem: Page loads but no data appears
+
+**Possible Causes**:
+- Opportunity missing required fields
+- Apex class not deployed
+- JavaScript errors
+
+**Solution**:
+1. Verify the Opportunity has:
+   - An Account relationship
+   - Amount field populated
+   - Close Date set
+2. Check browser console for errors (F12)
+3. Redeploy Apex classes:
+   ```bash
+   sf project deploy start -d salesforce/force-app/main/default/classes -o MyDevOrg
+   ```
+
+---
+
+### Problem: Styling looks broken
+
+**Solution**:
+1. Clear browser cache (Ctrl + Shift + R)
+2. Verify static resource deployed correctly
+3. Check that `GoogleQuoteAppV2.zip` is ~95 KB
+4. Redeploy static resources:
+   ```bash
+   sf project deploy start -d salesforce/force-app/main/default/staticresources -o MyDevOrg
+   ```
+
+---
+
+## Understanding What Was Deployed
+
+### Apex Classes
+
+**File**: `QuoteController.cls`
+
+**Purpose**: Fetches data from Salesforce (Opportunity, Account) and prepares it for the user interface.
+
+**What it does**:
+- Retrieves Opportunity details
+- Gets related Account information
+- Calculates sales channel
+- Generates quote ID
+- Returns data to the Angular app
+
+---
+
+### Visualforce Pages
+
+**File**: `GoogleQuoteAppVF.page`
+
+**Purpose**: Hosts the Angular application within Salesforce.
+
+**What it does**:
+- Loads the Angular app from static resources
+- Injects Salesforce context data
+- Provides secure communication between Salesforce and Angular
+- Includes Google Fonts and Material Icons
+
+---
+
+### Lightning Web Components
+
+**File**: `quoteBridgeV3`
+
+**Purpose**: Provides the navigation button on Opportunity pages.
+
+**What it does**:
+- Appears as a button in the Opportunity action bar
+- Redirects users to the full-page quote creation interface
+- Passes Opportunity ID to the application
+
+---
+
+### Static Resources
+
+**File**: `GoogleQuoteAppV2.zip`
+
+**Purpose**: Contains the compiled Angular application.
+
+**What's inside**:
+- HTML, CSS, and JavaScript files
+- Angular framework code
+- Quote creation user interface
+- Form components and styling
+
+**Size**: ~95 KB (compressed)
+
+---
+
+### Object Metadata
+
+**Files**: Opportunity object customizations
+
+**Purpose**: Configures the Opportunity object for the application.
+
+**What it includes**:
+- WebLink definitions
+- Object metadata
+- Field configurations
+
+---
+
+## FAQ
+
+### Q: Do I need to install Angular or Node.js on my computer?
+
+**A**: No. The Angular application is already compiled and included in the package. You only need Salesforce CLI, which requires Node.js to run, but you don't need to use Node.js directly.
+
+---
+
+### Q: Can I deploy this to a production org?
+
+**A**: It's recommended to test in a sandbox first. Once verified, you can deploy to production using the same steps.
+
+---
+
+### Q: Will this affect my existing Salesforce data?
+
+**A**: No. This deployment only adds new components. It doesn't modify or delete existing data.
+
+---
+
+### Q: Can I customize the application after deployment?
+
+**A**: The compiled Angular app cannot be easily customized. For customizations, you would need the full source code. Contact the person who sent you the package.
+
+---
+
+### Q: How do I update the application if I receive a new version?
+
+**A**: Simply repeat the deployment steps with the new package. The deployment will update the existing components.
+
+---
+
+### Q: Can I rename the "quoteBridgeV3" button?
+
+**A**: Yes, but it requires editing the LWC metadata file and redeploying. It's easier to leave it as-is for now.
+
+---
+
+### Q: What permissions do users need to access the application?
+
+**A**: Users need:
+- Read access to Opportunities
+- Read access to Accounts
+- Access to the Visualforce page
+- Access to the Apex class
+
+Your Salesforce admin can configure these permissions.
+
+---
+
+### Q: Can I deploy individual components instead of all at once?
+
+**A**: Yes. Use these commands:
+
+```bash
+# Apex only
+sf project deploy start -d salesforce/force-app/main/default/classes -o MyDevOrg
+
+# Visualforce only
+sf project deploy start -d salesforce/force-app/main/default/pages -o MyDevOrg
+
+# LWC only
+sf project deploy start -d salesforce/force-app/main/default/lwc -o MyDevOrg
+
+# Static resources only
+sf project deploy start -d salesforce/force-app/main/default/staticresources -o MyDevOrg
+```
+
+---
+
+### Q: How do I uninstall the application?
+
+**A**: You would need to manually delete each component:
+1. Delete the Apex class (QuoteController)
+2. Delete the Visualforce page (GoogleQuoteAppVF)
+3. Delete the LWC (quoteBridgeV3)
+4. Delete the static resource (GoogleQuoteAppV2)
+5. Remove the button from page layouts
+
+---
+
+### Q: Is this application secure?
+
+**A**: Yes. It uses Salesforce's standard security model:
+- Apex classes respect sharing rules
+- User permissions are enforced
+- Data is accessed through secure Salesforce APIs
+
+---
+
+### Q: Can multiple users use this at the same time?
+
+**A**: Yes. The application supports concurrent users.
+
+---
+
+### Q: Does this work on mobile devices?
+
+**A**: The application is optimized for desktop browsers. Mobile support may be limited.
+
+---
+
+## Need Help?
+
+If you encounter issues not covered in this guide:
+
+1. **Check the error message** carefully
+2. **Review the Troubleshooting section** above
+3. **Contact the person who sent you the package**
+4. **Include in your message**:
+   - The exact error message
+   - Which step you're on
+   - Screenshots if applicable
+   - Your Salesforce org type (Developer Edition, Sandbox, Production)
+
+---
+
+## Deployment Checklist
+
+Use this checklist to track your progress:
+
+- [ ] Node.js installed and verified
+- [ ] Salesforce CLI installed and verified
+- [ ] Authenticated to Salesforce org
+- [ ] Package extracted
+- [ ] Navigated to package folder
+- [ ] Deployment command executed successfully
+- [ ] All components deployed without errors
+- [ ] Page layout editor opened
+- [ ] "quoteBridgeV3" button added to layout
+- [ ] Page layout saved
+- [ ] Tested on an Opportunity record
+- [ ] Button appears and works
+- [ ] Data loads correctly
+- [ ] All features tested and working
+
+---
+
+## Summary
+
+You have successfully deployed the Google Quote Creation application to your Salesforce org!
+
+**What you accomplished**:
+✅ Installed required tools  
+✅ Authenticated to Salesforce  
+✅ Deployed all application components  
+✅ Configured the Opportunity page layout  
+✅ Tested the application  
+
+**Next steps**:
+- Train your users on how to use the application
+- Create test Opportunities to familiarize yourself with the features
+- Configure user permissions as needed
+- Customize the page layout to your preferences
+
+**Congratulations!** 🎉

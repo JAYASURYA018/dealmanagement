@@ -1,0 +1,9 @@
+{
+    "name": "log-api-metrics",
+    "version": "1.0.0",
+    "description": "Cloud Function to log API metrics to Google Sheets",
+    "main": "index.js",
+    "dependencies": {
+        "googleapis": "^134.0.0"
+    }
+}

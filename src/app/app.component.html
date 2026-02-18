@@ -1,0 +1,28 @@
+<div class="flex h-screen bg-gray-50 overflow-hidden text-slate-800 font-sans">
+  
+  <!-- Sidebar Area -->
+  <aside class="w-72 flex-shrink-0 bg-transparent h-full overflow-y-auto p-4">
+      <!-- Card Container for Sidebar -->
+      <div class="bg-white h-full rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <app-sidebar></app-sidebar>
+      </div>
+  </aside>
+
+  <!-- Main Content Area -->
+  <main class="flex-1 flex flex-col h-full overflow-hidden relative">
+      
+      <!-- Header / Search -->
+      <header class="p-6 pb-2">
+          <app-header></app-header>
+      </header>
+
+      <!-- Scrollable Feed -->
+      <div class="flex-1 overflow-y-auto px-6 pb-6">
+          <app-hero-banner></app-hero-banner>
+          
+          <div class="mt-6">
+              <app-product-list></app-product-list>
+          </div>
+      </div>
+  </main>
+</div>

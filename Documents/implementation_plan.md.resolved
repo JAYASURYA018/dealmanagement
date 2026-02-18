@@ -1,0 +1,31 @@
+# Architecture Documentation Plan
+
+## Goal
+Create a comprehensive design document (`architecture_design.md`) detailing the move to a pure standalone Angular app hosted on GCP, integrating with Salesforce via Headless APIs.
+
+## Document Structure
+
+### 1. UI/UX Strategy: Pure Standalone
+- **Concept**: Material Design (Google 1P feel).
+- **Removal of Wrappers**: No Visualforce, no LWC containers.
+- **Example**: Quote Editor interaction flow (Client-side interactivity vs. Server-side processing).
+
+### 2. Integration Strategy: Headless API-First
+- **Pattern**: Backend-for-Frontend (BFF) or Direct API integration.
+- **Salesforce Role**: Headless CMS/Rule Engine.
+- **Example**: "Calculate Price" button click triggers REST call to Salesforce Pricing API, returns JSON, UI updates.
+
+### 3. Technical Stack
+- **Frontend**: Angular (latest).
+- **Middleware/Backend**: Node.js/Express (Hosted on Cloud Run) to handle auth proxying and API aggregation.
+- **Authentication**: OAuth 2.0 Web Server Flow (using a Salesforce Connected App).
+
+### 4. Infrastructure & Hosting
+- **Hosting**: GCP (Cloud Run or App Engine).
+- **Connectivity**: 
+    - Angular -> Node.js (GCP) -> Salesforce REST APIs.
+    - Security: JWT Bearer Token or OAuth User-Agent.
+
+## Next Steps
+- Write the `architecture_design.md` artifact.
+- Notify user for review.

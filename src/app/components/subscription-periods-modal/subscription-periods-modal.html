@@ -1,0 +1,46 @@
+<div *ngIf="isOpen" class="fixed inset-0 z-[200] flex items-center justify-center">
+    <!-- Backdrop -->
+    <div class="absolute inset-0 bg-slate-900/40" (click)="onClose()"></div>
+
+    <!-- Modal Card -->
+    <div
+        class="bg-slate-200 rounded-3xl shadow-2xl w-full max-w-md p-6 relative z-10 animate-in fade-in zoom-in duration-200">
+        <h3 class="text-[20px] font-medium text-gray-900 mb-3">Create Subscription Periods</h3>
+        <p class="text-sm text-gray-600 mb-6">Choose the frequency at which you want to ramp up your subscription</p>
+
+        <!-- Dropdown -->
+        <div (click)="$event.stopPropagation(); frequencyOpen = !frequencyOpen"
+            class="bg-white p-2 px-3 rounded-sm mb-10 relative group cursor-pointer border border-transparent hover:border-blue-100 transition-all">
+            <label
+                class="block text-[13px] font-semibold text-gray-600 mb-0 tracking-wider cursor-pointer leading-tight">Frequency</label>
+            <div class="flex items-center justify-between">
+                <span class="text-sm font-medium text-gray-800 leading-none">{{ selectedFrequency }}</span>
+                <span class="material-icons-outlined text-gray-500 scale-110">arrow_drop_down</span>
+            </div>
+
+            <!-- Dropdown List -->
+            <div *ngIf="frequencyOpen"
+                class="absolute left-0 right-0 top-[105%] bg-white rounded-xl shadow-xl border border-gray-100 py-2 z-[210] overflow-hidden">
+                <button *ngFor="let option of frequencyOptions"
+                    (click)="selectFrequency(option); $event.stopPropagation()"
+                    class="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 transition-colors flex items-center justify-between">
+                    {{ option }}
+                    <span *ngIf="selectedFrequency === option"
+                        class="material-icons-outlined text-blue-600 text-sm">check</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Footer Buttons -->
+        <div class="flex justify-end gap-6 items-center">
+            <button (click)="onClose()"
+                class="text-blue-600 font-semibold text-sm hover:text-blue-700 transition-colors px-2 py-1">
+                Cancel
+            </button>
+            <button (click)="onCreate()"
+                class="text-blue-600 font-semibold text-sm hover:text-blue-800 transition-colors px-2 py-1">
+                Create
+            </button>
+        </div>
+    </div>
+</div>
