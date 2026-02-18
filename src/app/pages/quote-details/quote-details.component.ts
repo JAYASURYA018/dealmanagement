@@ -52,7 +52,7 @@ export class QuoteDetailsComponent implements OnInit {
     salesChannel: string = '';
     productName: string = 'No Products';
     productId: string | null = null;
-    bundleQuoteLineId: string | null = null; // To link components to this parent
+    bundleQuoteLineId: string | null = null;
     website: string = '';
     isGCP: boolean = false;
 
@@ -65,7 +65,7 @@ export class QuoteDetailsComponent implements OnInit {
     operationType: string = 'New';
     billingFrequency: string = 'Annual in Advance';
     termStartsOn: string = 'Fixed Start Date';
-    // termStartDate is reused 'startDate'
+
     termEndDate: string = '';
 
     operationTypeOptions = ['New', 'Renewal', 'Amendment'];
@@ -79,9 +79,8 @@ export class QuoteDetailsComponent implements OnInit {
     isSubscriptionModalOpen: boolean = false;
     subscriptionPeriods: SubscriptionPeriod[] = [];
     productOptions: ProductItem[] = [];
-    lookerRegionOptions: string[] = ['us-central1', 'europe-west1', 'asia-northeast1']; // Mock options
+    lookerRegionOptions: string[] = ['us-central1', 'europe-west1', 'asia-northeast1'];
 
-    // Mock Prices for Bundle
     developerUserPrice: number = 100;
     standardUserPrice: number = 200;
     viewerUserPrice: number = 50;
@@ -95,8 +94,6 @@ export class QuoteDetailsComponent implements OnInit {
     existingQuoteLineItems: any[] = [];
     productRelationshipTypeId: string = '';
 
-    // Explicit termStartDate property to match ConfigureQuoteDetails usage if needed, 
-    // or we can map it to this.startDate. for now let's use a getter/setter or just use startDate.
     get termStartDate(): string { return this.startDate; }
     set termStartDate(val: string) { this.startDate = val; }
 
@@ -105,9 +102,8 @@ export class QuoteDetailsComponent implements OnInit {
         this.activeTab = tab;
     }
 
-    // Mock Bundle Loading
     loadBundleDetails() {
-        const bundleId = '01tDz00000Ea17zIAB'; // Looker New RCA
+        const bundleId = '01tDz00000Ea17zIAB';
         this.loadingService.show();
 
         this.sfApi.getBundleDetails(bundleId).subscribe({
@@ -119,7 +115,7 @@ export class QuoteDetailsComponent implements OnInit {
                 if (result && result.productComponentGroups) {
                     const groups = result.productComponentGroups;
 
-                    // 1. Extract Platform Products
+
                     const platformGroup = groups.find((g: any) => g.name === 'Platform');
                     const nonProdGroup = groups.find((g: any) => g.name === 'Non-production' || g.name === 'Non-Production');
 
@@ -130,7 +126,7 @@ export class QuoteDetailsComponent implements OnInit {
                             const frequency = priceObj && priceObj.pricingModel ? priceObj.pricingModel.frequency : 'Year';
                             const pricebookEntryId = priceObj ? priceObj.priceBookEntryId : null;
 
-                            // Find corresponding non-prod component
+
                             let nonProdPrice = 0;
                             let nonProdProductId = null;
                             let nonProdPricebookEntryId = null;
@@ -157,14 +153,13 @@ export class QuoteDetailsComponent implements OnInit {
                                 price: mainPrice,
                                 nonProdPrice: nonProdPrice,
                                 frequency: frequency,
-                                productId: c.id, // As requested: take ID from response 'id'
+                                productId: c.id,
                                 pricebookEntryId: pricebookEntryId,
                                 nonProdProductId: nonProdProductId,
                                 nonProdPricebookEntryId: nonProdPricebookEntryId,
-                                // Dynamic Fields from User Request (Defaulted here, but can be from API if available)
-                                startDate: null, // Will be set by user selection
-                                endDate: null,   // Will be set by user selection
-                                billingFrequency: 'Annual', // Default from user request example
+                                startDate: null,
+                                endDate: null,
+                                billingFrequency: 'Annual',
                                 periodBoundary: 'Anniversary',
                                 operationType: 'New',
                                 termStartsOn: 'Fixed Start Date',
@@ -173,7 +168,7 @@ export class QuoteDetailsComponent implements OnInit {
                         });
                     }
 
-                    // 2. Extract User Prices and IDs
+
                     const userGroup = groups.find((g: any) => g.name === 'Users');
                     if (userGroup) {
                         userGroup.components.forEach((c: any) => {
@@ -183,11 +178,8 @@ export class QuoteDetailsComponent implements OnInit {
                             const productId = c.productId || c.product2Id || c.id;
                             const pricebookEntryId = priceObj ? priceObj.priceBookEntryId : null;
 
-                            // Store prices and IDs securely if needed for global access, 
-                            // or relied upon standard/viewer logic in subscription-period-item
                             if (c.name.includes('Developer')) {
                                 this.developerUserPrice = price;
-                                // Store IDs if you have properties for them, or just rely on period update below
                             } else if (c.name.includes('Standard')) {
                                 this.standardUserPrice = price;
                             } else if (c.name.includes('Viewer')) {
@@ -208,7 +200,7 @@ export class QuoteDetailsComponent implements OnInit {
                         });
                     }
 
-                    // PBE IDs are now directly from the CPQ response, so no need for extra API call!
+
                     this.loadingService.hide();
 
                 } else {
@@ -284,11 +276,11 @@ export class QuoteDetailsComponent implements OnInit {
                 if (currentStart > totalEnd) break;
                 if (pIndex > 50) break; // Safety
             }
-            // Trigger ID mapping
+
             this.loadBundleDetails();
         }
 
-        // Call Dynamic APIs as requested by user on "Create"
+
         const sfQuoteId = this.salesforceQuoteId;
         if (sfQuoteId) {
             console.log('🔄 Fetching Quote Line Items and Relationship Types...', { sfQuoteId });
@@ -299,12 +291,12 @@ export class QuoteDetailsComponent implements OnInit {
                 next: (results: any) => {
                     console.log('✅ APIs Fetched Successfully on Create:', results);
 
-                    // Store Quote Line Items (IDs)
+
                     if (results.qlItems && results.qlItems.records) {
                         this.existingQuoteLineItems = results.qlItems.records;
                     }
 
-                    // Store Product Relationship Type ID
+
                     if (results.prType && results.prType.records && results.prType.records.length > 0) {
                         this.productRelationshipTypeId = results.prType.records[0].Id;
                     }
@@ -402,7 +394,6 @@ export class QuoteDetailsComponent implements OnInit {
     }
 
     get isLookerSubscription(): boolean {
-        // Check for specific Looker New RCA Product ID OR Name containing 'Looker'
         return this.productId === '01tDz00000Ea17zIAB' || (this.productName ? this.productName.includes('Looker') : false);
     }
 
@@ -414,7 +405,7 @@ export class QuoteDetailsComponent implements OnInit {
         }
         QuoteDetailsComponent.lastInitTime = now;
 
-        // Subscribe to QuoteDataService for API-fetched data
+
         this.quoteDataService.quoteData$.subscribe(quoteData => {
             if (quoteData.opportunityName) {
                 this.opportunityName = quoteData.opportunityName;
@@ -439,34 +430,30 @@ export class QuoteDetailsComponent implements OnInit {
             }
         });
 
-        // Fetch Quote Details if quoteId is available
         const quoteId = this.contextService.currentContext?.quoteId;
         if (quoteId && quoteId.startsWith('0Q0')) {
-            // Use getQuotePreview because it contains line items and headers in one SOQL call
             this.sfApi.getQuotePreview(quoteId).subscribe({
                 next: (res) => {
                     if (res.records && res.records.length > 0) {
                         const quote = res.records[0];
 
-                        // Set Quote Number
+
                         if (quote.QuoteNumber) {
                             const formatted = `Q-${quote.QuoteNumber}`;
                             this.quoteDataService.setQuoteData({ quoteNumber: formatted });
                             this.quoteId = formatted;
                         }
 
-                        // Set Website from Account (via Quote Preview)
+
                         if (quote.Account && quote.Account.Website) {
                             this.website = quote.Account.Website;
                         }
 
-                        // Set Product Name (from first line item)
+
                         if (quote.QuoteLineItems?.records?.length > 0) {
                             const lineItem = quote.QuoteLineItems.records[0];
                             this.productName = lineItem.Product2?.Name || 'Product';
-                            // Save Product ID for configuration calls
                             this.productId = lineItem.Product2Id || lineItem.Product2?.Id;
-                            // Save Line Item ID as parent for relationships
                             this.bundleQuoteLineId = lineItem.Id;
                         } else {
                             this.productName = 'No Products';
@@ -485,9 +472,7 @@ export class QuoteDetailsComponent implements OnInit {
             this.isLoading = false; // No valid quote ID, stop loading
         }
 
-        // Keep existing context service subscription for backward compatibility
         this.contextService.context$.subscribe(ctx => {
-            // Only use context values if not already set by QuoteDataService
             if (!this.accountName) this.accountName = ctx.accountName;
             if (!this.opportunityName) this.opportunityName = ctx.opportunityName;
             this.website = ctx.website;
@@ -498,10 +483,7 @@ export class QuoteDetailsComponent implements OnInit {
             this.isGCP = !!ctx.isGCPFamily;
         });
 
-        // Load mock bundle details for Looker flows
         this.loadBundleDetails();
-
-        // Load Picklist Values
         this.loadTermStartsOnFromAPI();
         this.loadBillingFrequencyFromAPI();
         this.loadOperationTypeFromAPI();
@@ -509,7 +491,6 @@ export class QuoteDetailsComponent implements OnInit {
     }
 
     loadLookerRegionFromAPI() {
-        // Using Master Record Type ID: 012000000000000AAA
         const recordTypeId = '012000000000000AAA';
         this.sfApi.getRegionPicklist(recordTypeId).subscribe({
             next: (data) => {
@@ -530,7 +511,6 @@ export class QuoteDetailsComponent implements OnInit {
             next: (data) => {
                 if (data && data.values) {
                     this.operationTypeOptions = data.values.map((v: any) => v.label);
-                    // Set default if not set
                     if (!this.operationType && data.defaultValue) {
                         this.operationType = data.defaultValue.label;
                     } else if (!this.operationType && this.operationTypeOptions.length > 0) {
@@ -551,7 +531,6 @@ export class QuoteDetailsComponent implements OnInit {
                         .map((v: any) => v.label)
                         .filter((label: string) => label !== 'None');
 
-                    // Priority 1: User specified target (Annual in Advance Anniversary)
                     const targetDefault = 'Annual in Advance Anniversary';
                     const foundDefault = this.billingFrequencyOptions.find(opt => opt.toLowerCase() === targetDefault.toLowerCase());
 
@@ -591,7 +570,6 @@ export class QuoteDetailsComponent implements OnInit {
     submitQuote() {
         const fullQuoteId = this.contextService.currentContext?.quoteId;
 
-        // "if not select dont call the api" - as per user requirement
         if (!this.startDate || !this.expirationDate || !fullQuoteId) {
             this.showSuccessPopup = true;
             return;
@@ -600,7 +578,7 @@ export class QuoteDetailsComponent implements OnInit {
         this.isSaving = true;
         this.loadingService.show();
 
-        // Use patchQuoteDates directly
+
         this.sfApi.patchQuoteDates(
             fullQuoteId,
             this.startDate,
@@ -616,8 +594,6 @@ export class QuoteDetailsComponent implements OnInit {
                 this.loadingService.hide();
                 this.toastService.show('Failed to update quote dates.', 'error');
                 console.error('[QuoteDetails] Error:', err);
-                // Still show popup on error? Maybe not, allow retry.
-                // this.showSuccessPopup = true; 
             }
         });
     }
@@ -634,11 +610,9 @@ export class QuoteDetailsComponent implements OnInit {
             return;
         }
 
-        // update dates first so preview is accurate
         this.loadingService.show();
         this.sfApi.patchQuoteDates(fullQuoteId, this.startDate, this.expirationDate || this.startDate).subscribe({
             next: () => {
-                // Fetch existing quote data for the preview
                 this.fetchQuotePreview(fullQuoteId);
             },
             error: (err) => {
@@ -647,20 +621,15 @@ export class QuoteDetailsComponent implements OnInit {
             }
         });
 
-        // Build commitment preview data from current form state
         this.previewCommitments = this.buildPreviewCommitments();
     }
 
-    /**
-     * Builds commitment preview data for display
-     */
     buildPreviewCommitments(): any[] {
-        // For Looker Subscription Flow, use subscriptionPeriods
         if (this.isLookerSubscription && this.subscriptionPeriods.length > 0) {
             return this.buildSubscriptionPreview();
         }
 
-        // Default to today if start date is not set, so preview still works
+
         const start = this.startDate ? new Date(this.startDate) : new Date();
         const previews: any[] = [];
         let currentStartDate = new Date(start);
@@ -690,9 +659,6 @@ export class QuoteDetailsComponent implements OnInit {
         return previews;
     }
 
-    /**
-     * Builds subscription period preview data for Looker flow
-     */
     buildSubscriptionPreview(): any[] {
         const previews: any[] = [];
 
@@ -734,16 +700,13 @@ export class QuoteDetailsComponent implements OnInit {
                 endDate: this.formatDateForDisplay(new Date(period.endDate)),
                 months: this.calculateMonthsBetween(period.startDate, period.endDate),
                 amount: totalAmount,
-                userDetails: userDetails // Include user details for expanded view
+                userDetails: userDetails
             });
         });
 
         return previews;
     }
 
-    /**
-     * Calculate months between two dates
-     */
     calculateMonthsBetween(startDate: string, endDate: string): number {
         const start = new Date(startDate);
         const end = new Date(endDate);
@@ -751,7 +714,6 @@ export class QuoteDetailsComponent implements OnInit {
         let months = (end.getFullYear() - start.getFullYear()) * 12;
         months += end.getMonth() - start.getMonth();
 
-        // Add 1 to include both start and end months
         return months + 1;
     }
 
@@ -792,33 +754,23 @@ export class QuoteDetailsComponent implements OnInit {
         this.previewData = null;
     }
 
-    /**
-     * Captures a screenshot of the preview popup before showing the success popup
-     */
     capturePreviewScreenshot() {
         const fullQuoteId = this.salesforceQuoteId;
         if (!fullQuoteId) {
-            // If no quote ID, just show success popup without screenshot
             this.showSuccessPopup = true;
             return;
         }
 
-        // Build commitment preview data
         this.previewCommitments = this.buildPreviewCommitments();
-
-        // Fetch quote preview data
         this.loadingService.show();
         this.sfApi.getQuotePreview(fullQuoteId).subscribe({
             next: (response) => {
                 if (response.records && response.records.length > 0) {
                     this.previewData = response.records[0];
 
-                    // Set flag to render preview off-screen
                     this.isCapturingScreenshot = true;
-                    // Show preview popup off-screen for screenshot
                     this.showPreviewPopup = true;
 
-                    // Wait for DOM to render, then capture screenshot
                     setTimeout(() => {
                         const previewElement = document.querySelector('.bg-white.rounded-2xl.shadow-2xl.max-w-7xl') as HTMLElement;
 
@@ -829,15 +781,10 @@ export class QuoteDetailsComponent implements OnInit {
                                 useCORS: true,
                                 backgroundColor: '#ffffff'
                             }).then(canvas => {
-                                // Convert canvas to base64 image
                                 this.previewScreenshot = canvas.toDataURL('image/png');
-
-                                // Hide preview popup and reset flag
                                 this.showPreviewPopup = false;
                                 this.isCapturingScreenshot = false;
                                 this.loadingService.hide();
-
-                                // Show success popup with screenshot
                                 this.showSuccessPopup = true;
                             }).catch(err => {
                                 console.error('Screenshot capture failed:', err);
@@ -889,13 +836,9 @@ export class QuoteDetailsComponent implements OnInit {
     }
 
     get totalTerms(): number {
-        if (this.activeTab === 'discounts' && this.isLookerSubscription) { // Using 'discounts' as the tab name for 'Plans & Discounts'
-            // If we are in the subscription flow, calculate from periods
+        if (this.activeTab === 'discounts' && this.isLookerSubscription) {
             if (this.subscriptionPeriods.length > 0) {
-                // Sum of all period durations? Or just total duration?
-                // Usually term is start of first to end of last
-                // Implementation assumes periods fill the term
-                return this.getTermYears() * 12; // Approximation or sum of months
+                return this.getTermYears() * 12;
             }
         }
         return this.commitmentPeriods.reduce((acc, curr) => acc + (parseInt(curr.months) || 0), 0);
@@ -908,10 +851,6 @@ export class QuoteDetailsComponent implements OnInit {
         return this.commitmentPeriods.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
     }
 
-    /**
-     * Builds commitment records array for API submission
-     * Calculates start and end dates dynamically based on periods
-     */
     buildCommitmentRecords(quoteId: string, quoteLineItemId: string): any[] {
         if (!this.startDate) {
             console.warn('[QuoteDetails] Start date not set, cannot build commitments');
@@ -919,7 +858,6 @@ export class QuoteDetailsComponent implements OnInit {
         }
 
         const records: any[] = [];
-        // Parse start date as UTC
         const parts = this.startDate.split('-');
         let currentStartDate = new Date(Date.UTC(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])));
 
@@ -928,10 +866,9 @@ export class QuoteDetailsComponent implements OnInit {
             const amount = Number(period.amount) || 0;
 
             if (months > 0) {
-                // Calculate end date by adding months to current start date (in UTC)
                 const endDate = new Date(currentStartDate);
                 endDate.setUTCMonth(endDate.getUTCMonth() + months);
-                endDate.setUTCDate(endDate.getUTCDate() - 1); // End date is one day before next period starts
+                endDate.setUTCDate(endDate.getUTCDate() - 1);
 
                 records.push({
                     attributes: {
@@ -947,7 +884,6 @@ export class QuoteDetailsComponent implements OnInit {
                     Commit_Amount__c: amount.toString()
                 });
 
-                // Next period starts where this one ended + 1 day
                 currentStartDate = new Date(endDate);
                 currentStartDate.setUTCDate(currentStartDate.getUTCDate() + 1);
             }
@@ -956,9 +892,6 @@ export class QuoteDetailsComponent implements OnInit {
         return records;
     }
 
-    /**
-     * Formats a Date object to Salesforce date format (YYYY-MM-DD)
-     */
     formatDateForSalesforce(date: Date): string {
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -966,10 +899,6 @@ export class QuoteDetailsComponent implements OnInit {
         return `${year}-${month}-${day}`;
     }
 
-    /**
-     * Main save handler for "Skip and Save" button
-     * Intelligently routes to subscription or commit flow based on product type
-     */
     onSkipAndSave() {
         const fullQuoteId = this.contextService.currentContext?.quoteId;
         if (!fullQuoteId) {
@@ -982,24 +911,15 @@ export class QuoteDetailsComponent implements OnInit {
             return;
         }
 
-        // Route to appropriate flow based on product type
         if (this.isLookerSubscription && this.subscriptionPeriods.length > 0) {
-            // Execute subscription flow for Looker New RCA
-            console.log('[QuoteDetails] Executing subscription flow');
             this.onSave();
         } else if (this.commitmentPeriods.length > 0 && this.commitmentPeriods[0].months) {
-            // Execute traditional commit flow for other products
-            console.log('[QuoteDetails] Executing commit flow');
             this.executeCommitFlow();
         } else {
             this.toastService.show('Please configure periods before saving', 'warning');
         }
     }
 
-    /**
-     * Executes traditional commit flow for non-subscription products
-     * Based on reference implementation
-     */
     executeCommitFlow() {
         const fullQuoteId = this.contextService.currentContext?.quoteId;
         if (!fullQuoteId) {
@@ -1009,19 +929,14 @@ export class QuoteDetailsComponent implements OnInit {
 
         this.loadingService.show();
 
-        // Step 1: Fetch QuoteLineItems first to get their IDs
         this.sfApi.getQuoteLineItems(fullQuoteId).pipe(
             switchMap((lineItemsResponse: any) => {
-                // Extract QuoteLineItem IDs and build the array
                 const quoteLineItems: Array<{ id: string, commitmentAmount: number }> = [];
 
                 if (lineItemsResponse.records && lineItemsResponse.records.length > 0) {
                     const firstLineItem = lineItemsResponse.records[0];
                     const firstLineItemId = firstLineItem.Id;
-                    console.log('[QuoteDetails] First QuoteLineItem ID:', firstLineItemId);
                     this.bundleQuoteLineId = firstLineItemId;
-
-                    // Add to quoteLineItems array for updateQuoteDates
                     quoteLineItems.push({
                         id: firstLineItemId,
                         commitmentAmount: this.totalContractValue
@@ -1030,7 +945,7 @@ export class QuoteDetailsComponent implements OnInit {
                     throw new Error('No QuoteLineItems found');
                 }
 
-                // Step 2: Update Quote and QuoteLineItems together (if dates are set)
+
                 if (this.startDate && this.expirationDate) {
                     return this.sfApi.updateQuoteDates(
                         fullQuoteId,
@@ -1040,21 +955,17 @@ export class QuoteDetailsComponent implements OnInit {
                         this.totalContractValue,
                         quoteLineItems
                     ).pipe(
-                        map(() => lineItemsResponse) // Pass lineItemsResponse to next step
+                        map(() => lineItemsResponse)
                     );
                 } else {
-                    // If no dates, skip update and just return lineItemsResponse
                     return of(lineItemsResponse);
                 }
             }),
             switchMap((lineItemsResponse: any) => {
-                // Step 3: Build commitment records
                 const firstLineItemId = lineItemsResponse.records[0].Id;
                 const commitmentRecords = this.buildCommitmentRecords(fullQuoteId, firstLineItemId);
 
                 if (commitmentRecords.length > 0) {
-                    console.log('[QuoteDetails] Creating commitments:', commitmentRecords);
-                    // Step 4: Create commitments
                     return this.sfApi.createQuoteLineCommitments(commitmentRecords);
                 } else {
                     return new Observable(observer => {
@@ -1065,10 +976,8 @@ export class QuoteDetailsComponent implements OnInit {
             })
         ).subscribe({
             next: (commitmentResponse: any) => {
-                console.log('[QuoteDetails] Commitments saved:', commitmentResponse);
                 this.loadingService.hide();
                 this.toastService.show('Quote Data Saved Successfully!', 'success');
-                // Capture screenshot and show success popup
                 this.capturePreviewScreenshot();
             },
             error: (err) => {
@@ -1107,14 +1016,9 @@ export class QuoteDetailsComponent implements OnInit {
         this.updateExpirationDate();
     }
 
-    /**
-     * Formats a date string (YYYY-MM-DD) to readable format (Month Day, Year)
-     * Used for preview display only
-     */
     formatDateForDisplay(dateString: any): string {
         if (!dateString) return '-';
         const date = new Date(dateString);
-        // Changed to M/d/yyyy format as requested
         return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
     }
 
@@ -1138,9 +1042,7 @@ export class QuoteDetailsComponent implements OnInit {
         this.salesChannelOpen = false;
     }
 
-    checkCollapse(index: number, event: FocusEvent) {
-        // Simple blur logic
-    }
+    checkCollapse(index: number, event: FocusEvent) { }
 
     // Input handlers for commitment periods
     onMonthFocus(index: number, el: HTMLElement) { }
@@ -1152,8 +1054,6 @@ export class QuoteDetailsComponent implements OnInit {
     onMonthInput(index: number, val: string) { }
 
     updateExpirationDate() {
-        // If it's a subscription flow, handle term end date differently if needed
-        // For now, reuse the same logic or add specific subscription logic
         if (!this.startDate) {
             this.expirationDate = '';
             this.termEndDate = '';
@@ -1161,36 +1061,18 @@ export class QuoteDetailsComponent implements OnInit {
         }
 
         const totalMonths = this.totalTerms;
-        // If no commitment periods (subscription flow might just use term length), default to 12 or use a specific field
-        // For Looker Subscription, if we use the same commitment structure
         if (totalMonths <= 0 && !this.isLookerSubscription) {
             this.expirationDate = '';
             return;
         }
 
-        // For Looker Subscription, if we assume a standard 12 month term or derived from somewhere else?
-        // The screenshot shows "Term", we can probably reuse commitmentPeriods or just a simple term input. 
-        // If reusing commitmentPeriods, logic holds.
-        // If Looker Subscription is fixed 12 months? 
-        // Let's assume for now it uses the same commitment logic for calculation
+        const termsToUse = totalMonths > 0 ? totalMonths : 12;
 
-        const termsToUse = totalMonths > 0 ? totalMonths : 12; // Default to 12 if 0 for subscription?
-
-        // Create date in UTC to avoid timezone issues
         const parts = this.startDate.split('-');
         const date = new Date(Date.UTC(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])));
-
-        // Add months
         date.setUTCMonth(date.getUTCMonth() + termsToUse);
-
-        // Subtract 1 day to get the end of term (e.g. Jan 1 to Dec 31)
         date.setUTCDate(date.getUTCDate() - 1);
-
         const isoDate = date.toISOString().split('T')[0];
-        // For Looker flow, Term End Date needs to be calculated if not set, 
-        // OR if we are getting it from totalTerms.
-        // But if we want distinct fields, we should probably set termEndDate here if driven by start+term
-        // However, if we allow manual date selection, we might not want to overwrite it always.
 
         if (!this.isLookerSubscription) {
             this.expirationDate = isoDate;
@@ -1199,7 +1081,7 @@ export class QuoteDetailsComponent implements OnInit {
         }
     }
 
-    // New method to calculate term (months) when Start or End date changes manually in Subscription flow
+
     updateTermFromDates() {
         if (!this.startDate || !this.termEndDate) return;
 
@@ -1211,10 +1093,6 @@ export class QuoteDetailsComponent implements OnInit {
         months -= start.getMonth();
         months += end.getMonth();
 
-        // Adjust for days (if end day is less than start day, it's not a full month)
-        // Taking a simple approach for now: Round to nearest or just floor
-        // Usually Term End = Start + Months - 1 day.
-        // So (End + 1 day) - Start
 
         const endAdjusted = new Date(end);
         endAdjusted.setDate(endAdjusted.getDate() + 1);
@@ -1223,7 +1101,7 @@ export class QuoteDetailsComponent implements OnInit {
 
         if (diffMonths < 1) diffMonths = 1;
 
-        // Update the first commitment period to reflect this term
+
         if (this.commitmentPeriods.length === 0) {
             this.commitmentPeriods.push({ months: diffMonths, amount: null, isCollapsed: false });
         } else {
@@ -1279,13 +1157,9 @@ export class QuoteDetailsComponent implements OnInit {
 
     closePopup() {
         this.showSuccessPopup = false;
-
-        // Clear state
         this.cartService.clearCart();
         this.quoteDataService.clearQuoteData();
         this.resetForm();
-
-        // Redirect to opportunities page
         this.router.navigate(['/']);
     }
 
@@ -1327,10 +1201,6 @@ export class QuoteDetailsComponent implements OnInit {
         return `${month} ${day},${year}`;
     }
 
-    // --- SKIP & SAVE IMPLEMENTATION ---
-
-    // --- SAVE IMPLEMENTATION ---
-
     onSave() {
         console.log('🚀 Initiating Consolidated Quote Update (Graph API)...');
         if (this.isSaving) return;
@@ -1353,17 +1223,11 @@ export class QuoteDetailsComponent implements OnInit {
                 const lineItems = data.lineItemRes.records || [];
                 const relTypes = data.relTypeRes.recentItems || [];
 
-                // Find the specific relationship type ID
                 const bundleRelType = relTypes.find((r: any) => r.Name === 'Bundle to Bundle Component Relationship');
                 const relationshipTypeId = bundleRelType ? bundleRelType.Id : '0yoKf0000010wFiIAI';
 
-                console.log(`📦 Found Relationship Type ID: ${relationshipTypeId}`);
-                console.log(`📦 Found ${lineItems.length} QuoteLineItems to update.`);
-
-                // Identify Main Line ID
                 const bundleProductId = '01tDz00000Ea17zIAB';
                 let mainLineId = lineItems.find((item: any) => item.Product2Id === bundleProductId)?.Id || (lineItems.length > 0 ? lineItems[0].Id : '0QLDz000001KGRvOAO');
-                console.log(`🎯 Target MainLineId: ${mainLineId}`);
 
                 const records1: any[] = [];
                 const firstPeriod = this.subscriptionPeriods[0];
@@ -1375,12 +1239,11 @@ export class QuoteDetailsComponent implements OnInit {
                     return;
                 }
 
-                // 1. Patch Quote
                 const todayStr = new Date().toISOString().split('T')[0];
                 const quoteRec: any = {
                     "attributes": { "type": "Quote", "method": "PATCH", "id": targetQuoteId },
                     "Pricebook2Id": "01sf4000003ZgtzAAC",
-                    "StartDate": todayStr // Using Today as per reference logic
+                    "StartDate": todayStr
                 };
                 if (firstPeriod.endDate) quoteRec["ExpirationDate"] = firstPeriod.endDate;
 
@@ -1389,7 +1252,7 @@ export class QuoteDetailsComponent implements OnInit {
                     "record": quoteRec
                 });
 
-                // 1.1 Patch Existing Lines
+
                 lineItems.forEach((item: any, index: number) => {
                     const lineUpdate: any = {
                         "attributes": { "type": "QuoteLineItem", "method": "PATCH", "id": item.Id },
@@ -1399,24 +1262,13 @@ export class QuoteDetailsComponent implements OnInit {
                         "PeriodBoundary": "Anniversary"
                     };
 
-                    // Fix for END_DATE_MISSING:
-                    // If this is the main bundle line or any line, we should ensure it has dates if we are setting term fields.
-                    // Use the first period's start date and calculate end date based on total term or just 1 year if it's segmented?
-                    // Safe bet: Sync it with the Quote's StartDate and either ExpirationDate or specific Term.
-
                     if (this.startDate) lineUpdate["StartDate"] = this.startDate;
 
-                    // If we have an expiration date (Term End Date), use it. 
-                    // Otherwise default to 1 year from start?
                     if (this.expirationDate) {
                         lineUpdate["EndDate"] = this.expirationDate;
                     } else if (firstPeriod.endDate) {
                         lineUpdate["EndDate"] = firstPeriod.endDate;
                     }
-
-                    // Alternatively, add SubscriptionTerm if dates are tricky, but Dates are preferred for alignment.
-                    // lineUpdate["SubscriptionTerm"] = 12; 
-                    // lineUpdate["SubscriptionTermUnit"] = "Months";
 
                     records1.push({
                         "referenceId": `refLineUpdate_${index}`,
@@ -1424,15 +1276,11 @@ export class QuoteDetailsComponent implements OnInit {
                     });
                 });
 
-                // 2. Add Child Products Logic (Year 1)
                 let childIdx = 1;
-
-                // Platform
                 const selectedPlatform = this.productOptions.find(p => p.name === firstPeriod.productName);
                 if (selectedPlatform && selectedPlatform.productId) {
                     this.addGraphRecords(records1, childIdx++, selectedPlatform, firstPeriod, mainLineId, 1, targetQuoteId, 'NotIncludedInBundlePrice', firstPeriod.discount || 0, '_P1', null, relationshipTypeId);
                 }
-                // Users
                 firstPeriod.userRows.forEach(row => {
                     if (row.type !== 'Non-prod' && (row.quantity || 0) > 0 && row.productId) {
                         const userProduct = this.productOptions.find(p => p.name.includes(row.type));
@@ -1445,7 +1293,6 @@ export class QuoteDetailsComponent implements OnInit {
                         }
                     }
                 });
-                // Non-Prod
                 const nonProdRow = firstPeriod.userRows.find(r => r.type === 'Non-prod');
                 if (nonProdRow && (nonProdRow.quantity || 0) > 0 && selectedPlatform?.nonProdProductId) {
                     const matchingItem = {
@@ -1476,13 +1323,11 @@ export class QuoteDetailsComponent implements OnInit {
                     }
                 };
 
-                console.log('📡 STEP 1: Sending Child Products Payload:', JSON.stringify(payload1, null, 2));
+
 
                 this.sfApi.placeGraphRequest(payload1).subscribe({
                     next: (res1: any) => {
-                        console.log('✅ STEP 1 Success:', res1);
                         if (this.subscriptionPeriods.length <= 1) {
-                            console.log('🛑 Only 1 period detected. Skipping grouping logic.');
                             this.isSaving = false;
                             this.loadingService.hide();
                             this.capturePreviewScreenshot();
@@ -1509,7 +1354,6 @@ export class QuoteDetailsComponent implements OnInit {
 
     syncRampGroup(period: SubscriptionPeriod, mainLineId: string, relationshipTypeId: string) {
         const targetQuoteId = this.salesforceQuoteId;
-        console.log('🚀 Creating Ramp Group for first period...');
 
         const records2 = [
             {
@@ -1542,11 +1386,10 @@ export class QuoteDetailsComponent implements OnInit {
             "graph": { "graphId": "updateQuote", "records": records2 }
         };
 
-        console.log('📡 STEP 2: Sending Group Creation Payload:', JSON.stringify(payload2, null, 2));
+
 
         this.sfApi.placeGraphRequest(payload2).subscribe({
             next: (res) => {
-                console.log('✅ Ramp Group created and line linked successfully:', res);
                 this.syncRemainingPeriods(relationshipTypeId);
             },
             error: (err) => {
@@ -1569,28 +1412,22 @@ export class QuoteDetailsComponent implements OnInit {
         const remainingPeriods = this.subscriptionPeriods.slice(1);
         const targetQuoteId = this.salesforceQuoteId || '';
         const bundleProductId = '01tDz00000Ea17zIAB';
-        const bundlePBEId = '01uDz00000dqXP8IAM'; // Standard PBE for Looker New RCA
+        const bundlePBEId = '01uDz00000dqXP8IAM';
 
-        console.log(`🚀 Starting Sequential Sync for ${remainingPeriods.length} remaining periods...`);
-
-        // Use reduce to execute sequentially
         remainingPeriods.reduce((prev: Observable<any>, period, idx) => {
             return prev.pipe(
                 switchMap(() => {
-                    const periodNum = idx + 2; // slice(1) starts at index 0 which is actually Period 2
-                    console.log(`📡 STEP 3.${idx + 1}: Processing Year ${periodNum}...`);
+                    const periodNum = idx + 2;
 
                     const recordsP: any[] = [];
                     const groupRef = `refRampGroup_P${periodNum}`;
                     const bundleParentRef = `refBundleParent_P${periodNum}`;
 
-                    // A. Quote Patch
                     recordsP.push({
                         "referenceId": `refQuote_P${periodNum}`,
                         "record": { "attributes": { "type": "Quote", "method": "PATCH", "id": targetQuoteId }, "Pricebook2Id": "01sf4000003ZgtzAAC" }
                     });
 
-                    // B. Create Group
                     const groupName = period.name.replace('Period', 'Year');
                     const groupRec: any = {
                         "attributes": { "type": "QuoteLineGroup", "method": "POST" },
@@ -1607,7 +1444,6 @@ export class QuoteDetailsComponent implements OnInit {
                         "record": groupRec
                     });
 
-                    // C. Create Bundle Parent
                     const standardFreq = this.billingFrequency ? this.billingFrequency.split(' ')[0] : 'Monthly';
                     const parentRec: any = {
                         "attributes": { "type": "QuoteLineItem", "method": "POST" },
@@ -1630,23 +1466,18 @@ export class QuoteDetailsComponent implements OnInit {
                         "record": parentRec
                     });
 
-                    // D. Add Children (Platform & Users)
                     let childIdx = 1;
-
-                    // Platform
                     const selectedPlatform = this.productOptions.find(p => p.name === period.productName);
                     if (selectedPlatform && selectedPlatform.productId) {
                         this.addGraphRecords(recordsP, childIdx++, selectedPlatform, period, `@{${bundleParentRef}.id}`, 1, targetQuoteId, "NotIncludedInBundlePrice", period.discount || 0, `_P${periodNum}`, `@{${groupRef}.id}`, relationshipTypeId);
                     }
 
-                    // Users
                     period.userRows.forEach(row => {
                         if (row.type !== 'Non-prod' && (row.quantity || 0) > 0 && row.productId) {
                             this.addGraphRecords(recordsP, childIdx++, row, period, `@{${bundleParentRef}.id}`, row.quantity || 0, targetQuoteId, "NotIncludedInBundlePrice", row.discount || 0, `_P${periodNum}`, `@{${groupRef}.id}`, relationshipTypeId);
                         }
                     });
 
-                    // Non-Prod
                     const nonProdRow = period.userRows.find(r => r.type === 'Non-prod');
                     if (nonProdRow && (nonProdRow.quantity || 0) > 0 && selectedPlatform?.nonProdProductId) {
                         const matchingItem = {
@@ -1675,21 +1506,18 @@ export class QuoteDetailsComponent implements OnInit {
                         "graph": { "graphId": "updateQuote", "records": recordsP }
                     };
 
-                    console.log(`📡 STEP 3.${idx + 1}: Sending Payload for Year ${periodNum}...`);
+
                     return this.sfApi.placeGraphRequest(payloadP);
                 })
             );
         }, of('Start Chain')).subscribe({
-            next: (res) => {
-                console.log('✅ All Sequential Periods Synced:', res);
+            next: () => {
                 this.isSaving = false;
                 this.loadingService.hide();
                 this.toastService.show('Quote Data Saved Successfully!', 'success');
-                // Capture screenshot before showing success popup
                 this.capturePreviewScreenshot();
             },
             error: (err) => {
-                console.error('❌ Sequential Sync Error:', err);
                 this.isSaving = false;
                 this.loadingService.hide();
                 this.toastService.show('Failed to sync remaining periods.', 'error');
@@ -1698,7 +1526,6 @@ export class QuoteDetailsComponent implements OnInit {
     }
 
     addGraphRecords(records: any[], index: number, item: any, period: SubscriptionPeriod, parentId: string, quantity: number, quoteId: string, pricing: string, discount: number = 0, suffix: string = '', groupId: string | null = null, productRelationshipTypeId: string | null = null) {
-        // refIdStr logic to match reference payload naming convention (e.g., refChildQuoteLineItem_P1)
         const refIdStr = index === 1 ? '' : `-${index}`;
         const refId = `refChildQuoteLineItem${suffix}${refIdStr}`;
 
@@ -1712,7 +1539,7 @@ export class QuoteDetailsComponent implements OnInit {
                 "Product2Id": item.productId,
                 "PricebookEntryId": item.pricebookEntryId || '01uDz00000dqXP8IAM',
                 "Quantity": quantity,
-                // "UnitPrice": item.price || item.unitPrice || 0, // Removed to match reference
+
                 "PeriodBoundary": "Anniversary",
                 "BillingFrequency": standardFreq,
                 "Billing_Frequency__c": this.billingFrequency,
@@ -1735,7 +1562,7 @@ export class QuoteDetailsComponent implements OnInit {
 
         if (parentId && productRelationshipTypeId) {
             records.push({
-                "referenceId": `refRel${suffix}_${index}`, // Updated format to match reference: refRel_P1_1
+                "referenceId": `refRel${suffix}_${index}`,
                 "record": {
                     "attributes": { "type": "QuoteLineRelationship", "method": "POST" },
                     "MainQuoteLineId": parentId,
