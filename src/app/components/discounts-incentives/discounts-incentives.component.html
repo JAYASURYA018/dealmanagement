@@ -21,14 +21,16 @@
                 <!-- Start Date -->
                 <div class="bg-white p-2 rounded-lg h-[52px] flex flex-col justify-center relative">
                     <label class="text-[11px] text-gray-500 mb-0.5 ml-1">Start date</label>
-                    <input type="date" [(ngModel)]="discountPeriod.startDate"
+                    <input type="date" [(ngModel)]="discountPeriod.startDate" [min]="minDate"
+                        (ngModelChange)="validateDiscountDates()"
                         class="w-full bg-transparent text-sm font-medium text-gray-900 outline-none cursor-pointer"
                         placeholder="Select date">
                 </div>
                 <!-- End Date -->
                 <div class="bg-white p-2 rounded-lg h-[52px] flex flex-col justify-center relative">
                     <label class="text-[11px] text-gray-500 mb-0.5 ml-1">End date</label>
-                    <input type="date" [(ngModel)]="discountPeriod.endDate"
+                    <input type="date" [(ngModel)]="discountPeriod.endDate" [min]="discountPeriod.startDate || minDate"
+                        (ngModelChange)="validateDiscountDates()"
                         class="w-full bg-transparent text-sm font-medium text-gray-900 outline-none cursor-pointer"
                         placeholder="Select date">
                 </div>
@@ -94,7 +96,8 @@
                 <!-- Start Date -->
                 <div class="bg-white p-2 rounded-lg h-[52px] flex flex-col justify-center relative">
                     <label class="text-[11px] text-gray-500 mb-0.5 ml-1">Start date</label>
-                    <input type="date" [(ngModel)]="incentivePeriod.startDate"
+                    <input type="date" [(ngModel)]="incentivePeriod.startDate" [min]="minDate"
+                        (ngModelChange)="validateIncentiveDates()"
                         class="w-full bg-transparent text-sm font-medium text-gray-900 outline-none cursor-pointer"
                         placeholder="Select date">
                 </div>
@@ -102,6 +105,7 @@
                 <div class="bg-white p-2 rounded-lg h-[52px] flex flex-col justify-center relative">
                     <label class="text-[11px] text-gray-500 mb-0.5 ml-1">End date</label>
                     <input type="date" [(ngModel)]="incentivePeriod.endDate"
+                        [min]="incentivePeriod.startDate || minDate" (ngModelChange)="validateIncentiveDates()"
                         class="w-full bg-transparent text-sm font-medium text-gray-900 outline-none cursor-pointer"
                         placeholder="Select date">
                 </div>
@@ -250,7 +254,7 @@
                 <div class="bg-white border border-gray-400 rounded-lg p-2 h-[52px] flex flex-col justify-center focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all"
                     [ngClass]="{'bg-gray-50 opacity-60 pointer-events-none': discountForm.granularity === 'Granular'}">
                     <label class="text-[11px] text-gray-500 mb-0.5">Discount</label>
-                    <input type="text" [(ngModel)]="discountForm.value"
+                    <input type="text" [(ngModel)]="discountForm.value" (keydown)="restrictNumeric($event)"
                         [placeholder]="discountForm.granularity === 'Granular' ? 'See items' : 'Enter'"
                         class="w-full outline-none text-sm font-medium text-gray-900 placeholder-gray-400"
                         [disabled]="discountForm.granularity === 'Granular'">
@@ -304,6 +308,7 @@
                         class="bg-white border border-gray-400 rounded-lg p-2 h-[52px] flex flex-col justify-center focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all">
                         <label class="text-[11px] text-gray-500 mb-0.5">Amount</label>
                         <input type="text" [(ngModel)]="incentiveForm.amount" placeholder="$50,000"
+                            (keydown)="restrictNumeric($event)"
                             class="w-full outline-none text-sm font-medium text-gray-900 placeholder-gray-400">
                     </div>
                     <div
@@ -452,7 +457,7 @@
                             class="w-32 px-4 py-4 text-right pr-6">
                             <div class="inline-flex items-center bg-gray-100 rounded-lg px-2 py-1.5 w-16 border border-transparent focus-within:bg-white focus-within:border-blue-500 transition-all ml-auto"
                                 [ngClass]="{'opacity-50 grayscale pointer-events-none': !item.selected}">
-                                <input type="number" [(ngModel)]="item.discount"
+                                <input type="number" [(ngModel)]="item.discount" (keydown)="restrictNumeric($event)"
                                     class="w-full bg-transparent text-sm font-bold text-gray-900 outline-none text-right [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                     [disabled]="!item.selected">
                                 <span class="text-[10px] font-bold text-gray-500 ml-0.5">%</span>

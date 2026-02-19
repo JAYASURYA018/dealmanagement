@@ -68,7 +68,8 @@
                         {{ period.name }} Start Date
                     </label>
                     <div class="relative w-full flex items-center">
-                        <input type="date" [(ngModel)]="period.startDate"
+                        <input type="date" [(ngModel)]="period.startDate" [min]="minDate"
+                            (ngModelChange)="onDateChange()"
                             class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
                         <div class="text-sm font-semibold text-gray-800">
                             {{ formatDate(period.startDate) || 'Select' }}
@@ -85,7 +86,8 @@
                             {{ period.name }} End Date
                         </label>
                         <div class="relative w-full flex items-center">
-                            <input type="date" [(ngModel)]="period.endDate"
+                            <input type="date" [(ngModel)]="period.endDate" [min]="period.startDate || minDate"
+                                (ngModelChange)="onDateChange()"
                                 class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
                             <div class="text-sm font-semibold text-gray-800">
                                 {{ formatDate(period.endDate) || 'Select' }}
@@ -105,6 +107,7 @@
                     class="bg-white p-2 px-3 rounded-lg border border-gray-300 hover:border-gray-400 transition-colors flex flex-col justify-center h-[56px] shadow-sm">
                     <label class="block text-[11px] text-gray-500 font-medium leading-none mb-1">Discount (%)</label>
                     <input type="number" [(ngModel)]="period.discount" placeholder="Enter"
+                        (keydown)="restrictNumeric($event)"
                         class="w-full bg-transparent text-sm font-semibold text-gray-800 outline-none">
                 </div>
             </div>
@@ -128,7 +131,7 @@
                 <div
                     class="bg-white p-2 px-3 rounded-md border border-gray-300 hover:border-gray-400 transition-colors flex flex-col justify-center h-[56px] shadow-sm">
                     <label class="block text-[11px] text-gray-500 font-medium leading-none mb-1">Quantity</label>
-                    <input type="number" [(ngModel)]="row.quantity" min="0"
+                    <input type="number" [(ngModel)]="row.quantity" min="0" (keydown)="restrictNumeric($event)"
                         (change)="row.quantity = (row.quantity ?? 0) < 0 ? 0 : (row.quantity ?? 0); productChanged.emit()"
                         class="w-full bg-transparent text-sm font-semibold text-gray-800 outline-none">
                 </div>
@@ -177,6 +180,7 @@
                     class="bg-white p-2 px-3 rounded-md border border-gray-300 hover:border-gray-400 transition-colors flex flex-col justify-center h-[56px] shadow-sm">
                     <label class="block text-[11px] text-gray-500 font-medium leading-none mb-1">Discount (%)</label>
                     <input type="number" [(ngModel)]="row.discount" placeholder="Enter"
+                        (keydown)="restrictNumeric($event)"
                         class="w-full bg-transparent text-sm font-semibold text-gray-800 outline-none">
                 </div>
             </div>

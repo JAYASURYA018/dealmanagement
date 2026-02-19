@@ -49,8 +49,13 @@
                         <span class="material-icons-outlined text-lg mr-2 text-slate-700">person</span>
                         Preview approval
                     </button>
-                    <button (click)="onSave()" [disabled]="isSaving" [class.opacity-50]="isSaving"
-                        class="px-5 py-2 bg-blue-50 text-slate-700 rounded-full text-sm font-semibold hover:bg-blue-100 shadow-sm flex items-center transition-colors border border-blue-100">
+
+
+                    <!-- Create contract button - always visible, but no action for subscription flow -->
+                    <button (click)="!isLookerSubscription ? onSave() : null" [disabled]="isSaving"
+                        [class.opacity-50]="isSaving"
+                        class="px-5 py-2 bg-blue-50 text-slate-700 rounded-full text-sm font-semibold shadow-sm flex items-center transition-colors border border-blue-100"
+                        [class.hover:bg-blue-100]="!isLookerSubscription" [class.cursor-default]="isLookerSubscription">
                         <span class="material-icons-outlined text-lg mr-2 text-slate-700">feed</span>
                         <span *ngIf="!isSaving">Create contract</span>
                         <span *ngIf="isSaving">Creating...</span>
@@ -131,7 +136,7 @@
                                             Start
                                             Date</label>
                                         <div class="relative w-full flex items-center">
-                                            <input type="date" [(ngModel)]="termStartInput"
+                                            <input type="date" [(ngModel)]="termStartInput" [min]="minDate"
                                                 (ngModelChange)="updateExpirationDate()"
                                                 class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                                                 placeholder="Select">
@@ -150,6 +155,7 @@
                                             Date</label>
                                         <div class="relative w-full flex items-center">
                                             <input type="date" [(ngModel)]="termEndDate"
+                                                [min]="termStartInput || minDate"
                                                 (ngModelChange)="updateTermFromDates()"
                                                 class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                                                 placeholder="Select">
@@ -264,6 +270,7 @@
                                     class="bg-slate-200 p-2 rounded-lg border-b-2 border-transparent hover:bg-slate-300 transition-colors relative group h-[52px] flex flex-col justify-center">
                                     <label class="block text-[11px] text-gray-600 mb-0.5">Quote Start date</label>
                                     <input type="date" [(ngModel)]="startDate" (ngModelChange)="updateExpirationDate()"
+                                        [min]="minDate"
                                         class="w-full bg-transparent text-sm text-gray-800 outline-none cursor-pointer font-medium -mt-0.5"
                                         placeholder="Select">
                                 </div>
@@ -388,6 +395,7 @@
                                                         <label class="block text-[11px] text-gray-600 mb-0.5">Period
                                                             (months)</label>
                                                         <input #monthsInput type="text" placeholder="Enter"
+                                                            (keydown)="restrictNumeric($event)"
                                                             [value]="period.months ? period.months + ' months' : ''"
                                                             (focus)="onMonthFocus(i, monthsInput)"
                                                             (blur)="onMonthBlur(i, monthsInput)"
@@ -402,6 +410,7 @@
                                                     class="bg-gray-100 p-2 rounded-lg border-b-2 border-transparent hover:bg-gray-200 transition-colors relative group h-[52px] flex flex-col justify-center focus-within:ring-1 focus-within:ring-blue-500">
                                                     <label class="block text-[11px] text-gray-600 mb-0.5">Amount</label>
                                                     <input #amountInput type="text" placeholder="Enter"
+                                                        (keydown)="restrictNumeric($event)"
                                                         [value]="period.amount ? formatCurrency(period.amount).replace('$', '') : ''"
                                                         (blur)="onAmountBlur(i, amountInput.value)"
                                                         (keydown.enter)="handleInputEnter(i, 'amount', $event, monthsInput, amountInput)"
@@ -579,7 +588,7 @@
                                         Start Date</label>
                                     <div class="flex justify-between items-center w-full relative">
                                         <input type="date" [(ngModel)]="termStartDate"
-                                            (ngModelChange)="updateExpirationDate()"
+                                            (ngModelChange)="updateExpirationDate()" [min]="minDate"
                                             [disabled]="isTermStartDateDisabled()"
                                             class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10 disabled:cursor-not-allowed"
                                             placeholder="Select">
@@ -599,7 +608,7 @@
                                         End Date</label>
                                     <div class="flex justify-between items-center w-full relative">
                                         <input type="date" [(ngModel)]="termEndDate"
-                                            (ngModelChange)="updateTermFromDates()"
+                                            (ngModelChange)="updateTermFromDates()" [min]="termStartDate || minDate"
                                             class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                                             placeholder="Select">
                                         <div class="text-sm font-medium text-gray-900 leading-tight">
@@ -823,7 +832,7 @@
                 <!-- Subscription Periods Section (for Looker Subscription Flow) -->
                 <div class="mb-6" *ngIf="isLookerSubscription && previewCommitments.length > 0">
                     <div class="flex items-center justify-between mb-4">
-                        <h3 class="text-xl font-bold text-gray-900">Subscription Periods ({{ previewCommitments.length
+                        <h3 class="text-xl font-bold text-gray-900">Subscription Years ({{ previewCommitments.length
                             }})
                         </h3>
                     </div>

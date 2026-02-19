@@ -77,6 +77,7 @@ export class QuoteDetailsComponent implements OnInit {
     expirationDate: string = new Date(Date.now() + 45 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     previewCommitments: any[] = [];
     todayDate: Date = new Date(); // Keep for explicit today reference if needed, but startDate is now separate
+    minDate: string = new Date().toISOString().split('T')[0];
 
     // Term Start Date (Separate from Quote Start Date)
     termStartInput: string = '';
@@ -150,6 +151,7 @@ export class QuoteDetailsComponent implements OnInit {
                             let nonProdPrice = 0;
                             let nonProdProductId = null;
                             let nonProdPricebookEntryId = null;
+                            let nonProdProductName = null;
                             if (nonProdGroup) {
                                 const name = c.name.toLowerCase();
                                 const match = nonProdGroup.components.find((npc: any) => {
@@ -162,8 +164,9 @@ export class QuoteDetailsComponent implements OnInit {
                                 if (match) {
                                     const npPriceObj = (match.prices && match.prices.find((p: any) => p.isDefault || p.isSelected)) || (match.prices && match.prices[0]) || null;
                                     nonProdPrice = npPriceObj ? npPriceObj.price : 0;
-                                    nonProdProductId = match.id; // As requested: take ID from response 'id'
+                                    nonProdProductId = match.id;
                                     nonProdPricebookEntryId = npPriceObj ? npPriceObj.priceBookEntryId : null;
+                                    nonProdProductName = match.name;
                                 }
                             }
 
@@ -177,6 +180,7 @@ export class QuoteDetailsComponent implements OnInit {
                                 pricebookEntryId: pricebookEntryId,
                                 nonProdProductId: nonProdProductId,
                                 nonProdPricebookEntryId: nonProdPricebookEntryId,
+                                nonProdProductName: nonProdProductName,
                                 startDate: null,
                                 endDate: null,
                                 billingFrequency: 'Annual',
@@ -214,6 +218,7 @@ export class QuoteDetailsComponent implements OnInit {
                                         r.frequency = frequency;
                                         r.productId = productId;
                                         r.pricebookEntryId = pricebookEntryId;
+                                        r.name = c.name;
                                     }
                                 });
                             });
@@ -711,7 +716,7 @@ export class QuoteDetailsComponent implements OnInit {
                 const total = price * (1 - discount / 100);
 
                 items.push({
-                    name: period.productName + ' (Platform)', // Or just productName
+                    name: period.productName, // Use actual name without suffix
                     operationType: 'New',
                     quantity: 1,
                     startDate: this.formatDateForDisplay(new Date(period.startDate)),
@@ -739,8 +744,11 @@ export class QuoteDetailsComponent implements OnInit {
                     const discount = userRow.discount || 0;
                     const total = (price * qty) * (1 - discount / 100);
 
+                    // Use stored name from Salesforce if available
+                    const displayName = userRow.name || `${period.productName || 'Looker'} ${userRow.type} ${userRow.type === 'Non-prod' ? 'Environment' : 'User'}`;
+
                     items.push({
-                        name: `${period.productName || 'Looker'} ${userRow.type} ${userRow.type === 'Non-prod' ? 'Environment' : 'User'}`,
+                        name: displayName,
                         operationType: 'New',
                         quantity: qty,
                         startDate: this.formatDateForDisplay(new Date(period.startDate)),
@@ -763,7 +771,7 @@ export class QuoteDetailsComponent implements OnInit {
 
             if (items.length > 0) {
                 previews.push({
-                    name: `Period ${index + 1} - ${period.name}`,
+                    name: `Year ${index + 1}`,
                     startDate: this.formatDateForDisplay(new Date(period.startDate)),
                     endDate: this.formatDateForDisplay(new Date(period.endDate)),
                     months: this.calculateMonthsBetween(period.startDate, period.endDate),
@@ -1151,15 +1159,15 @@ export class QuoteDetailsComponent implements OnInit {
 
         if (this.isLookerSubscription) {
             if (!this.termStartInput) return; // Wait for term start
-            const [y, m, d] = this.termStartInput.split('-').map(Number);
-            const selectedDate = new Date(y, m - 1, d);
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-
-            if (selectedDate < today) {
+            if (this.termStartInput < this.minDate) {
                 this.toastService.show('You cannot select a term start date less than the current date.', 'warning');
-                this.termStartInput = '';
+                this.termStartInput = this.minDate;
                 return;
+            }
+        } else {
+            if (this.startDate && this.startDate < this.minDate) {
+                this.toastService.show('Quote Start Date cannot be less than the current date.', 'warning');
+                this.startDate = this.minDate;
             }
         }
 
@@ -1341,7 +1349,7 @@ export class QuoteDetailsComponent implements OnInit {
         this.termStartsOn = option;
         this.termStartsOnOpen = false;
         if (this.isTermStartDateDisabled()) {
-            this.startDate = '';
+            this.termStartDate = '';
         }
     }
 
@@ -1403,6 +1411,8 @@ export class QuoteDetailsComponent implements OnInit {
                 }
 
                 const todayStr = new Date().toISOString().split('T')[0];
+                const firstRegion = firstPeriod.userRows.find((r: any) => r.region)?.region || '';
+
                 const quoteRec: any = {
                     "attributes": { "type": "Quote", "method": "PATCH", "id": targetQuoteId },
                     "Pricebook2Id": "01sf4000003ZgtzAAC",
@@ -1494,6 +1504,7 @@ export class QuoteDetailsComponent implements OnInit {
 
 
 
+                console.log('📦 Step 1 Payload (Periods/Lines):', JSON.stringify(payload1, null, 2));
                 this.sfApi.placeGraphRequest(payload1).subscribe({
                     next: (res1: any) => {
                         if (this.subscriptionPeriods.length <= 1) {
@@ -1527,7 +1538,9 @@ export class QuoteDetailsComponent implements OnInit {
         const records2 = [
             {
                 "referenceId": "refQuote_Step2",
-                "record": { "attributes": { "type": "Quote", "method": "PATCH", "id": targetQuoteId } }
+                "record": {
+                    "attributes": { "type": "Quote", "method": "PATCH", "id": targetQuoteId }
+                }
             },
             {
                 "referenceId": "refGroup1",
@@ -1557,6 +1570,7 @@ export class QuoteDetailsComponent implements OnInit {
 
 
 
+        console.log('📦 Step 2 Payload (Ramp Group):', JSON.stringify(payload2, null, 2));
         this.sfApi.placeGraphRequest(payload2).subscribe({
             next: (res) => {
                 this.syncRemainingPeriods(relationshipTypeId);
@@ -1594,7 +1608,10 @@ export class QuoteDetailsComponent implements OnInit {
 
                     recordsP.push({
                         "referenceId": `refQuote_P${periodNum}`,
-                        "record": { "attributes": { "type": "Quote", "method": "PATCH", "id": targetQuoteId }, "Pricebook2Id": "01sf4000003ZgtzAAC" }
+                        "record": {
+                            "attributes": { "type": "Quote", "method": "PATCH", "id": targetQuoteId },
+                            "Pricebook2Id": "01sf4000003ZgtzAAC"
+                        }
                     });
 
                     const groupName = period.name.replace('Period', 'Year');
@@ -1678,6 +1695,7 @@ export class QuoteDetailsComponent implements OnInit {
                     };
 
 
+                    console.log(`📦 Payload for Period ${periodNum}:`, JSON.stringify(payloadP, null, 2));
                     return this.sfApi.placeGraphRequest(payloadP);
                 })
             );
@@ -1763,5 +1781,20 @@ export class QuoteDetailsComponent implements OnInit {
         this.expirationDate = new Date(Date.now() + 45 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
         this.commitmentPeriods = [{ months: null, amount: null, isCollapsed: false }];
         this.activeMenuIndex = null;
+    }
+    restrictNumeric(event: KeyboardEvent) {
+        const allowedKeys = ['Backspace', 'Tab', 'Enter', 'ArrowLeft', 'ArrowRight', 'Delete', 'End', 'Home'];
+        if (allowedKeys.includes(event.key)) return;
+
+        const isDigit = /[0-9]/.test(event.key);
+        const isDot = event.key === '.';
+
+        if (!isDigit && !isDot) {
+            event.preventDefault();
+        }
+
+        if (isDot && (event.target as HTMLInputElement).value.includes('.')) {
+            event.preventDefault();
+        }
     }
 }

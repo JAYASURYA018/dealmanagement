@@ -1,6 +1,7 @@
-import { Component, EventEmitter, HostListener, Input, Output } from '@angular/core';
+import { Component, EventEmitter, HostListener, Input, Output, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ToastService } from '../../services/toast.service';
 
 export interface ProductItem {
     category: string;
@@ -12,6 +13,7 @@ export interface ProductItem {
     pricebookEntryId?: string;
     nonProdProductId?: string | null;
     nonProdPricebookEntryId?: string | null;
+    nonProdProductName?: string | null;
 }
 
 export interface UserTypeRow {
@@ -25,6 +27,7 @@ export interface UserTypeRow {
     frequency?: string;
     productId?: string;
     pricebookEntryId?: string;
+    name?: string;
 }
 
 export interface SubscriptionPeriod {
@@ -87,9 +90,37 @@ export class SubscriptionPeriodItemComponent {
     }
     @Output() remove = new EventEmitter<void>();
     @Output() productChanged = new EventEmitter<void>();
+    private toastService = inject(ToastService);
     activeRegionIndex: number | null = null;
 
     @Input() regionOptions: string[] = [];
+
+    minDate: string = new Date().toISOString().split('T')[0];
+
+    onDateChange() {
+        if (!this.period.startDate || !this.period.endDate) return;
+
+        const start = new Date(this.period.startDate);
+        const end = new Date(this.period.endDate);
+
+        if (end < start) {
+            this.period.endDate = '';
+            this.toastService.show('End Date cannot be earlier than Start Date.', 'warning');
+            return;
+        }
+
+        // Limit to 1 year
+        const limitDate = new Date(start);
+        limitDate.setFullYear(limitDate.getFullYear() + 1);
+
+        if (end > limitDate) {
+            this.period.endDate = '';
+            this.toastService.show('Period duration cannot exceed 1 year.', 'warning');
+            return;
+        }
+
+        this.productChanged.emit();
+    }
 
     toggleExpand() {
         this.period.isExpanded = !this.period.isExpanded;
@@ -109,6 +140,7 @@ export class SubscriptionPeriodItemComponent {
             if (nonProdRow) {
                 nonProdRow.price = selected.nonProdPrice ?? 0;
                 nonProdRow.frequency = selected.frequency;
+                nonProdRow.name = selected.nonProdProductName || '';
             }
             this.productChanged.emit();
         }
@@ -164,5 +196,22 @@ export class SubscriptionPeriodItemComponent {
         }
 
         return `${months}M ${days}D (${diffDays} Days)`;
+    }
+    restrictNumeric(event: KeyboardEvent) {
+        const allowedKeys = ['Backspace', 'Tab', 'Enter', 'ArrowLeft', 'ArrowRight', 'Delete', 'End', 'Home'];
+        if (allowedKeys.includes(event.key)) return;
+
+        // Allow digits and at most one decimal point
+        const isDigit = /[0-9]/.test(event.key);
+        const isDot = event.key === '.';
+
+        if (!isDigit && !isDot) {
+            event.preventDefault();
+        }
+
+        // Prevent multiple dots
+        if (isDot && (event.target as HTMLInputElement).value.includes('.')) {
+            event.preventDefault();
+        }
     }
 }

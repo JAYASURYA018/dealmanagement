@@ -104,6 +104,24 @@ export class DiscountsIncentivesComponent {
         this.incentiveTypeOpen = false;
     }
 
+    minDate: string = new Date().toISOString().split('T')[0];
+
+    validateDiscountDates() {
+        if (!this.discountPeriod.startDate || !this.discountPeriod.endDate) return;
+        if (this.discountPeriod.endDate < this.discountPeriod.startDate) {
+            this.toastService.show('Discount End Date cannot be earlier than Start Date.', 'warning');
+            this.discountPeriod.endDate = '';
+        }
+    }
+
+    validateIncentiveDates() {
+        if (!this.incentivePeriod.startDate || !this.incentivePeriod.endDate) return;
+        if (this.incentivePeriod.endDate < this.incentivePeriod.startDate) {
+            this.toastService.show('Incentive End Date cannot be earlier than Start Date.', 'warning');
+            this.incentivePeriod.endDate = '';
+        }
+    }
+
     // Product Selector Logic
     showProductSelector = false;
     productTab: 'groups' | 'individual' = 'groups';
@@ -570,5 +588,20 @@ export class DiscountsIncentivesComponent {
             p.selected = false;
             p.discount = 0;
         });
+    }
+    restrictNumeric(event: KeyboardEvent) {
+        const allowedKeys = ['Backspace', 'Tab', 'Enter', 'ArrowLeft', 'ArrowRight', 'Delete', 'End', 'Home'];
+        if (allowedKeys.includes(event.key)) return;
+
+        const isDigit = /[0-9]/.test(event.key);
+        const isDot = event.key === '.';
+
+        if (!isDigit && !isDot) {
+            event.preventDefault();
+        }
+
+        if (isDot && (event.target as HTMLInputElement).value.includes('.')) {
+            event.preventDefault();
+        }
     }
 }
