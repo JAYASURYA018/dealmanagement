@@ -702,45 +702,75 @@ export class QuoteDetailsComponent implements OnInit {
         const previews: any[] = [];
 
         this.subscriptionPeriods.forEach((period, index) => {
-            // Calculate total amount for this period from all user types
-            let totalAmount = 0;
-            const userDetails: any[] = [];
+            const items: any[] = [];
 
+            // 1. Platform (First Row)
+            if (period.productName) {
+                const discount = period.discount || 0;
+                const price = period.unitPrice || 0;
+                const total = price * (1 - discount / 100);
+
+                items.push({
+                    name: period.productName + ' (Platform)', // Or just productName
+                    operationType: 'New',
+                    quantity: 1,
+                    startDate: this.formatDateForDisplay(new Date(period.startDate)),
+                    endDate: period.endDate ? this.formatDateForDisplay(new Date(period.endDate)) : '-',
+                    // Calculate "12M 0D" roughly or leave as is if not critical
+                    orderTerm: this.calculateMonthsBetween(period.startDate, period.endDate) + ' Months',
+                    listPrice: price,
+                    discount: discount, // Display as %
+                    total: total
+                });
+            }
+
+            // 2. User Rows
             period.userRows.forEach((userRow: any) => {
                 const qty = userRow.quantity || 0;
-                const price = userRow.price || 0;
-                const userTotal = qty * price;
-                totalAmount += userTotal;
 
+                // Determine price: Use period.nonProdPrice for 'Non-prod' type if available, otherwise row price
+                let price = userRow.price || 0;
+                if (userRow.type === 'Non-prod' && period.nonProdPrice) {
+                    price = period.nonProdPrice;
+                }
+
+                // Only show if quantity > 0
                 if (qty > 0) {
-                    userDetails.push({
-                        type: userRow.type,
+                    const discount = userRow.discount || 0;
+                    const total = (price * qty) * (1 - discount / 100);
+
+                    items.push({
+                        name: `${period.productName || 'Looker'} ${userRow.type} ${userRow.type === 'Non-prod' ? 'Environment' : 'User'}`,
+                        operationType: 'New',
                         quantity: qty,
-                        price: price,
-                        total: userTotal
+                        startDate: this.formatDateForDisplay(new Date(period.startDate)),
+                        endDate: period.endDate ? this.formatDateForDisplay(new Date(period.endDate)) : '-',
+                        orderTerm: this.calculateMonthsBetween(period.startDate, period.endDate) + ' Months',
+                        listPrice: price,
+                        discount: discount,
+                        total: total
                     });
                 }
             });
 
-            // Also add non-prod price if available
-            if (period.nonProdPrice) {
-                totalAmount += period.nonProdPrice;
-                userDetails.push({
-                    type: 'Non-Prod',
-                    quantity: 1,
-                    price: period.nonProdPrice,
-                    total: period.nonProdPrice
+
+            // Re-evaluating the user row loop to fix price:
+            // (Self-correction in thought process)
+            // Let's check `items` generation again.
+
+            // Total for period
+            const periodTotal = items.reduce((sum, item) => sum + item.total, 0);
+
+            if (items.length > 0) {
+                previews.push({
+                    name: `Period ${index + 1} - ${period.name}`,
+                    startDate: this.formatDateForDisplay(new Date(period.startDate)),
+                    endDate: this.formatDateForDisplay(new Date(period.endDate)),
+                    months: this.calculateMonthsBetween(period.startDate, period.endDate),
+                    amount: periodTotal,
+                    items: items // Changed from userDetails to items generic list
                 });
             }
-
-            previews.push({
-                name: `Period ${index + 1} - ${period.name}`,
-                startDate: this.formatDateForDisplay(new Date(period.startDate)),
-                endDate: this.formatDateForDisplay(new Date(period.endDate)),
-                months: this.calculateMonthsBetween(period.startDate, period.endDate),
-                amount: totalAmount,
-                userDetails: userDetails
-            });
         });
 
         return previews;
@@ -750,10 +780,19 @@ export class QuoteDetailsComponent implements OnInit {
         const start = new Date(startDate);
         const end = new Date(endDate);
 
-        let months = (end.getFullYear() - start.getFullYear()) * 12;
-        months += end.getMonth() - start.getMonth();
+        // Add 1 day to end date to make it inclusive (e.g. Feb 19 to Feb 18 is 1 full year)
+        const adjustedEnd = new Date(end);
+        adjustedEnd.setDate(adjustedEnd.getDate() + 1);
 
-        return months + 1;
+        let months = (adjustedEnd.getFullYear() - start.getFullYear()) * 12;
+        months += adjustedEnd.getMonth() - start.getMonth();
+
+        // Adjust if the day of month hasn't reached the start day
+        if (adjustedEnd.getDate() < start.getDate()) {
+            months--;
+        }
+
+        return Math.max(0, months);
     }
 
     fetchQuotePreview(quoteId: string) {

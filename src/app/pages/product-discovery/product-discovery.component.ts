@@ -11,6 +11,7 @@ import { RcaApiService } from '../../services/rca-api.service';
 import { SalesforceApiService } from '../../services/salesforce-api.service';
 import { QuoteDataService } from '../../services/quote-data.service';
 import { LoadingService } from '../../services/loading.service';
+import { SearchFilterService } from '../../services/search-filter.service'; // Import SearchFilterService
 
 import { TopNavComponent } from '../../components/top-nav/top-nav.component';
 
@@ -27,12 +28,16 @@ export class ProductDiscoveryComponent implements OnInit, AfterViewInit {
     salesforceApiService = inject(SalesforceApiService);
     quoteDataService = inject(QuoteDataService);
     loadingService = inject(LoadingService);
+    searchFilterService = inject(SearchFilterService); // Inject SearchFilterService
     cartItems$ = this.cartService.cartItems$;
 
 
     opportunityId: string | null = null;
 
     ngOnInit(): void {
+        // Clear search query on init
+        this.searchFilterService.setSearchQuery('');
+
         // Read opportunity ID from query params
         this.route.queryParams.subscribe(params => {
             this.opportunityId = params['opportunityId'] || null;

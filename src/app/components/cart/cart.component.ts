@@ -6,6 +6,7 @@ import { SalesforceApiService } from '../../services/salesforce-api.service';
 import { QuoteDataService } from '../../services/quote-data.service';
 import { switchMap, finalize } from 'rxjs/operators';
 import { LoadingService } from '../../services/loading.service';
+import { SearchFilterService } from '../../services/search-filter.service'; // Import SearchFilterService
 
 @Component({
     selector: 'app-cart',
@@ -21,6 +22,7 @@ export class CartComponent implements AfterViewInit, OnChanges {
     private salesforceApi = inject(SalesforceApiService);
     private quoteDataService = inject(QuoteDataService);
     private loadingService = inject(LoadingService);
+    private searchFilterService = inject(SearchFilterService); // Inject SearchFilterService
     cartItems$ = this.cartService.cartItems$;
 
     // Store API responses for later use
@@ -96,6 +98,9 @@ export class CartComponent implements AfterViewInit, OnChanges {
             })
         ).subscribe({
             next: (quoteDetails: any) => {
+                // Clear search query
+                this.searchFilterService.setSearchQuery('');
+
                 // Navigate to quote details page
                 this.router.navigate(['/configure-quote']);
             },

@@ -828,52 +828,81 @@
                         </h3>
                     </div>
 
-                    <!-- Subscription Periods Table -->
-                    <div *ngFor="let period of previewCommitments; let i = index" class="mb-6">
-                        <h4 class="text-lg font-semibold text-gray-800 mb-3">{{ period.name }}</h4>
-                        <p class="text-sm text-gray-600 mb-2">
-                            <strong>Duration:</strong> {{ period.startDate }} to {{ period.endDate }} ({{ period.months
-                            }} months)
-                        </p>
+                    <!-- New Table Structure -->
+                    <div *ngFor="let period of previewCommitments; let i = index" class="mb-8">
+                        <h4
+                            class="text-lg font-bold text-gray-800 mb-4 bg-gray-50 p-2 rounded-lg border border-gray-200">
+                            {{ period.name }}
+                            <span class="text-sm font-normal text-gray-600 ml-2">({{ period.startDate }} - {{
+                                period.endDate }})</span>
+                        </h4>
 
-                        <!-- User Types Table for this period -->
-                        <table class="w-full border-collapse mb-4">
-                            <thead>
-                                <tr class="bg-blue-500 text-white">
-                                    <th class="border border-gray-300 px-3 py-2 text-left text-sm font-bold">User Type
-                                    </th>
-                                    <th class="border border-gray-300 px-3 py-2 text-center text-sm font-bold">Quantity
-                                    </th>
-                                    <th class="border border-gray-300 px-3 py-2 text-right text-sm font-bold">Price</th>
-                                    <th class="border border-gray-300 px-3 py-2 text-right text-sm font-bold">Total</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr *ngFor="let user of period.userDetails" class="hover:bg-gray-50">
-                                    <td class="border border-gray-300 px-3 py-2 text-sm font-medium">{{ user.type }}
-                                    </td>
-                                    <td class="border border-gray-300 px-3 py-2 text-sm text-center">{{ user.quantity }}
-                                    </td>
-                                    <td class="border border-gray-300 px-3 py-2 text-sm text-right">{{
-                                        formatCurrency(user.price) }}</td>
-                                    <td class="border border-gray-300 px-3 py-2 text-sm text-right">{{
-                                        formatCurrency(user.total) }}</td>
-                                </tr>
-                                <tr *ngIf="!period.userDetails || period.userDetails.length === 0">
-                                    <td colspan="4"
-                                        class="border border-gray-300 px-3 py-4 text-center text-sm text-gray-500">
-                                        No user types configured for this period
-                                    </td>
-                                </tr>
-                                <!-- Period Total Row -->
-                                <tr class="bg-gray-100 font-bold">
-                                    <td colspan="3" class="border border-gray-300 px-3 py-2 text-sm text-right">Period
-                                        Total:</td>
-                                    <td class="border border-gray-300 px-3 py-2 text-sm text-right">{{
-                                        formatCurrency(period.amount) }}</td>
-                                </tr>
-                            </tbody>
-                        </table>
+                        <div class="overflow-x-auto">
+                            <table class="w-full border-collapse border border-gray-300">
+                                <thead>
+                                    <tr class="bg-[#1a73e8] text-white">
+                                        <th
+                                            class="border border-gray-300 px-3 py-3 text-left text-xs font-bold uppercase tracking-wider">
+                                            Product Name</th>
+                                        <th
+                                            class="border border-gray-300 px-3 py-3 text-left text-xs font-bold uppercase tracking-wider">
+                                            Operation Type</th>
+                                        <th
+                                            class="border border-gray-300 px-3 py-3 text-center text-xs font-bold uppercase tracking-wider">
+                                            Quantity</th>
+                                        <th
+                                            class="border border-gray-300 px-3 py-3 text-left text-xs font-bold uppercase tracking-wider">
+                                            Service Start Date</th>
+                                        <th
+                                            class="border border-gray-300 px-3 py-3 text-left text-xs font-bold uppercase tracking-wider min-w-[100px]">
+                                            Order Term (Months)</th>
+                                        <th
+                                            class="border border-gray-300 px-3 py-3 text-right text-xs font-bold uppercase tracking-wider">
+                                            List Price (USD)</th>
+                                        <th
+                                            class="border border-gray-300 px-3 py-3 text-right text-xs font-bold uppercase tracking-wider">
+                                            Discount (%)</th>
+                                        <th
+                                            class="border border-gray-300 px-3 py-3 text-right text-xs font-bold uppercase tracking-wider">
+                                            Total Subscription Fees (USD)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr *ngFor="let item of period.items" class="hover:bg-gray-50 text-gray-700">
+                                        <td class="border border-gray-300 px-3 py-2 text-sm">
+                                            {{ item.name }}
+                                        </td>
+                                        <td class="border border-gray-300 px-3 py-2 text-sm">{{ item.operationType }}
+                                        </td>
+                                        <td class="border border-gray-300 px-3 py-2 text-sm text-center">{{
+                                            item.quantity }}</td>
+                                        <td class="border border-gray-300 px-3 py-2 text-sm">{{ item.startDate }}</td>
+                                        <td class="border border-gray-300 px-3 py-2 text-sm">{{ item.orderTerm }}</td>
+                                        <td
+                                            class="border border-gray-300 px-3 py-2 text-sm text-right whitespace-nowrap">
+                                            {{ formatCurrency(item.listPrice) }}</td>
+                                        <td class="border border-gray-300 px-3 py-2 text-sm text-right">{{ item.discount
+                                            }}%</td>
+                                        <td
+                                            class="border border-gray-300 px-3 py-2 text-sm text-right font-medium whitespace-nowrap">
+                                            {{ formatCurrency(item.total) }}</td>
+                                    </tr>
+                                    <tr *ngIf="!period.items || period.items.length === 0">
+                                        <td colspan="8"
+                                            class="border border-gray-300 px-3 py-4 text-center text-sm text-gray-500">
+                                            No items in this period.
+                                        </td>
+                                    </tr>
+                                    <!-- Period Total Row -->
+                                    <tr class="bg-gray-100 font-bold text-gray-900 border-t-2 border-gray-300">
+                                        <td colspan="7" class="border border-gray-300 px-3 py-2 text-sm text-right">
+                                            Period Total (USD):</td>
+                                        <td class="border border-gray-300 px-3 py-2 text-sm text-right">{{
+                                            formatCurrency(period.amount) }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
 
