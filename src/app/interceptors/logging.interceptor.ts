@@ -2,6 +2,7 @@ import { HttpInterceptorFn, HttpResponse, HttpErrorResponse } from '@angular/com
 import { inject } from '@angular/core';
 import { tap, finalize } from 'rxjs';
 import { LoggingService } from '../services/logging.service';
+import { getApiDetails } from '../utils/api-log-helper';
 
 export const loggingInterceptor: HttpInterceptorFn = (req, next) => {
     const loggingService = inject(LoggingService);
@@ -12,6 +13,9 @@ export const loggingInterceptor: HttpInterceptorFn = (req, next) => {
     if (url.includes('google-cloud-logger') || url.includes('assets/')) {
         return next(req);
     }
+
+    // Get API details (Name & Description)
+    const apiDetails = getApiDetails(url, req.method, req.body);
 
     return next(req).pipe(
         tap({
@@ -24,7 +28,9 @@ export const loggingInterceptor: HttpInterceptorFn = (req, next) => {
                         status: event.status,
                         startTime: new Date().toISOString(),
                         durationMs: Math.round(duration),
-                        user: 'system' // Placeholder, could be dynamic
+                        user: 'system', // Placeholder, could be dynamic
+                        apiName: apiDetails.name,
+                        description: apiDetails.description
                     });
                 }
             },
@@ -37,7 +43,9 @@ export const loggingInterceptor: HttpInterceptorFn = (req, next) => {
                     startTime: new Date().toISOString(),
                     durationMs: Math.round(duration),
                     error: error.message,
-                    user: 'system'
+                    user: 'system',
+                    apiName: apiDetails.name,
+                    description: apiDetails.description
                 });
             }
         })

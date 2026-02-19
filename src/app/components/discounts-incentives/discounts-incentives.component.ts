@@ -1,10 +1,11 @@
-import { Component, Input, inject } from '@angular/core';
+import { Component, Input, OnChanges, SimpleChanges, inject } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { RcaApiService } from '../../services/rca-api.service';
 import { SalesforceApiService } from '../../services/salesforce-api.service';
 import { ContextService } from '../../services/context.service';
 import { ToastService } from '../../services/toast.service';
-import { finalize, forkJoin, map, catchError, of } from 'rxjs';
-import { CommonModule } from '@angular/common';
+import { LoadingService } from '../../services/loading.service';
+import { finalize, forkJoin, map, catchError, of, switchMap } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 
 @Component({
@@ -13,13 +14,10 @@ import { FormsModule } from '@angular/forms';
     imports: [CommonModule, FormsModule],
     templateUrl: './discounts-incentives.component.html',
 })
-export class DiscountsIncentivesComponent {
+export class DiscountsIncentivesComponent implements OnChanges {
     @Input() productId: string | null = null;
     @Input() parentQuoteLineId: string | null = null; // Parent Bundle Line ID
-    rcaApiService = inject(RcaApiService);
-    salesforceApiService = inject(SalesforceApiService);
-    contextService = inject(ContextService);
-    toastService = inject(ToastService);
+
 
     isLoading = false;
 
@@ -77,7 +75,98 @@ export class DiscountsIncentivesComponent {
     // Dropdown Options
     incentiveTypeOptions = ['Select', 'Incentives type 1', 'Incentives type 2'];
 
-    constructor() { }
+
+
+    // Product Selector Logic
+    showProductSelector = false;
+    productTab: 'groups' | 'individual' = 'groups';
+    filterQuery: string = '';
+    viewMode: 'all' | 'selected' = 'all';
+
+    // Sorting
+    sortConfig = {
+        column: 'name',
+        direction: 'asc' as 'asc' | 'desc'
+    };
+
+    // Data
+    displayMode: 'grid' | 'list' = 'list';
+    productGroups: any[] = [];
+    individualProducts: any[] = [];
+
+    // Dropdown Data
+    dropdownOptions: any[] = [];
+    filteredDropdownOptions: any[] = [];
+    selectedDropdownOption: any = null;
+    dropdownSearchText: string = '';
+    isDropdownOpen: boolean = false;
+
+    // Individual Pagination State
+    individualPageSize: number = 50;
+    individualPageOptions: number[] = [10, 20, 50];
+    individualCurrentOffset: number = 0;
+    individualTotalLoaded: number = 0;
+    isIndividualLoading: boolean = false;
+
+    constructor(
+        private rcaApiService: RcaApiService,
+        private salesforceApiService: SalesforceApiService,
+        private contextService: ContextService,
+        private toastService: ToastService,
+        private loadingService: LoadingService
+    ) { }
+
+    ngOnInit() {
+        this.fetchDropdownOptions();
+    }
+
+    ngOnChanges(changes: SimpleChanges) {
+        if (changes['productId'] && changes['productId'].currentValue) {
+            this.fetchProductDetails();
+        }
+    }
+
+    fetchDropdownOptions() {
+        this.rcaApiService.getDropdownOptions().subscribe({
+            next: (res: any) => {
+                const records = res.records || [];
+                // Filter only those with It_has_Bundle_Products__c = false (Individual Products)
+                this.dropdownOptions = records.filter((r: any) => r.It_has_Bundle_Products__c === false);
+                this.filteredDropdownOptions = [...this.dropdownOptions];
+
+                // Select the first option by default if available
+                if (this.filteredDropdownOptions.length > 0) {
+                    this.selectDropdownOption(this.filteredDropdownOptions[0]);
+                }
+            },
+            error: (err) => {
+                console.error('Error fetching dropdown options', err);
+                this.toastService.show('Error fetching product classifications', 'error');
+            }
+        });
+    }
+
+    toggleDropdown() {
+        this.isDropdownOpen = !this.isDropdownOpen;
+    }
+
+    selectDropdownOption(option: any) {
+        this.selectedDropdownOption = option;
+        this.isDropdownOpen = false;
+        this.individualCurrentOffset = 0; // Reset pagination
+        this.loadIndividualProducts();
+    }
+
+    filterDropdownOptions() {
+        if (!this.dropdownSearchText) {
+            this.filteredDropdownOptions = [...this.dropdownOptions];
+        } else {
+            const searchLower = this.dropdownSearchText.toLowerCase();
+            this.filteredDropdownOptions = this.dropdownOptions.filter(opt =>
+                opt.Name.toLowerCase().includes(searchLower)
+            );
+        }
+    }
 
     setActiveTab(tab: 'discounts' | 'incentives') {
         this.activeTab = tab;
@@ -121,25 +210,6 @@ export class DiscountsIncentivesComponent {
             this.incentivePeriod.endDate = '';
         }
     }
-
-    // Product Selector Logic
-    showProductSelector = false;
-    productTab: 'groups' | 'individual' = 'groups';
-    filterQuery: string = '';
-    viewMode: 'all' | 'selected' = 'all';
-
-    // Sorting
-    sortConfig = {
-        column: 'name',
-        direction: 'asc' as 'asc' | 'desc'
-    };
-
-    // Data
-    productGroups: any[] = [];
-    individualProducts: any[] = [];
-
-
-
     // Selector Actions
     openProductSelector() {
         if (this.discountForm.granularity === 'Select' || this.discountForm.type === 'Select') {
@@ -148,6 +218,7 @@ export class DiscountsIncentivesComponent {
         }
 
         this.showProductSelector = true;
+
         if (this.productId) {
             this.fetchProductDetails();
         } else {
@@ -164,18 +235,165 @@ export class DiscountsIncentivesComponent {
 
         this.isLoading = true;
         this.debugData = null; // Clear previous
-        this.rcaApiService.getProductDetails(this.productId).pipe(
+
+        // 1. Get Classifications for the current Bundle ID (which implies the current product is a bundle)
+        // The user requirement says: WHERE Parent_Bundle_Product_ID__c ='01tDz00000Eah7vIAB'
+        // I should stick to using `this.productId` as the parent bundle ID.
+        this.rcaApiService.getProductClassifications(this.productId).pipe(
+            switchMap((res: any) => {
+                const records = res.records || [];
+
+                // 1. Handle Bundles (for Groups tab)
+                const bundleClassifications = records.filter((r: any) => r.It_has_Bundle_Products__c === true);
+
+                // 2. Handle Individuals (Legacy or Fallback logic, mainly dependent on Dropdown now)
+                // We no longer rely on `individualClassifications` from THIS call for the main list,
+                // as the Dropdown fetches its own options.
+                // However, we might want to ensure consistency or use this as a fallback.
+                // For now, removing the auto-load from here to rely on fetchDropdownOptions.
+                // this.individualClassifications = records.filter((r: any) => r.It_has_Bundle_Products__c === false);
+                // this.currentIndividualClassIndex = 0;
+                // this.individualCurrentOffset = 0;
+                // this.individualProducts = []; // Clear previous
+
+                // Start loading individual products if any classifications exist
+                // if (this.individualClassifications.length > 0) {
+                //     this.loadIndividualProducts();
+                // }
+
+                // Continue with Group loading logic
+                const requests = bundleClassifications.map((cls: any) =>
+                    this.rcaApiService.getProductsByClassification(cls.Id).pipe(
+                        map(productsRes => ({
+                            classificationId: cls.Id,
+                            products: productsRes.products || []
+                        })),
+                        catchError(() => of({ classificationId: cls.Id, products: [] }))
+                    )
+                );
+
+                if (requests.length === 0) {
+                    return of({ classifications: bundleClassifications, productResults: [] });
+                }
+
+                return forkJoin(requests).pipe(
+                    map(productResults => ({
+                        classifications: bundleClassifications,
+                        productResults: productResults
+                    }))
+                );
+            }),
             finalize(() => this.isLoading = false)
         ).subscribe({
-            next: (data) => {
-                this.debugData = data; // Store raw data for debug view
-                this.mapProductData(data);
+            next: (data: any) => {
+                this.debugData = data;
+                this.mapNewProductData(data.classifications, data.productResults);
             },
             error: (err) => {
+                console.error('Error in product fetch flow', err);
+                this.toastService.show('Failed to load products', 'error');
                 this.debugData = { error: err.message || err };
             }
         });
     }
+
+    loadIndividualProducts() {
+        if (!this.selectedDropdownOption) {
+            return;
+        }
+
+        const currentClassId = this.selectedDropdownOption.Id;
+        const currentClassName = this.selectedDropdownOption.Name;
+
+        this.isIndividualLoading = true;
+
+        this.rcaApiService.getProductsByClassification(
+            currentClassId,
+            this.individualPageSize,
+            this.individualCurrentOffset
+        ).pipe(
+            finalize(() => this.isIndividualLoading = false)
+        ).subscribe({
+            next: (data) => {
+                const newProducts = data.products || [];
+
+                // Map to UI model
+                const mappedProducts = newProducts.map((p: any) => ({
+                    id: p.id,
+                    name: p.name,
+                    family: currentClassName, // Use classification name as family
+                    selected: false,
+                    discount: 0,
+                    quantity: 1,
+                    price: p.unitPrice || 0,
+                    pricebookEntryId: p.pricebookEntryId || '',
+                    isBundleChild: false
+                }));
+
+                this.individualProducts = mappedProducts; // Replace current view with page results
+
+                // If fewer products returned than page size, we might be at end of this classification.
+                // But for now, user just wants simple next/prev.
+                // Logic for "Cross-Classification" Next:
+                // If user clicks Next and we get 0 results, OR we decided we are at end, we move index.
+                // For this implementation, I will handle "Next" logic in the Next button handler.
+            },
+            error: (err) => {
+                console.error('Error loading individual products', err);
+                this.toastService.show('Error loading products', 'error');
+            }
+        });
+    }
+
+    handlePageSizeChange(newSize: number) {
+        this.individualPageSize = newSize;
+        this.individualCurrentOffset = 0;
+        // this.currentIndividualClassIndex = 0; // Reset to start? Or keep current class?
+        // User implied "continuous" flow. Let's restart to be safe and simple.
+        this.loadIndividualProducts();
+    }
+
+    nextPage() {
+        // Increment offset
+        this.individualCurrentOffset += this.individualPageSize;
+        this.loadIndividualProducts();
+    }
+
+    prevPage() {
+        if (this.individualCurrentOffset >= this.individualPageSize) {
+            this.individualCurrentOffset -= this.individualPageSize;
+            this.loadIndividualProducts();
+        }
+    }
+
+    mapNewProductData(classifications: any[], productResults: any[]) {
+        this.productGroups = [];
+        // Note: individualProducts is managed by loadIndividualProducts
+
+        // The user wants the CONTENTS of the "Bundle" classifications to be listed in "Product Groups".
+        // e.g. If "ROOT" is the Bundle Classification, we fetched its products (Edge, Compute, etc.)
+        // We should display Edge, Compute, etc. as the groups.
+
+        const allBundleProducts: any[] = [];
+
+        productResults.forEach(res => {
+            if (res.products && res.products.length > 0) {
+                allBundleProducts.push(...res.products);
+            }
+        });
+
+        // Map these products to the Product Groups model
+        this.productGroups = allBundleProducts.map(p => ({
+            id: p.id,
+            name: p.name, // e.g. "Edge", "Compute"
+            count: 0,     // We don't have child count from this API yet?
+            selected: false,
+            discount: 0,
+            components: [] // No components known yet unless we fetch deeper
+        }));
+    }
+
+
 
     mapProductData(data: any) {
         // Extract the actual product object. API returns { products: [...] } for bundle queries.

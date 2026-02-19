@@ -106,15 +106,15 @@ const server = http.createServer((req, res) => {
             logs.forEach(log => {
                 const start = new Date(log.startTime);
                 const end = new Date(start.getTime() + log.durationMs);
-                const description = getLogDescription(log.url, log.method);
+                
+                // Combine Name and Description for the single "Functionality & Context" column
+                let combinedDescription = log.apiName || getLogDescription(log.url, log.method);
+                if (log.description && log.description !== combinedDescription) {
+                    combinedDescription = `${combinedDescription}: ${log.description}`;
+                }
 
                 // Check for Visual Separator
-                if (description === "Fetch Recent Opportunities List (Dashboard)") {
-                    // Add an empty CSV row (commas matching header count)
-                    // rows.push(headers.map(() => "").join(',')); 
-                    // Actually, a simple blank line might be better for visual scanning in text view, 
-                    // but for CSV/Sheets strictness, we use commas.
-                    // User said "empty row", let's use commas to maintain column structure.
+                if (combinedDescription.includes("Fetch Recent Opportunities List (Dashboard)") || combinedDescription.includes("Get Recent Opportunities")) {
                     rows.push(headers.map(() => "").join(','));
                 }
 
@@ -125,7 +125,7 @@ const server = http.createServer((req, res) => {
                     log.method,
                     log.status,
                     log.durationMs,
-                    description,
+                    combinedDescription,
                     log.error || '',
                     log.user || 'system',
                     log.clientSource || 'unknown'

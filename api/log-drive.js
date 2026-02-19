@@ -179,10 +179,15 @@ export default async function handler(req, res) {
         logs.forEach(log => {
             const start = new Date(log.startTime);
             const end = new Date(start.getTime() + log.durationMs);
-            const description = getLogDescription(log.url, log.method);
+            
+            // Combine Name and Description for the single "Functionality & Context" column
+            let combinedDescription = log.apiName || getLogDescription(log.url, log.method);
+            if (log.description && log.description !== combinedDescription) {
+                combinedDescription = `${combinedDescription}: ${log.description}`;
+            }
 
             // Check for Visual Separator (Match Local Server Logic)
-            if (description === "Fetch Recent Opportunities List (Dashboard)") {
+            if (combinedDescription.includes("Fetch Recent Opportunities List (Dashboard)") || combinedDescription.includes("Get Recent Opportunities")) {
                 rows.push(headers.map(() => "").join(','));
             }
 
@@ -193,7 +198,7 @@ export default async function handler(req, res) {
                 log.method,
                 log.status,
                 log.durationMs,
-                description,
+                combinedDescription,
                 log.error || '',
                 log.user || 'system',
                 log.clientSource || 'unknown'

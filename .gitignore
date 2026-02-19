@@ -51,12 +51,8 @@ Thumbs.db
 environment.prod.ts
 
 # Environment Variables
-.env
-.env.local
-.env.*.local
+
 
 # Angular
 /.angular/
 /.post-install-cache/
-.vercel
-.env*.local

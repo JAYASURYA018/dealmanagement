@@ -12,6 +12,8 @@ export interface ApiLogMetric {
     user?: string;
     error?: string;
     clientSource?: string; // e.g. http://localhost:4200 or https://dealmanagement.vercel.app
+    apiName?: string;
+    description?: string;
 }
 
 @Injectable({
@@ -44,7 +46,8 @@ export class LoggingService {
         // Add current origin to the metric
         metric.clientSource = window.location.origin;
 
-        console.log(`📊 [LoggingService] API Call: ${metric.method} ${metric.url} - ${metric.status} (${metric.durationMs}ms)`);
+        const displayName = metric.apiName || 'API Call';
+        console.log(`📊 [LoggingService] ${displayName}: ${metric.method} ${metric.url} - ${metric.status} (${metric.durationMs}ms)`);
         this.logQueue.push(metric);
         if (this.logQueue.length >= this.BATCH_SIZE) {
             this.flush();
@@ -62,6 +65,7 @@ export class LoggingService {
         // Display in console table for quick viewing
         console.table(payload.map(p => ({
             Time: new Date(p.startTime).toLocaleTimeString(),
+            'API Name': p.apiName || 'General',
             Method: p.method,
             URL: p.url.substring(p.url.lastIndexOf('/') + 1, Math.min(p.url.length, p.url.lastIndexOf('/') + 50)),
             Status: p.status,
