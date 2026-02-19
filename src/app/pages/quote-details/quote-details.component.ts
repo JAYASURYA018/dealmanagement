@@ -1157,6 +1157,12 @@ export class QuoteDetailsComponent implements OnInit {
 
         if (isNaN(start.getTime()) || isNaN(end.getTime())) return;
 
+        if (end < start) {
+            this.toastService.show('Term End Date cannot be earlier than Term Start Date.', 'warning');
+            this.termEndDate = '';
+            return;
+        }
+
         // Check if duration > 5 years
         const limitDate = new Date(start);
         limitDate.setFullYear(limitDate.getFullYear() + 5);
@@ -1363,7 +1369,7 @@ export class QuoteDetailsComponent implements OnInit {
                     "Pricebook2Id": "01sf4000003ZgtzAAC",
                     "StartDate": todayStr
                 };
-                if (firstPeriod.endDate) quoteRec["ExpirationDate"] = firstPeriod.endDate;
+                if (this.expirationDate) quoteRec["ExpirationDate"] = this.expirationDate;
 
                 records1.push({
                     "referenceId": "refQuote",
@@ -1390,8 +1396,6 @@ export class QuoteDetailsComponent implements OnInit {
 
                     if (this.isLookerSubscription && firstPeriod.endDate) {
                         lineUpdate["EndDate"] = firstPeriod.endDate;
-                    } else if (this.expirationDate) {
-                        lineUpdate["EndDate"] = this.expirationDate;
                     } else if (firstPeriod.endDate) {
                         lineUpdate["EndDate"] = firstPeriod.endDate;
                     }

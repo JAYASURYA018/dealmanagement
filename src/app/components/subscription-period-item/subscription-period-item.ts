@@ -87,7 +87,6 @@ export class SubscriptionPeriodItemComponent {
     }
     @Output() remove = new EventEmitter<void>();
     @Output() productChanged = new EventEmitter<void>();
-
     activeRegionIndex: number | null = null;
 
     @Input() regionOptions: string[] = [];

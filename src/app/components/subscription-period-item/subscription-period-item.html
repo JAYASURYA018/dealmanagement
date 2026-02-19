@@ -22,8 +22,8 @@
             </div>
 
             <button (click)="remove.emit(); $event.stopPropagation()"
-                class="p-1 hover:bg-red-100 rounded-full transition-colors text-gray-400 hover:text-red-500">
-                <span class="material-icons-outlined text-lg">delete</span>
+                class="p-1 hover:bg-gray-100 rounded-full transition-colors text-gray-600 hover:text-gray-600">
+                <span class="material-icons-outlined text-lg">more_vert</span>
             </button>
             <span class="material-icons-outlined text-gray-800 transition-transform duration-300"
                 [class.rotate-180]="period.isExpanded">
