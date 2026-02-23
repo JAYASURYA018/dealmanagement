@@ -1,0 +1,90 @@
+<apex:page standardController="Opportunity" sidebar="false" showHeader="false" standardStylesheets="false">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="{!URLFOR($Resource.GoogleQuoteAppV2, 'styles.css')}" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet" />
+    <style>
+        .bootstrap-loader {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100vh;
+            background: #f8f9fa; display: flex; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 9999;
+            font-family: 'Inter', sans-serif;
+        }
+        .spinner {
+            width: 50px; height: 50px; border: 4px solid #f3f3f3;
+            border-top: 4px solid #1a73e8; border-radius: 50%;
+            animation: spin 1s linear infinite; margin-bottom: 20px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .loading-text { color: #3c4043; font-size: 18px; font-weight: 500; }
+        .loading-subtext { color: #70757a; font-size: 14px; margin-top: 8px; }
+    </style>
+
+    <div id="bootstrap-overlay" class="bootstrap-loader">
+        <div class="spinner"></div>
+        <div class="loading-text">Preparing your Google Quote...</div>
+        <div class="loading-subtext">Initializing Application Access</div>
+    </div>
+
+    <app-root></app-root>
+
+    <script>
+        (function() {
+            console.log('--- Google Quote Application Bootstrap Start ---');
+
+            // 1. Capture Raw Values
+            const sid = '{!$Api.Session_ID}';
+            const purl = '{!$Api.Partner_Server_URL_600}';
+            const oppId = '{!Opportunity.Id}';
+
+            console.log('Raw SID Length:', sid ? sid.length : 0);
+            console.log('Raw Partner URL:', purl);
+
+            // 2. Derive API Base URL Safely
+            let apiBaseUrl = '';
+            if (purl) {
+                const match = purl.match(/^https:\/\/[^/]+/);
+                if (match) {
+                    apiBaseUrl = match[0];
+                    if (apiBaseUrl.includes('--c.')) {
+                        apiBaseUrl = apiBaseUrl.replace('--c.', '.').replace('.vf.force.com', '.my.salesforce.com');
+                    }
+                }
+            }
+            
+            // Fallback if purl is missing
+            if (!apiBaseUrl) {
+                apiBaseUrl = window.location.origin.replace('--c.', '.').replace('.vf.force.com', '.my.salesforce.com');
+                console.warn('Using Fallback URL from location:', apiBaseUrl);
+            }
+
+            // 3. Initialize Context
+            window.SF_CONTEXT = {
+                accessToken: sid || '',
+                apiBaseUrl: apiBaseUrl || '',
+                opportunityId: oppId || ''
+            };
+
+            // 4. CRITICAL CHECK: Alert if Token is missing (common in restricted orgs)
+            if (!sid) {
+                console.error('ERROR: No Session ID found. Check if "API Enabled" is checked on your Profile.');
+                alert('Security Warning: Salesforce Session ID is empty. Ensure the User Profile has "API Enabled" checked and session security allows access.');
+            }
+
+            console.log('SF_CONTEXT Ready:', window.SF_CONTEXT);
+
+            // 5. Signal Angular to start
+            window.dispatchEvent(new CustomEvent('sfcontextready'));
+
+            // Cleanup Loader
+            setTimeout(() => {
+                const overlay = document.getElementById('bootstrap-overlay');
+                if (overlay) overlay.style.display = 'none';
+            }, 800);
+        })();
+    </script>
+
+    <script type="module" src="{!URLFOR($Resource.GoogleQuoteAppV2, 'polyfills.js')}"></script>
+    <script type="module" src="{!URLFOR($Resource.GoogleQuoteAppV2, 'main.js')}"></script>
+</apex:page>

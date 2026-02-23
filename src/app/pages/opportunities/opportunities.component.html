@@ -1,0 +1,126 @@
+<div class="flex flex-col h-screen bg-[#eff3f8] overflow-hidden text-[#3c4043] font-sans" (click)="closeMenu()">
+
+    <!-- Global Top Navigation -->
+    <app-top-nav class="flex-shrink-0"></app-top-nav>
+
+    <!-- Main Content Area: Large White Card -->
+    <div class="flex-1 overflow-hidden p-6">
+        <div class="w-full h-full bg-white rounded-[24px] shadow-sm flex flex-col overflow-hidden">
+
+            <!-- Unified Padding Container -->
+            <div class="flex-1 flex flex-col overflow-hidden px-8">
+
+                <!-- Page Title -->
+                <div class="pt-8 pb-5">
+                    <h1 class="text-[22px] font-semibold text-[#1a1b1e]">Opportunities</h1>
+                </div>
+
+                <!-- Table Container -->
+                <div class="flex-1 overflow-hidden pb-10">
+                    <div class="h-full border-2 border-gray-100 rounded-xl flex flex-col overflow-hidden">
+
+                        <!-- Table Header: Mixed Case, Bold, Perfect Alignment -->
+                        <div
+                            class="grid grid-cols-[60px_2fr_1.5fr_1fr_1fr_1fr_60px] border-b-2 border-gray-100 bg-white sticky top-0 z-10">
+                            <div class="flex items-center justify-center h-[56px]">
+                                <input type="checkbox" class="w-4 h-4 rounded border-gray-300">
+                            </div>
+                            <div (click)="toggleSort()"
+                                class="px-3 flex items-center gap-2 text-[14px] font-bold text-gray-700 cursor-pointer hover:bg-gray-50 transition-colors">
+                                Opportunity Name
+                                <span class="material-icons text-xl text-gray-400">arrow_upward</span>
+                            </div>
+                            <div class="px-3 flex items-center text-[14px] font-bold text-gray-700">Account Name</div>
+                            <div class="px-3 flex items-center text-[14px] font-bold text-gray-700">Owner</div>
+                            <div class="px-3 flex items-center text-[14px] font-bold text-gray-700">Amount</div>
+                            <div class="px-3 flex items-center text-[14px] font-bold text-gray-700">Close Date</div>
+                            <div class="w-[60px]"></div>
+                        </div>
+
+                        <!-- Scrollable Table Body -->
+                        <div class="flex-1 overflow-y-auto custom-scrollbar bg-white">
+                            <div *ngFor="let opp of paginatedOpportunities"
+                                class="grid grid-cols-[60px_2fr_1.5fr_1fr_1fr_1fr_60px] border-b border-gray-100 hover:bg-gray-50 transition-all items-stretch bg-white">
+                                <div class="flex items-center justify-center py-4">
+                                    <input type="checkbox" class="w-4 h-4 rounded border-gray-300">
+                                </div>
+                                <!-- Content: font-normal as per latest mock -->
+                                <div class="px-3 flex items-center text-[14px] text-gray-900 font-normal truncate py-4">
+                                    {{ opp.name }}</div>
+                                <div class="px-3 flex items-center text-[14px] text-gray-700 truncate py-4">{{
+                                    opp.accountName }}</div>
+                                <div class="px-3 flex items-center text-[14px] text-gray-700 truncate py-4">{{ opp.owner
+                                    }}</div>
+                                <div class="px-3 flex items-center text-[14px] text-gray-700 py-4">{{ opp.amount }}
+                                </div>
+                                <div class="px-3 flex items-center text-[14px] text-gray-700 py-4">{{ opp.closeDate }}
+                                </div>
+                                <div class="flex items-center justify-center py-4">
+                                    <div class="relative">
+                                        <button (click)="toggleMenu(opp.id, $event)"
+                                            class="p-1.5 hover:bg-gray-200 rounded-full transition-colors flex items-center justify-center text-gray-500"
+                                            [class.bg-gray-100]="activeMenuId === opp.id">
+                                            <span class="material-icons text-[20px]">more_vert</span>
+                                        </button>
+
+                                        <!-- Action Popup (Create Quote) -->
+                                        <div *ngIf="activeMenuId === opp.id"
+                                            class="absolute right-0 top-0 translate-x-[-10px] translate-y-[40px] z-50 bg-[#eef2f8] border border-gray-200 rounded-xl shadow-lg py-1.5 min-w-[170px]">
+                                            <button (click)="createQuote(opp)"
+                                                class="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-white hover:bg-opacity-50 text-[13.5px] font-medium text-gray-900 transition-colors">
+                                                <span
+                                                    class="material-icons text-[20px] text-gray-500">add_circle_outline</span>
+                                                Create Quote
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Pagination Footer -->
+                        <div class="h-16 px-8 border-t-2 border-gray-100 bg-white flex items-center justify-end gap-10">
+                            <div class="flex items-center gap-3 text-[13px] text-gray-600">
+                                Rows per page
+                                <div class="relative flex items-center ml-1">
+                                    <select (change)="onPageSizeChange($event)"
+                                        class="appearance-none border border-gray-300 rounded px-3 pr-9 py-1.5 outline-none bg-white text-[13px] hover:border-gray-400 transition-colors cursor-pointer">
+                                        <option [value]="10" [selected]="pageSize === 10">10</option>
+                                        <option [value]="25" [selected]="pageSize === 25">25</option>
+                                        <option [value]="50" [selected]="pageSize === 50">50</option>
+                                    </select>
+                                    <span
+                                        class="material-icons absolute right-2 text-[20px] pointer-events-none text-gray-400">expand_more</span>
+                                </div>
+                            </div>
+
+                            <div class="text-[13px] text-gray-600 font-medium">
+                                {{ (currentPage - 1) * pageSize + 1 }}-{{ Math.min(currentPage * pageSize,
+                                opportunities.length) }} of {{ opportunities.length }}
+                            </div>
+
+                            <div class="flex items-center gap-2">
+                                <button (click)="firstPage()" [disabled]="currentPage === 1"
+                                    class="p-1.5 hover:bg-gray-100 rounded-full disabled:opacity-30 transition-colors">
+                                    <span class="material-icons text-[22px]">first_page</span>
+                                </button>
+                                <button (click)="prevPage()" [disabled]="currentPage === 1"
+                                    class="p-1.5 hover:bg-gray-100 rounded-full disabled:opacity-30 transition-colors">
+                                    <span class="material-icons text-[22px]">chevron_left</span>
+                                </button>
+                                <button (click)="nextPage()" [disabled]="currentPage * pageSize >= opportunities.length"
+                                    class="p-1.5 hover:bg-gray-100 rounded-full disabled:opacity-30 transition-colors">
+                                    <span class="material-icons text-[22px]">chevron_right</span>
+                                </button>
+                                <button (click)="lastPage()" [disabled]="currentPage * pageSize >= opportunities.length"
+                                    class="p-1.5 hover:bg-gray-100 rounded-full disabled:opacity-30 transition-colors">
+                                    <span class="material-icons text-[22px]">last_page</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

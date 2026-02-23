@@ -1,0 +1,42 @@
+<div class="h-full bg-white rounded-[20px] border-2 border-gray-100 shadow-sm flex flex-col">
+    <!-- Header -->
+    <div class="flex justify-between items-center p-4 border-b border-gray-100">
+        <h3 class="text-[17px] font-medium text-gray-900">Added products</h3>
+        <button (click)="closeCart()" class="text-gray-400 hover:text-gray-600 transition-colors">
+            <span class="material-icons text-[20px]">close</span>
+        </button>
+    </div>
+
+    <!-- Items List -->
+    <div class="flex-1 overflow-y-auto p-6 pt-4 space-y-6 custom-scrollbar">
+        <div *ngFor="let item of cartItems$ | async" class="flex flex-col gap-1">
+            <!-- Row: Logo + Category -->
+            <div class="flex items-center gap-2">
+                <div class="w-5 h-5 flex items-center justify-center">
+                    <img src="https://fonts.gstatic.com/s/i/productlogos/googleg/v6/24px.svg" alt="logo"
+                        class="w-4 h-4">
+                </div>
+                <span class="text-[12px] font-medium text-gray-900">
+                    {{item.family}}
+                </span>
+            </div>
+            <!-- Name -->
+            <div class="pl-7 text-[14px] font-bold text-gray-900 leading-tight">
+                {{item.name}}
+            </div>
+        </div>
+
+        <!-- Empty State -->
+        <div *ngIf="!(cartItems$ | async)?.length" class="text-center py-10 text-gray-400 text-sm">
+            No products added yet.
+        </div>
+    </div>
+
+    <!-- Footer Action -->
+    <div class="p-6 pt-2">
+        <button (click)="onContinue()" [disabled]="isSubmitting"
+            class="w-full py-1.5 bg-[#0b57d0] hover:bg-[#0842a0] disabled:bg-gray-400 disabled:cursor-not-allowed text-white text-[15px] font-bold rounded-full transition-colors shadow-sm">
+            {{ isSubmitting ? 'Processing...' : 'Continue' }}
+        </button>
+    </div>
+</div>

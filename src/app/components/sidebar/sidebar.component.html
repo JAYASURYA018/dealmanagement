@@ -1,0 +1,14 @@
+<div class="h-full bg-[#f0f3f8] rounded-[20px] p-5 flex flex-col">
+    <h3 class="text-[11px] font-bold text-black mb-6 uppercase tracking-[0.06em]">PRODUCT FAMILY</h3>
+    <ul class="space-y-1">
+        <li *ngFor="let family of (families$ | async)" (click)="selectCategory(family)"
+            class="cursor-pointer px-2 py-2 rounded-lg transition-colors flex items-center h-10"
+            [class.bg-[#e8f0fe]]="(selectedCategory$ | async) === family"
+            [class.text-black]="(selectedCategory$ | async) === family"
+            [class.font-bold]="(selectedCategory$ | async) === family"
+            [class.text-[#5f6368]]="(selectedCategory$ | async) !== family"
+            [class.hover:bg-gray-100]="(selectedCategory$ | async) !== family">
+            <span class="text-[14px] leading-none">{{family}}</span>
+        </li>
+    </ul>
+</div>
