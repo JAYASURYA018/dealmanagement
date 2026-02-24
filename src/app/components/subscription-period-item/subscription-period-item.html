@@ -54,10 +54,9 @@
                                 class="material-icons-outlined text-gray-600 text-lg pointer-events-none absolute right-0 top-1/2 -translate-y-1/2">arrow_drop_down</span>
                         </div>
                     </div>
-                    <div *ngIf="period.unitPrice !== null && period.productName"
+                    <div *ngIf="period.unitPrice != null && period.productName"
                         class="text-[11px] text-gray-500 font-medium mt-1 ml-2 animate-in fade-in slide-in-from-top-1 duration-300">
-                        ${{ period.unitPrice | number:'1.0-2' }} / {{ (period.unitPriceFrequency || 'Year') | lowercase
-                        }}
+                        ${{ (period.unitPrice || 0) * 12 }} / {{ ('Year')}}
                     </div>
                 </div>
 
@@ -121,9 +120,9 @@
                 <!-- Heading Column -->
                 <div class="flex flex-col">
                     <h5 class="text-sm font-medium text-gray-800 leading-tight">{{ row.type }}</h5>
-                    <div *ngIf="row.price !== null && period.productName"
+                    <div *ngIf="row.price != null && period.productName"
                         class="text-[11px] text-gray-500 font-medium mt-1 animate-in fade-in slide-in-from-top-1 duration-300">
-                        ${{ row.price | number:'1.0-2' }} / {{ (row.frequency || 'Year') | lowercase }}
+                        ${{ (row.price || 0) * 12 }} / {{ ('Year') }}
                     </div>
                 </div>
 

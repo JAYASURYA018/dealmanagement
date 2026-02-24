@@ -188,8 +188,11 @@
                             <!-- Subscription Periods List -->
                             <div *ngIf="subscriptionPeriods.length > 0"
                                 class="space-y-4 animate-in fade-in duration-500">
-                                <app-subscription-period-item *ngFor="let period of subscriptionPeriods"
-                                    [period]="period" [products]="productOptions" [regionOptions]="lookerRegionOptions">
+                                <app-subscription-period-item
+                                    *ngFor="let period of subscriptionPeriods; let i = index; let first = first; let last = last"
+                                    [period]="period" [products]="productOptions" [regionOptions]="lookerRegionOptions"
+                                    [isFirst]="first" [isLast]="last" [subscriptionStartDate]="termStartDate"
+                                    [subscriptionEndDate]="termEndDate">
                                 </app-subscription-period-item>
 
                                 <!-- Add Period Button at Bottom -->

@@ -94,6 +94,10 @@ export class SubscriptionPeriodItemComponent {
     activeRegionIndex: number | null = null;
 
     @Input() regionOptions: string[] = [];
+    @Input() isFirst: boolean = false;
+    @Input() isLast: boolean = false;
+    @Input() subscriptionStartDate: string = '';
+    @Input() subscriptionEndDate: string = '';
 
     minDate: string = new Date().toISOString().split('T')[0];
 
@@ -106,6 +110,20 @@ export class SubscriptionPeriodItemComponent {
         if (end < start) {
             this.period.endDate = '';
             this.toastService.show('End Date cannot be earlier than Start Date.', 'warning');
+            return;
+        }
+
+        // Period 1 Start Date Validation
+        if (this.isFirst && this.subscriptionStartDate && this.period.startDate !== this.subscriptionStartDate) {
+            this.period.startDate = this.subscriptionStartDate;
+            this.toastService.show('The Period 1 start date must equal to subscription start date', 'warning');
+            return;
+        }
+
+        // Last Period End Date Validation
+        if (this.isLast && this.subscriptionEndDate && this.period.endDate !== this.subscriptionEndDate) {
+            this.period.endDate = this.subscriptionEndDate;
+            this.toastService.show('The last period end date should equal to subscription end date', 'warning');
             return;
         }
 
