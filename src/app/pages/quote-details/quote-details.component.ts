@@ -250,6 +250,47 @@ export class QuoteDetailsComponent implements OnInit {
         this.isSubscriptionModalOpen = true;
     }
 
+    addSubscriptionPeriodDirectly() {
+        if (this.subscriptionPeriods.length === 0) {
+            if (this.termStartInput && this.termEndDate) {
+                this.addOnePeriod(this.termStartInput, this.termEndDate);
+                this.onSubscriptionProductChanged();
+            } else {
+                this.isSubscriptionModalOpen = true;
+            }
+            return;
+        }
+
+        const lastPeriod = this.subscriptionPeriods[this.subscriptionPeriods.length - 1];
+
+        // 1. If previous period end date equals subscription end date
+        if (lastPeriod.endDate === this.termEndDate) {
+            this.toastService.show('change the subscription end date to create new period', 'warning');
+            return;
+        }
+
+        // 2. If subscription end date is greater than previous end date but previous duration < 1 year
+        if (this.termEndDate && lastPeriod.endDate && lastPeriod.endDate < this.termEndDate) {
+            if (lastPeriod.startDate) {
+                const term = this.calculateSubscriptionTerm(lastPeriod.startDate, lastPeriod.endDate);
+                if (term < 12) {
+                    this.toastService.show('you cannot create new period without having previous period with duration exactly 1 year', 'warning');
+                    return;
+                }
+            }
+        }
+
+        if (lastPeriod.endDate) {
+            const lastEnd = this.parseDate(lastPeriod.endDate);
+            const newStart = new Date(lastEnd);
+            newStart.setDate(newStart.getDate() + 1);
+
+            const newStartIso = this.toIsoDateString(newStart);
+            this.addOnePeriod(newStartIso, this.termEndDate);
+            this.onSubscriptionProductChanged();
+        }
+    }
+
     closeSubscriptionModal() {
         this.isSubscriptionModalOpen = false;
     }
