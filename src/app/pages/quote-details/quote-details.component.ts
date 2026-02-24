@@ -142,9 +142,9 @@ export class QuoteDetailsComponent implements OnInit {
 
                     if (platformGroup) {
                         this.productOptions = platformGroup.components.map((c: any) => {
-                            const priceObj = (c.prices && c.prices.find((p: any) => p.isDefault || p.isSelected)) || (c.prices && c.prices[0]) || null;
+                            const priceObj = c.prices ? c.prices.find((p: any) => p.pricingModel?.frequency === 'Months') : null;
                             const mainPrice = priceObj ? priceObj.price : 0;
-                            const frequency = priceObj && priceObj.pricingModel ? priceObj.pricingModel.frequency : 'Year';
+                            const frequency = priceObj && priceObj.pricingModel ? priceObj.pricingModel.frequency : 'Months';
                             const pricebookEntryId = priceObj ? priceObj.priceBookEntryId : null;
 
 
@@ -162,7 +162,7 @@ export class QuoteDetailsComponent implements OnInit {
                                     return false;
                                 });
                                 if (match) {
-                                    const npPriceObj = (match.prices && match.prices.find((p: any) => p.isDefault || p.isSelected)) || (match.prices && match.prices[0]) || null;
+                                    const npPriceObj = match.prices ? match.prices.find((p: any) => p.pricingModel?.frequency === 'Months') : null;
                                     nonProdPrice = npPriceObj ? npPriceObj.price : 0;
                                     nonProdProductId = match.id;
                                     nonProdPricebookEntryId = npPriceObj ? npPriceObj.priceBookEntryId : null;
@@ -187,7 +187,7 @@ export class QuoteDetailsComponent implements OnInit {
                                 periodBoundary: 'Anniversary',
                                 operationType: 'New',
                                 termStartsOn: 'Fixed Start Date',
-                                subscriptionTermUnit: 'Monthly'
+                                subscriptionTermUnit: 'Months'
                             };
                         });
                     }
@@ -196,9 +196,9 @@ export class QuoteDetailsComponent implements OnInit {
                     const userGroup = groups.find((g: any) => g.name === 'Users');
                     if (userGroup) {
                         userGroup.components.forEach((c: any) => {
-                            const priceObj = (c.prices && c.prices.find((p: any) => p.isDefault || p.isSelected)) || (c.prices && c.prices[0]) || null;
+                            const priceObj = c.prices ? c.prices.find((p: any) => p.pricingModel?.frequency === 'Months') : null;
                             const price = priceObj ? priceObj.price : 0;
-                            const frequency = priceObj && priceObj.pricingModel ? priceObj.pricingModel.frequency : 'Year';
+                            const frequency = priceObj && priceObj.pricingModel ? priceObj.pricingModel.frequency : 'Months';
                             const productId = c.productId || c.product2Id || c.id;
                             const pricebookEntryId = priceObj ? priceObj.priceBookEntryId : null;
 
@@ -358,10 +358,10 @@ export class QuoteDetailsComponent implements OnInit {
 
     private getDefaultUserRows() {
         return [
-            { type: 'Viewer', price: this.viewerUserPrice, frequency: 'Year', quantity: 0, region: '', gcpProjectId: '', lookerInstanceId: '', discount: null },
-            { type: 'Standard', price: this.standardUserPrice, frequency: 'Year', quantity: 0, region: '', gcpProjectId: '', lookerInstanceId: '', discount: null },
-            { type: 'Developer', price: this.developerUserPrice, frequency: 'Year', quantity: 0, region: '', gcpProjectId: '', lookerInstanceId: '', discount: null },
-            { type: 'Non-prod', price: 0, frequency: 'Year', quantity: 0, region: '', gcpProjectId: '', lookerInstanceId: '', discount: null }
+            { type: 'Viewer', price: this.viewerUserPrice, frequency: 'Months', quantity: 0, region: '', gcpProjectId: '', lookerInstanceId: '', discount: null },
+            { type: 'Standard', price: this.standardUserPrice, frequency: 'Months', quantity: 0, region: '', gcpProjectId: '', lookerInstanceId: '', discount: null },
+            { type: 'Developer', price: this.developerUserPrice, frequency: 'Months', quantity: 0, region: '', gcpProjectId: '', lookerInstanceId: '', discount: null },
+            { type: 'Non-prod', price: 0, frequency: 'Months', quantity: 0, region: '', gcpProjectId: '', lookerInstanceId: '', discount: null }
         ];
     }
 
@@ -417,23 +417,44 @@ export class QuoteDetailsComponent implements OnInit {
         const daysInMonth = new Date(temp.getFullYear(), temp.getMonth() + 1, 0).getDate();
         return parseFloat((months + (diffDays / daysInMonth)).toFixed(4));
     }
+    formatTermDisplay(startDate: string, endDate: string): string {
+        if (!startDate || !endDate) return '';
+        const start = this.parseDate(startDate);
+        const end = this.parseDate(endDate);
+        if (isNaN(start.getTime()) || isNaN(end.getTime())) return '';
 
-    calculateMonths(start: string, end: string): number {
-        if (!start || !end) return 0;
-        const s = new Date(start);
-        const e = new Date(end);
-        const diff = e.getTime() - s.getTime();
-        return Math.ceil(diff / (1000 * 60 * 60 * 24 * 30.44));
+        const endAdjusted = new Date(end);
+        endAdjusted.setDate(endAdjusted.getDate() + 1);
+
+        let months = (endAdjusted.getFullYear() - start.getFullYear()) * 12 + (endAdjusted.getMonth() - start.getMonth());
+        const temp = new Date(start);
+        temp.setMonth(temp.getMonth() + months);
+
+        if (temp > endAdjusted) {
+            months--;
+            temp.setTime(start.getTime());
+            temp.setMonth(temp.getMonth() + months);
+        }
+
+        const diffTime = endAdjusted.getTime() - temp.getTime();
+        const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+        let res = '';
+        if (months > 0) res += `${months} month${months > 1 ? 's' : ''} `;
+        if (diffDays > 0) res += `${diffDays} day${diffDays > 1 ? 's' : ''}`;
+        return res.trim() || '0 months';
     }
 
     calculatePeriodTotal(p: SubscriptionPeriod): number {
         let total = 0;
+        const term = this.calculateSubscriptionTerm(p.startDate, p.endDate);
+
         if (p.unitPrice && p.productName) {
-            total += p.unitPrice * (1 - (p.discount || 0) / 100);
+            total += (p.unitPrice * term) * (1 - (p.discount || 0) / 100);
         }
         p.userRows.forEach(r => {
             if (r.price && r.quantity) {
-                total += (r.price * r.quantity) * (1 - (r.discount || 0) / 100);
+                total += (r.price * r.quantity * term) * (1 - (r.discount || 0) / 100);
             }
         });
         return total;
@@ -736,18 +757,19 @@ export class QuoteDetailsComponent implements OnInit {
             if (period.productName) {
                 const discount = period.discount || 0;
                 const price = period.unitPrice || 0;
-                const total = price * (1 - discount / 100);
+                const term = this.calculateSubscriptionTerm(period.startDate, period.endDate);
+                const displayTerm = this.formatTermDisplay(period.startDate, period.endDate);
+                const total = (price * term) * (1 - discount / 100);
 
                 items.push({
-                    name: period.productName, // Use actual name without suffix
+                    name: period.productName,
                     operationType: 'New',
                     quantity: 1,
                     startDate: this.formatDateForDisplay(new Date(period.startDate)),
                     endDate: period.endDate ? this.formatDateForDisplay(new Date(period.endDate)) : '-',
-                    // Calculate "12M 0D" roughly or leave as is if not critical
-                    orderTerm: this.calculateMonthsBetween(period.startDate, period.endDate) + ' Months',
+                    orderTerm: displayTerm,
                     listPrice: price,
-                    discount: discount, // Display as %
+                    discount: discount,
                     total: total
                 });
             }
@@ -765,7 +787,9 @@ export class QuoteDetailsComponent implements OnInit {
                 // Only show if quantity > 0
                 if (qty > 0) {
                     const discount = userRow.discount || 0;
-                    const total = (price * qty) * (1 - discount / 100);
+                    const term = this.calculateSubscriptionTerm(period.startDate, period.endDate);
+                    const displayTerm = this.formatTermDisplay(period.startDate, period.endDate);
+                    const total = (price * qty * term) * (1 - discount / 100);
 
                     // Use stored name from Salesforce if available
                     const displayName = userRow.name || `${period.productName || 'Looker'} ${userRow.type} ${userRow.type === 'Non-prod' ? 'Environment' : 'User'}`;
@@ -776,7 +800,7 @@ export class QuoteDetailsComponent implements OnInit {
                         quantity: qty,
                         startDate: this.formatDateForDisplay(new Date(period.startDate)),
                         endDate: period.endDate ? this.formatDateForDisplay(new Date(period.endDate)) : '-',
-                        orderTerm: this.calculateMonthsBetween(period.startDate, period.endDate) + ' Months',
+                        orderTerm: displayTerm,
                         listPrice: price,
                         discount: discount,
                         total: total
@@ -793,13 +817,15 @@ export class QuoteDetailsComponent implements OnInit {
             const periodTotal = items.reduce((sum, item) => sum + item.total, 0);
 
             if (items.length > 0) {
+                const term = this.calculateSubscriptionTerm(period.startDate, period.endDate);
+
                 previews.push({
                     name: `Year ${index + 1}`,
                     startDate: this.formatDateForDisplay(new Date(period.startDate)),
                     endDate: this.formatDateForDisplay(new Date(period.endDate)),
-                    months: this.calculateMonthsBetween(period.startDate, period.endDate),
+                    months: term,
                     amount: periodTotal,
-                    items: items // Changed from userDetails to items generic list
+                    items: items
                 });
             }
         });
@@ -807,24 +833,6 @@ export class QuoteDetailsComponent implements OnInit {
         return previews;
     }
 
-    calculateMonthsBetween(startDate: string, endDate: string): number {
-        const start = new Date(startDate);
-        const end = new Date(endDate);
-
-        // Add 1 day to end date to make it inclusive (e.g. Feb 19 to Feb 18 is 1 full year)
-        const adjustedEnd = new Date(end);
-        adjustedEnd.setDate(adjustedEnd.getDate() + 1);
-
-        let months = (adjustedEnd.getFullYear() - start.getFullYear()) * 12;
-        months += adjustedEnd.getMonth() - start.getMonth();
-
-        // Adjust if the day of month hasn't reached the start day
-        if (adjustedEnd.getDate() < start.getDate()) {
-            months--;
-        }
-
-        return Math.max(0, months);
-    }
 
     fetchQuotePreview(quoteId: string) {
         this.loadingService.show();
@@ -945,7 +953,44 @@ export class QuoteDetailsComponent implements OnInit {
     }
 
     get totalTerms(): number {
-        return this.commitmentPeriods.reduce((acc, curr) => acc + (parseInt(curr.months) || 0), 0);
+        if (this.isLookerSubscription) {
+            // Priority 1: Use the top-level inputs if set, as they define the contract boundaries
+            if (this.termStartInput && this.termEndDate) {
+                return this.calculateSubscriptionTerm(this.termStartInput, this.termEndDate);
+            }
+            // Priority 2: Fallback to period boundaries if top-level inputs are missing
+            if (this.subscriptionPeriods.length > 0) {
+                const first = this.subscriptionPeriods[0];
+                const last = this.subscriptionPeriods[this.subscriptionPeriods.length - 1];
+                if (first.startDate && last.endDate) {
+                    return this.calculateSubscriptionTerm(first.startDate, last.endDate);
+                }
+            }
+            return 0;
+        }
+        return this.commitmentPeriods.reduce((acc, curr) => acc + (parseInt(curr.months || '0') || 0), 0);
+    }
+
+    get totalTermLabel(): string {
+        if (this.isLookerSubscription) {
+            if (this.termStartInput && this.termEndDate) {
+                return this.formatTermDisplay(this.termStartInput, this.termEndDate);
+            }
+            if (this.subscriptionPeriods.length > 0) {
+                const first = this.subscriptionPeriods[0];
+                const last = this.subscriptionPeriods[this.subscriptionPeriods.length - 1];
+                if (first.startDate && last.endDate) {
+                    return this.formatTermDisplay(first.startDate, last.endDate);
+                }
+            }
+            return '0 months';
+        }
+        return `${this.totalTerms} months`;
+    }
+
+    onSubscriptionProductChanged() {
+        console.log('🔄 Subscription period changed, refreshing term and totals...');
+        // Digestion will naturally occur but we could force logic here if needed.
     }
 
     get totalContractValue(): number {
@@ -1243,6 +1288,16 @@ export class QuoteDetailsComponent implements OnInit {
         months += end.getMonth();
 
 
+        if (this.isLookerSubscription) {
+            const fractionalMonths = this.calculateSubscriptionTerm(this.termStartInput, this.termEndDate);
+            if (this.commitmentPeriods.length === 0) {
+                this.commitmentPeriods.push({ months: fractionalMonths, amount: null, isCollapsed: false });
+            } else {
+                this.commitmentPeriods[0].months = fractionalMonths;
+            }
+            return;
+        }
+
         const endAdjusted = new Date(end);
         endAdjusted.setDate(endAdjusted.getDate() + 1);
 
@@ -1471,7 +1526,7 @@ export class QuoteDetailsComponent implements OnInit {
                         "Operation_Type__c": this.operationType,
                         "Billing_Frequency__c": this.billingFrequency,
                         "SubscriptionTerm": subTerm,
-                        "SubscriptionTermUnit": "Monthly",
+                        "SubscriptionTermUnit": "Months",
                         "PeriodBoundary": "Anniversary"
                     };
 
@@ -1556,7 +1611,7 @@ export class QuoteDetailsComponent implements OnInit {
                                 "Operation_Type__c": this.operationType,
                                 "Term_Starts_On__c": this.termStartsOn,
                                 "SubscriptionTerm": subTerm,
-                                "SubscriptionTermUnit": "Monthly",
+                                "SubscriptionTermUnit": "Months",
                                 "PeriodBoundary": "Anniversary",
                                 "StartDate": period.startDate,
                                 "EndDate": period.endDate,
@@ -1650,7 +1705,7 @@ export class QuoteDetailsComponent implements OnInit {
                 "PricebookEntryId": item.pricebookEntryId || '01uDz00000dqXP8IAM',
                 "Quantity": quantity,
                 "SubscriptionTerm": subTerm,
-                "SubscriptionTermUnit": "Monthly",
+                "SubscriptionTermUnit": "Months",
                 "PeriodBoundary": "Anniversary",
                 "BillingFrequency": standardFreq,
                 "Billing_Frequency__c": this.billingFrequency,

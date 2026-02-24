@@ -196,24 +196,67 @@ export class SubscriptionPeriodItemComponent {
     }
 
     getDurationLabel(): string {
-        if (!this.period.startDate || !this.period.endDate) return '';
-        const start = new Date(this.period.startDate);
-        const end = new Date(this.period.endDate);
+        return this.formatTermDisplay(this.period.startDate, this.period.endDate);
+    }
+
+    formatTermDisplay(startDate: string, endDate: string): string {
+        if (!startDate || !endDate) return '';
+        const start = this.parseDateString(startDate);
+        const end = this.parseDateString(endDate);
         if (isNaN(start.getTime()) || isNaN(end.getTime())) return '';
 
-        const diffTime = end.getTime() - start.getTime();
-        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
-        if (diffDays <= 0) return '0M 0D (0 Days)';
+        const endAdjusted = new Date(end);
+        endAdjusted.setDate(endAdjusted.getDate() + 1);
 
-        // Simple month/day logic for display
-        const months = Math.floor(diffDays / 30.44); // Average month length
-        const days = Math.round(diffDays % 30.44);
+        let months = (endAdjusted.getFullYear() - start.getFullYear()) * 12 + (endAdjusted.getMonth() - start.getMonth());
+        const temp = new Date(start);
+        temp.setMonth(temp.getMonth() + months);
 
-        if (diffDays >= 365 && diffDays <= 366) {
-            return `12M 0D (${diffDays} Days)`;
+        if (temp > endAdjusted) {
+            months--;
+            temp.setTime(start.getTime());
+            temp.setMonth(temp.getMonth() + months);
         }
 
-        return `${months}M ${days}D (${diffDays} Days)`;
+        const diffTime = endAdjusted.getTime() - temp.getTime();
+        const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+        let res = '';
+        if (months > 0) res += `${months} month${months > 1 ? 's' : ''} `;
+        if (diffDays > 0) res += `${diffDays} day${diffDays > 1 ? 's' : ''}`;
+        return res.trim() || '0 months';
+    }
+
+    calculateFractionalTerm(startDate: string, endDate: string): number {
+        if (!startDate || !endDate) return 0;
+        const start = this.parseDateString(startDate);
+        const end = this.parseDateString(endDate);
+        if (isNaN(start.getTime()) || isNaN(end.getTime())) return 0;
+
+        const endAdjusted = new Date(end);
+        endAdjusted.setDate(endAdjusted.getDate() + 1);
+
+        let months = (endAdjusted.getFullYear() - start.getFullYear()) * 12 + (endAdjusted.getMonth() - start.getMonth());
+        const temp = new Date(start);
+        temp.setMonth(temp.getMonth() + months);
+
+        if (temp > endAdjusted) {
+            months--;
+            temp.setTime(start.getTime());
+            temp.setMonth(temp.getMonth() + months);
+        }
+
+        const diffTime = endAdjusted.getTime() - temp.getTime();
+        const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+        if (diffDays === 0) return months;
+
+        const daysInMonth = new Date(temp.getFullYear(), temp.getMonth() + 1, 0).getDate();
+        return parseFloat((months + (diffDays / daysInMonth)).toFixed(4));
+    }
+
+    private parseDateString(dateStr: string): Date {
+        const parts = dateStr.split('-').map(Number);
+        return new Date(parts[0], parts[1] - 1, parts[2]);
     }
     restrictNumeric(event: KeyboardEvent) {
         const allowedKeys = ['Backspace', 'Tab', 'Enter', 'ArrowLeft', 'ArrowRight', 'Delete', 'End', 'Home'];

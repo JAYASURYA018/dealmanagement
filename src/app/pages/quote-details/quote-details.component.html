@@ -87,7 +87,7 @@
                             </div>
                             <div>
                                 <div class="text-xs text-gray-500 mb-1">Term</div>
-                                <div class="text-sm font-medium text-gray-900">{{ totalTerms }} months</div>
+                                <div class="text-sm font-medium text-gray-900">{{ totalTermLabel }}</div>
                             </div>
                             <div>
                                 <div class="text-xs text-gray-500 mb-1">Total Contract Value</div>
@@ -192,7 +192,8 @@
                                     *ngFor="let period of subscriptionPeriods; let i = index; let first = first; let last = last"
                                     [period]="period" [products]="productOptions" [regionOptions]="lookerRegionOptions"
                                     [isFirst]="first" [isLast]="last" [subscriptionStartDate]="termStartDate"
-                                    [subscriptionEndDate]="termEndDate">
+                                    [subscriptionEndDate]="termEndDate"
+                                    (productChanged)="onSubscriptionProductChanged()">
                                 </app-subscription-period-item>
 
                                 <!-- Add Period Button at Bottom -->
@@ -281,8 +282,8 @@
                                 <div
                                     class="bg-slate-200 p-2 rounded-lg border-b-2 border-transparent hover:bg-slate-300 transition-colors relative group h-[52px] flex flex-col justify-center">
                                     <label class="block text-[11px] text-gray-600 mb-0.5">Quote Expiration date</label>
-                                    <input type="date" [(ngModel)]="expirationDate" [readOnly]="true"
-                                        class="w-full bg-transparent text-sm text-gray-800 outline-none font-medium -mt-0.5 cursor-not-allowed"
+                                    <input type="date" [(ngModel)]="expirationDate" [min]="minDate"
+                                        class="w-full bg-transparent text-sm text-gray-800 outline-none cursor-pointer font-medium -mt-0.5"
                                         placeholder="-">
                                 </div>
                             </div>
@@ -522,7 +523,7 @@
                                         class="block text-[10px] text-gray-500 mb-0.5 uppercase tracking-wide font-medium">Quote
                                         Expiration Date</label>
                                     <div class="flex justify-between items-center w-full relative">
-                                        <input type="date" [(ngModel)]="expirationDate"
+                                        <input type="date" [(ngModel)]="expirationDate" [min]="minDate"
                                             class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                                             placeholder="Select">
                                         <div class="text-sm font-medium text-gray-900 leading-tight">
