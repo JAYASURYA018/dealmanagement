@@ -79,8 +79,8 @@ export class RcaApiService {
                     throw new Error('No access token available');
                 }
 
-                // Query: SELECT Id,Name,Code,it_has_Bundle_Products__c ,Status FROM ProductClassification WHERE Parent_Bundle_Product_ID__c ='...'
-                const query = `SELECT Id, Name, Code, It_has_Bundle_Products__c, Status FROM ProductClassification WHERE Parent_Bundle_Product_ID__c = '${parentBundleId}'`;
+                // Query: SELECT Id,Name,Code,it_has_Bundle_Products__c ,No_Of_Child_Products__c,Status FROM ProductClassification WHERE Parent_Bundle_Product_ID__c ='...'
+                const query = `SELECT Id, Name, Code, It_has_Bundle_Products__c, No_Of_Child_Products__c, Status FROM ProductClassification WHERE Parent_Bundle_Product_ID__c = '${parentBundleId}'`;
                 const encodedQuery = encodeURIComponent(query);
                 const url = `${baseUrl}/services/data/v66.0/query?q=${encodedQuery}`;
 
@@ -142,9 +142,9 @@ export class RcaApiService {
         );
     }
 
-    getDropdownOptions(): Observable<any> {
+    getDropdownOptions(parentBundleId: string): Observable<any> {
         const method = 'RcaApiService.getDropdownOptions';
-        const query = "SELECT Id, Name, Code, It_has_Bundle_Products__c, Status FROM ProductClassification WHERE Parent_Bundle_Product_ID__c = '01tDz00000Eah7vIAB'";
+        const query = `SELECT Id, Name, Code, It_has_Bundle_Products__c, No_Of_Child_Products__c, Status FROM ProductClassification WHERE Parent_Bundle_Product_ID__c = '${parentBundleId}'`;
 
         return this.contextService.context$.pipe(
             take(1),
@@ -258,5 +258,43 @@ export class RcaApiService {
                 }
             });
         });
+    }
+
+    searchProducts(searchTerm: string, categoryIds: string[]): Observable<any> {
+        const method = 'RcaApiService.searchProducts';
+
+        return this.contextService.context$.pipe(
+            take(1),
+            switchMap(context => {
+                const providedToken = '00DDz000001qvYA!ARQAQE2ut._CySv0HuqzA58fQg2KQLcac4Eomg4keHeHi6SaaLi8m3e5R6_XFyXbm217O5tEzWvSRR82lg7htONLvNqSzO5g';
+                const token = context?.accessToken || providedToken;
+
+                // Static URL as requested
+                const url = `https://vector--rcaagivant.sandbox.my.salesforce.com/services/data/v65.0/connect/pcm/products?include=/products`;
+
+                if (!token) {
+                    throw new Error('No access token available');
+                }
+
+                const body = {
+                    categoryIds: categoryIds,
+                    searchTerm: searchTerm
+                };
+
+                console.log(`[API Request] ${method}`, { url, body });
+
+                const headers = new HttpHeaders({
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                });
+
+                return this.http.post<any>(url, body, { headers });
+            }),
+            tap(response => console.log(`[API Response] ${method}`, response)),
+            catchError(err => {
+                console.error(`[API Error] ${method}`, err);
+                return of({ products: [] });
+            })
+        );
     }
 }

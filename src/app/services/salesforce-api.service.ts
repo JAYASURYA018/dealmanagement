@@ -130,7 +130,7 @@ export class SalesforceApiService {
     /**
      * Creates a Quote with Quote Lines using the Salesforce Composite Graph API
      */
-    createQuoteWithLines(opportunityId: string, pricebookId: string, items: any[]): Observable<any> {
+    createQuoteWithLines(opportunityId: string, pricebookId: string, items: any[], endDate?: string): Observable<any> {
         const method = 'SalesforceApiService.createQuoteWithLines';
         const token = this.contextService.accessToken;
         const baseUrl = this.contextService.apiBaseUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com';
@@ -207,8 +207,8 @@ export class SalesforceApiService {
 
                     let recordData: any = { ...baseRecord };
 
-                    if (item.endDate) {
-                        recordData["EndDate"] = item.endDate;
+                    if (item.endDate || endDate) {
+                        recordData["EndDate"] = item.endDate || endDate;
                     }
                     if (item.billingFrequency) {
                         recordData["BillingFrequency"] = item.billingFrequency;
@@ -728,24 +728,24 @@ export class SalesforceApiService {
      * Generic method to fetch picklist values using UI API
      */
     getAllPicklistValues(objectApiName: string, recordTypeId: string): Observable<any> {
-    const method = `SalesforceApiService.getAllPicklistValues`;
-    const token = this.contextService.accessToken;
-    const baseUrl = this.contextService.apiBaseUrl;
+        const method = `SalesforceApiService.getAllPicklistValues`;
+        const token = this.contextService.accessToken;
+        const baseUrl = this.contextService.apiBaseUrl;
 
-    const url = `${baseUrl}/services/data/v65.0/ui-api/object-info/${objectApiName}/picklist-values/${recordTypeId}`;
+        const url = `${baseUrl}/services/data/v65.0/ui-api/object-info/${objectApiName}/picklist-values/${recordTypeId}`;
 
-    console.log(`[API Request] ${method}`, { url });
+        console.log(`[API Request] ${method}`, { url });
 
-    const headers = new HttpHeaders({
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-    });
+        const headers = new HttpHeaders({
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        });
 
-    return this.http.get(url, { headers }).pipe(
-        tap(response => console.log(`[API Response] ${method}`, response)),
-        catchError(err => this.handleError(method, err))
-    );
-   }
+        return this.http.get(url, { headers }).pipe(
+            tap(response => console.log(`[API Response] ${method}`, response)),
+            catchError(err => this.handleError(method, err))
+        );
+    }
 
     /**
      * Fetches Bundle Details (Product Component Groups)

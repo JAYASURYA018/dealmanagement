@@ -108,6 +108,9 @@ export class DiscountsIncentivesComponent implements OnChanges {
     individualTotalLoaded: number = 0;
     isIndividualLoading: boolean = false;
 
+    productSearchTerm: string = '';
+    categoryId: string = '';
+
     constructor(
         private rcaApiService: RcaApiService,
         private salesforceApiService: SalesforceApiService,
@@ -123,11 +126,14 @@ export class DiscountsIncentivesComponent implements OnChanges {
     ngOnChanges(changes: SimpleChanges) {
         if (changes['productId'] && changes['productId'].currentValue) {
             this.fetchProductDetails();
+            this.fetchDropdownOptions();
         }
     }
 
     fetchDropdownOptions() {
-        this.rcaApiService.getDropdownOptions().subscribe({
+        if (!this.productId) return;
+
+        this.rcaApiService.getDropdownOptions(this.productId).subscribe({
             next: (res: any) => {
                 const records = res.records || [];
                 // Filter only those with It_has_Bundle_Products__c = false (Individual Products)
@@ -236,58 +242,33 @@ export class DiscountsIncentivesComponent implements OnChanges {
         this.isLoading = true;
         this.debugData = null; // Clear previous
 
-        // 1. Get Classifications for the current Bundle ID (which implies the current product is a bundle)
-        // The user requirement says: WHERE Parent_Bundle_Product_ID__c ='01tDz00000Eah7vIAB'
-        // I should stick to using `this.productId` as the parent bundle ID.
-        this.rcaApiService.getProductClassifications(this.productId).pipe(
-            switchMap((res: any) => {
-                const records = res.records || [];
+        // 1. Get Categories for the current Bundle
+        console.log('[fetchProductDetails] Fetching product details for category resolution:', this.productId);
+        this.rcaApiService.getProductDetails(this.productId).subscribe({
+            next: (p: any) => {
+                console.log('[fetchProductDetails] Product detail response for category resolution:', p);
 
-                // 1. Handle Bundles (for Groups tab)
-                const bundleClassifications = records.filter((r: any) => r.It_has_Bundle_Products__c === true);
+                // Handle both single object and array responses
+                const productData = Array.isArray(p) ? p[0] : p;
 
-                // 2. Handle Individuals (Legacy or Fallback logic, mainly dependent on Dropdown now)
-                // We no longer rely on `individualClassifications` from THIS call for the main list,
-                // as the Dropdown fetches its own options.
-                // However, we might want to ensure consistency or use this as a fallback.
-                // For now, removing the auto-load from here to rely on fetchDropdownOptions.
-                // this.individualClassifications = records.filter((r: any) => r.It_has_Bundle_Products__c === false);
-                // this.currentIndividualClassIndex = 0;
-                // this.individualCurrentOffset = 0;
-                // this.individualProducts = []; // Clear previous
-
-                // Start loading individual products if any classifications exist
-                // if (this.individualClassifications.length > 0) {
-                //     this.loadIndividualProducts();
-                // }
-
-                // Continue with Group loading logic
-                const requests = bundleClassifications.map((cls: any) =>
-                    this.rcaApiService.getProductsByClassification(cls.Id).pipe(
-                        map(productsRes => ({
-                            classificationId: cls.Id,
-                            products: productsRes.products || []
-                        })),
-                        catchError(() => of({ classificationId: cls.Id, products: [] }))
-                    )
-                );
-
-                if (requests.length === 0) {
-                    return of({ classifications: bundleClassifications, productResults: [] });
+                if (productData && productData.categories && productData.categories.length > 0) {
+                    this.categoryId = productData.categories[0].id;
+                    console.log('[fetchProductDetails] Resolved categoryId:', this.categoryId);
+                } else {
+                    console.warn('[fetchProductDetails] No categories found in product details response', productData);
                 }
+            },
+            error: (err) => console.error('[fetchProductDetails] Error fetching product categories', err)
+        });
 
-                return forkJoin(requests).pipe(
-                    map(productResults => ({
-                        classifications: bundleClassifications,
-                        productResults: productResults
-                    }))
-                );
-            }),
+        // 2. Get Classifications for the current Bundle ID
+        this.rcaApiService.getProductClassifications(this.productId).pipe(
             finalize(() => this.isLoading = false)
         ).subscribe({
-            next: (data: any) => {
-                this.debugData = data;
-                this.mapNewProductData(data.classifications, data.productResults);
+            next: (res: any) => {
+                const records = res.records || [];
+                this.debugData = res;
+                this.mapNewProductData(records);
             },
             error: (err) => {
                 console.error('Error in product fetch flow', err);
@@ -366,30 +347,90 @@ export class DiscountsIncentivesComponent implements OnChanges {
         }
     }
 
-    mapNewProductData(classifications: any[], productResults: any[]) {
-        this.productGroups = [];
-        // Note: individualProducts is managed by loadIndividualProducts
+    onProductSearch() {
+        console.log('[onProductSearch] Triggered with term:', this.productSearchTerm);
 
-        // The user wants the CONTENTS of the "Bundle" classifications to be listed in "Product Groups".
-        // e.g. If "ROOT" is the Bundle Classification, we fetched its products (Edge, Compute, etc.)
-        // We should display Edge, Compute, etc. as the groups.
+        if (!this.productSearchTerm) {
+            console.log('[onProductSearch] Search term cleared, reloading default products');
+            this.loadIndividualProducts();
+            return;
+        }
 
-        const allBundleProducts: any[] = [];
+        if (!this.categoryId) {
+            console.warn('[onProductSearch] No category ID found for search, attempting to re-fetch product details...');
+            // Try to fetch it again if it's missing
+            if (this.productId) {
+                this.isIndividualLoading = true;
+                this.rcaApiService.getProductDetails(this.productId).pipe(
+                    finalize(() => this.isIndividualLoading = false)
+                ).subscribe({
+                    next: (p: any) => {
+                        const productData = Array.isArray(p) ? p[0] : p;
+                        if (productData && productData.categories && productData.categories.length > 0) {
+                            this.categoryId = productData.categories[0].id;
+                            console.log('[onProductSearch] Resolved categoryId on retry:', this.categoryId);
+                            this.executeSearch(); // Actually perform the search now
+                        } else {
+                            this.toastService.show('Unable to determine product category for search.', 'warning');
+                        }
+                    },
+                    error: (err) => {
+                        console.error('[onProductSearch] Retry fetch of product details failed', err);
+                        this.toastService.show('Search failed: Category context unavailable.', 'error');
+                    }
+                });
+                return;
+            }
+            return;
+        }
 
-        productResults.forEach(res => {
-            if (res.products && res.products.length > 0) {
-                allBundleProducts.push(...res.products);
+        this.executeSearch();
+    }
+
+    executeSearch() {
+        if (!this.productSearchTerm) {
+            // If search is cleared, maybe reload default classification products?
+            this.loadIndividualProducts();
+            return;
+        }
+
+        this.isIndividualLoading = true;
+        this.rcaApiService.searchProducts(this.productSearchTerm, [this.categoryId]).pipe(
+            finalize(() => this.isIndividualLoading = false)
+        ).subscribe({
+            next: (data) => {
+                const newProducts = data.products || [];
+                // Map to UI model
+                this.individualProducts = newProducts.map((p: any) => ({
+                    id: p.id,
+                    name: p.name,
+                    family: p.additionalFields?.Family || 'Search Result',
+                    selected: false,
+                    discount: 0,
+                    quantity: 1,
+                    price: p.unitPrice || 0,
+                    pricebookEntryId: p.pricebookEntryId || '',
+                    isBundleChild: false
+                }));
+            },
+            error: (err) => {
+                console.error('Search error', err);
+                this.toastService.show('Search failed', 'error');
             }
         });
+    }
 
-        // Map these products to the Product Groups model
-        this.productGroups = allBundleProducts.map(p => ({
-            id: p.id,
-            name: p.name, // e.g. "Edge", "Compute"
-            count: 0,     // We don't have child count from this API yet?
+    mapNewProductData(classifications: any[]) {
+        this.productGroups = classifications.map(cls => ({
+            id: cls.Id,
+            name: cls.Name,
+            No_Of_Child_Products__c: cls.No_Of_Child_Products__c || 0,
             selected: false,
             discount: 0,
-            components: [] // No components known yet unless we fetch deeper
+            price: 0,
+            pricebookEntryId: '',
+            isBundleChild: false,
+            components: []
         }));
     }
 
@@ -544,19 +585,16 @@ export class DiscountsIncentivesComponent implements OnChanges {
         // 1. Collect from Product Groups
         const selectedGroups = this.productGroups.filter(g => g.selected);
         selectedGroups.forEach(group => {
-            if (group.components) {
-                group.components.forEach((comp: any) => {
-                    selectedItemsMap.set(comp.id, {
-                        id: comp.id,
-                        name: comp.name,
-                        discount: group.discount || 0,
-                        quantity: comp.quantity || 1,
-                        price: comp.unitPrice || 0,
-                        pricebookEntryId: comp.pricebookEntryId || '',
-                        isBundleChild: true
-                    });
-                });
-            }
+            // Treat the group itself as the item to be discounted
+            selectedItemsMap.set(group.id, {
+                id: group.id,
+                name: group.name,
+                discount: group.discount || 0,
+                quantity: 1,
+                price: group.price || 0,
+                pricebookEntryId: group.pricebookEntryId || '',
+                isBundleChild: true
+            });
         });
 
         // 2. Collect from Individual Products (Individual selection augments or overrides)
@@ -583,139 +621,136 @@ export class DiscountsIncentivesComponent implements OnChanges {
             return;
         }
 
-        console.log('[Discounts] Final Selected Items for API:', selectedItems);
-
-        if (this.discountForm.granularity === 'Granular') {
-            this.handleGranularDiscount(selectedItems);
-            return;
+        if (this.discountForm.granularity === 'Overall' && this.discountForm.value) {
+            const overallDisc = parseFloat(this.discountForm.value) || 0;
+            selectedItems.forEach(item => {
+                item.discount = overallDisc;
+            });
         }
 
-        const newDiscount = {
-            id: 'd' + Date.now(),
-            title: `${this.discountForm.granularity} Discount - ${this.discountForm.type}`,
-            subtext: `${groupCount} Groups and ${individualCount} Individual Products selected (${selectedItems.length} total)`,
-            value: this.discountForm.value ? this.discountForm.value + '%' : '0%',
-            type: 'discount',
-            granularity: this.discountForm.granularity
-        };
+        console.log('[Discounts] Final Selected Items for API:', selectedItems);
 
-        this.activeDiscounts.push(newDiscount);
-        this.toastService.show('Discount added successfully', 'success');
-
-        // Reset form but keep defaults
-        this.discountForm.value = '';
-        this.resetSelections();
+        // Always handle via API now
+        this.handleGranularDiscount(selectedItems);
     }
 
     handleGranularDiscount(selectedItems: any[]) {
         const quoteId = this.contextService.currentContext?.quoteId;
-        const pricebookId = this.contextService.currentContext?.pricebook2Id;
+        const pricebookId = this.contextService.currentContext?.pricebookId;
 
         if (!quoteId) {
-            this.toastService.show('Quote ID missing in context. Please reload.', 'error');
+            this.toastService.show('No active quote found in context', 'error');
             return;
         }
 
         this.isLoading = true;
+        this.loadingService.show();
 
-        // 1. Fetch PricebookEntryIds for all selected products
-        const requests = selectedItems.map(item => {
-            if (item.pricebookEntryId) {
-                return of({ itemId: item.id, pbeId: item.pricebookEntryId, pbeIdFound: true });
-            }
-            return this.salesforceApiService.getPricebookEntries([item.id]).pipe(
+        // 1. Resolve PricebookEntries for all items
+        const pbeRequests = selectedItems.map(item =>
+            this.salesforceApiService.getPricebookEntries([item.id]).pipe(
                 map(res => ({
                     itemId: item.id,
-                    pbeId: res.records && res.records.length > 0 ? res.records[0].Id : null,
-                    pbePricebookId: res.records && res.records.length > 0 ? res.records[0].Pricebook2Id : null,
-                    pbeIdFound: res.records && res.records.length > 0
+                    pbeId: (res as any).records?.[0]?.Id,
+                    pbePricebookId: (res as any).records?.[0]?.Pricebook2Id
                 })),
-                catchError(() => of({ itemId: item.id, pbeId: null, pbeIdFound: false }))
-            );
-        });
+                catchError(() => of({ itemId: item.id, pbeId: null }))
+            )
+        );
 
-        forkJoin(requests).pipe(
-            finalize(() => this.isLoading = false)
-        ).subscribe(results => {
-            const records: any[] = [];
+        forkJoin(pbeRequests).pipe(
+            switchMap(results => {
+                const records: any[] = [];
+                const oppId = this.contextService.currentContext?.opportunityId || '006Dz00000Q7DCGIA3';
 
-            // A. Identify the Pricebook to use (Prefer the one from the first PBE result, or fallback to context)
-            const firstValidPbe = results.find(r => (r as any).pbePricebookId);
-            const dynamicPricebookId = (firstValidPbe as any)?.pbePricebookId || pricebookId || '01sf4000003ZgtzAAC';
+                // A. Identify the Pricebook to use
+                const firstValidPbe = results.find(r => (r as any).pbePricebookId);
+                const dynamicPricebookId = (firstValidPbe as any)?.pbePricebookId || pricebookId || '01sf4000003ZgtzAAC';
 
-            // B. Add Quote Patch to ensure Pricebook is set
-            records.push({
-                "referenceId": "QuoteUpdate",
-                "record": {
-                    "attributes": { "type": "Quote", "method": "PATCH", "id": quoteId },
-                    "Pricebook2Id": dynamicPricebookId
-                }
-            });
-
-            // C. Build QuoteLineItems and Relationships
-            selectedItems.forEach((item, index) => {
-                const pbeResult: any = results.find(r => r.itemId === item.id);
-                const pbeId = pbeResult?.pbeId || item.pricebookEntryId;
-
-                if (!pbeId) {
-                    console.warn(`Missing PricebookEntryId for product ${item.name} (${item.id})`);
-                    return;
-                }
-
-                const lineRefId = `refLine_${index}`;
+                // B. Add Quote Patch to ensure Pricebook is set (Matching refQuote in sample)
                 records.push({
-                    "referenceId": lineRefId,
+                    "referenceId": "refQuote",
                     "record": {
-                        "attributes": { "type": "QuoteLineItem", "method": "POST" },
-                        "QuoteId": quoteId,
-                        "Product2Id": item.id,
-                        "PricebookEntryId": pbeId,
-                        "Quantity": item.quantity || 1,
-                        "UnitPrice": item.price || 0,
-                        "Discount": item.discount || 0,
-                        "StartDate": this.discountPeriod.startDate,
-                        "EndDate": this.discountPeriod.endDate,
-                        "PeriodBoundary": "Anniversary"
+                        "attributes": { "type": "Quote", "method": "PATCH", "id": quoteId },
+
+                        "OpportunityId": oppId,
+                        "Pricebook2Id": dynamicPricebookId
                     }
                 });
 
-                // D. Link child products to parent bundle if applicable
-                if (item.isBundleChild && this.parentQuoteLineId) {
+                // C. Build QuoteLineItems
+                selectedItems.forEach((item, index) => {
+                    const pbeResult: any = results.find(r => r.itemId === item.id);
+                    const pbeId = pbeResult?.pbeId || item.pricebookEntryId;
+
+                    if (!pbeId) {
+                        console.warn(`Missing PricebookEntryId for product ${item.name} (${item.id})`);
+                        return;
+                    }
+
+                    const lineRefId = `refLine_${index}`;
+
                     records.push({
-                        "referenceId": `refRel_${index}`,
+                        "referenceId": lineRefId,
                         "record": {
-                            "attributes": { "type": "QuoteLineRelationship", "method": "POST" },
-                            "MainQuoteLineId": this.parentQuoteLineId,
-                            "AssociatedQuoteLineId": `@{${lineRefId}.id}`,
-                            "ProductRelationshipTypeId": "0PRDz000000Cc5BIAS" // Placeholder ID for Bundle relationship
+                            "attributes": { "type": "QuoteLineItem", "method": "POST" },
+                            "QuoteId": "@{refQuote.id}",
+                            "Product2Id": item.id,
+                            "PricebookEntryId": pbeId,
+                            "Quantity": Number(item.quantity) || 1,
+                            "Discount": Number(item.discount) || 0,
+                            "StartDate": this.discountPeriod.startDate,
+                            "EndDate": this.discountPeriod.endDate,
+                            "PeriodBoundary": "Anniversary"
                         }
                     });
-                }
-            });
+                });
 
-            if (records.length <= 1) { // Only QuoteUpdate, no lines
-                this.toastService.show('No valid products to add (missing Pricebook Entries)', 'warning');
-                return;
+                if (records.length <= 1) {
+                    return of({ status: 'skip', message: 'No valid products to add' });
+                }
+
+                const payload = {
+                    "pricingPref": "System",
+                    "catalogRatesPref": "Skip",
+                    "configurationPref": {
+                        "configurationMethod": "Skip",
+                        "configurationOptions": {
+                            "validateProductCatalog": true,
+                            "validateAmendRenewCancel": true,
+                            "executeConfigurationRules": true,
+                            "addDefaultConfiguration": true
+                        }
+                    },
+                    "taxPref": "Skip",
+                    "contextDetails": {},
+                    "graph": {
+                        "graphId": "createQuoteWithLines",
+                        "records": records
+                    }
+                };
+
+                return this.salesforceApiService.placeSalesTransaction(payload).pipe(
+                    map(res => ({ status: 'success', res, count: selectedItems.length }))
+                );
+            }),
+            finalize(() => {
+                this.isLoading = false;
+                this.loadingService.hide();
+            })
+        ).subscribe({
+            next: (result: any) => {
+                if (result.status === 'skip') {
+                    this.toastService.show(result.message, 'warning');
+                    return;
+                }
+                this.toastService.show('Quote updated successfully with discounts', 'success');
+                this.addDiscountToUI(this.discountForm.granularity, result.count);
+                this.resetSelections();
+            },
+            error: (err) => {
+                console.error('Failed to update quote', err);
             }
-
-            const payload = {
-                "graph": {
-                    "graphId": "sync_" + Date.now(),
-                    "records": records
-                }
-            };
-
-            this.salesforceApiService.placeSalesTransaction(payload).subscribe({
-                next: (res) => {
-                    this.toastService.show('Quote updated successfully with granular discounts', 'success');
-                    this.addDiscountToUI('Granular', selectedItems.length);
-                    this.resetSelections();
-                },
-                error: (err) => {
-                    // Error is handled by SalesforceApiService.handleError which now shows more detail
-                    console.error('Failed to update quote', err);
-                }
-            });
         });
     }
 
@@ -742,7 +777,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
             return;
         }
 
-        const selectedCount = this.getSelectedCount('groups') || this.getSelectedCount('individual');
+        const selectedCount = this.totalProductsCount;
         if (selectedCount === 0) {
             this.toastService.show('Please select at least one product', 'warning');
             return;
@@ -765,11 +800,9 @@ export class DiscountsIncentivesComponent implements OnChanges {
     }
 
     get totalProductsCount(): number {
-        if (this.productTab === 'groups') {
-            return this.productGroups.filter(g => g.selected).reduce((acc, g) => acc + (g.count || 0), 0);
-        } else {
-            return this.individualProducts.filter(p => p.selected).length;
-        }
+        const groupCount = this.productGroups.filter(g => g.selected).length;
+        const individualCount = this.individualProducts.filter(p => p.selected).length;
+        return groupCount + individualCount;
     }
 
     duplicateItem(item: any) {

@@ -73,10 +73,15 @@ export class CartComponent implements AfterViewInit, OnChanges {
             throw new Error('Missing Pricebook2Id on Opportunity');
         }
 
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const endDate = tomorrow.toISOString().split('T')[0];
+
         this.salesforceApi.createQuoteWithLines(
             quoteData.opportunityId,
             quoteData.pricebook2Id,
-            cartItems
+            cartItems,
+            endDate
         ).pipe(
             switchMap((quoteResult: any) => {
                 if (quoteResult.isSuccess && quoteResult.salesTransactionId) {
