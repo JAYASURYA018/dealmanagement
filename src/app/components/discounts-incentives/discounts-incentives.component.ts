@@ -585,22 +585,21 @@ export class DiscountsIncentivesComponent implements OnChanges {
         // 1. Collect from Product Groups
         const selectedGroups = this.productGroups.filter(g => g.selected);
         selectedGroups.forEach(group => {
-            // Treat the group itself as the item to be discounted
+            // Use parent bundle's product ID for the group line item
             selectedItemsMap.set(group.id, {
-                id: group.id,
+                id: this.productId, // Map group to Bundle Product ID
                 name: group.name,
                 discount: group.discount || 0,
                 quantity: 1,
                 price: group.price || 0,
                 pricebookEntryId: group.pricebookEntryId || '',
-                isBundleChild: true
+                isBundleChild: false
             });
         });
 
-        // 2. Collect from Individual Products (Individual selection augments or overrides)
+        // 2. Collect from Individual Products
         const selectedIndividuals = this.individualProducts.filter(p => p.selected);
         selectedIndividuals.forEach(p => {
-            // Overwrite if already in map, or add if new
             selectedItemsMap.set(p.id, {
                 id: p.id,
                 name: p.name,
@@ -613,8 +612,6 @@ export class DiscountsIncentivesComponent implements OnChanges {
         });
 
         const selectedItems = Array.from(selectedItemsMap.values());
-        const groupCount = selectedGroups.length;
-        const individualCount = selectedIndividuals.length;
 
         if (selectedItems.length === 0) {
             this.toastService.show('Please select at least one product or group', 'warning');
@@ -628,9 +625,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
             });
         }
 
-        console.log('[Discounts] Final Selected Items for API:', selectedItems);
-
-        // Always handle via API now
+        console.log('[Discounts] Final Selected Items (Direct):', selectedItems);
         this.handleGranularDiscount(selectedItems);
     }
 
@@ -651,8 +646,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
             this.salesforceApiService.getPricebookEntries([item.id]).pipe(
                 map(res => ({
                     itemId: item.id,
-                    pbeId: (res as any).records?.[0]?.Id,
-                    pbePricebookId: (res as any).records?.[0]?.Pricebook2Id
+                    pbeId: (res as any).records?.[0]?.Id
                 })),
                 catchError(() => of({ itemId: item.id, pbeId: null }))
             )
@@ -663,30 +657,24 @@ export class DiscountsIncentivesComponent implements OnChanges {
                 const records: any[] = [];
                 const oppId = this.contextService.currentContext?.opportunityId || '006Dz00000Q7DCGIA3';
 
-                // A. Identify the Pricebook to use
-                const firstValidPbe = results.find(r => (r as any).pbePricebookId);
-                const dynamicPricebookId = (firstValidPbe as any)?.pbePricebookId || pricebookId || '01sf4000003ZgtzAAC';
-
-                // B. Add Quote Patch to ensure Pricebook is set (Matching refQuote in sample)
+                // A. Add Quote PATCH record
                 records.push({
                     "referenceId": "refQuote",
                     "record": {
-                        "attributes": { "type": "Quote", "method": "PATCH", "id": quoteId },
-
-                        "OpportunityId": oppId,
-                        "Pricebook2Id": dynamicPricebookId
+                        "attributes": {
+                            "method": "PATCH",
+                            "type": "Quote",
+                            "id": quoteId
+                        }
                     }
                 });
 
-                // C. Build QuoteLineItems
+                // B. Build QuoteLineItems
                 selectedItems.forEach((item, index) => {
                     const pbeResult: any = results.find(r => r.itemId === item.id);
-                    const pbeId = pbeResult?.pbeId || item.pricebookEntryId;
 
-                    if (!pbeId) {
-                        console.warn(`Missing PricebookEntryId for product ${item.name} (${item.id})`);
-                        return;
-                    }
+                    // Use resolved PBE, or item's PBE, or fallback for groups
+                    const pbeId = pbeResult?.pbeId || item.pricebookEntryId || '01uDz00000dqLY8IAM';
 
                     const lineRefId = `refLine_${index}`;
 
@@ -694,14 +682,14 @@ export class DiscountsIncentivesComponent implements OnChanges {
                         "referenceId": lineRefId,
                         "record": {
                             "attributes": { "type": "QuoteLineItem", "method": "POST" },
-                            "QuoteId": "@{refQuote.id}",
+                            "QuoteId": quoteId, // Direct ID as per sample
                             "Product2Id": item.id,
                             "PricebookEntryId": pbeId,
-                            "Quantity": Number(item.quantity) || 1,
-                            "Discount": Number(item.discount) || 0,
                             "StartDate": this.discountPeriod.startDate,
                             "EndDate": this.discountPeriod.endDate,
-                            "PeriodBoundary": "Anniversary"
+                            "PeriodBoundary": "Anniversary",
+                            "Quantity": Number(item.quantity) || 1,
+                            "Discount": Number(item.discount) || 0
                         }
                     });
                 });
@@ -800,6 +788,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
     }
 
     get totalProductsCount(): number {
+        // Treat each selected group as ONE product line item
         const groupCount = this.productGroups.filter(g => g.selected).length;
         const individualCount = this.individualProducts.filter(p => p.selected).length;
         return groupCount + individualCount;

@@ -192,13 +192,14 @@ export class SalesforceApiService {
                         "method": "POST"
                     };
 
-                    const baseRecord = {
+                    const baseRecord: any = {
                         "attributes": baseAttributes,
                         "QuoteId": "@{refQuote.id}",
                         "Product2Id": item.id,
                         "PricebookEntryId": finalPBEId,
                         "Quantity": item.quantity || 1,
-                        "StartDate": item.startDate || new Date().toISOString().split('T')[0]
+                        "StartDate": item.startDate || new Date().toISOString().split('T')[0],
+                        "PeriodBoundary": "Anniversary"
                     };
 
                     // Merge dynamic fields from item
@@ -253,16 +254,14 @@ export class SalesforceApiService {
                     "configurationPref": {
                         "configurationMethod": "Skip",
                         "configurationOptions": {
-                            "validateProductCatalog": true,
-                            "validateAmendRenewCancel": true,
-                            "executeConfigurationRules": true,
-                            "addDefaultConfiguration": true
+                            "executeConfigurationRules": false,
+                            "addDefaultConfiguration": false
                         }
                     },
                     "taxPref": "Skip",
                     "contextDetails": {},
                     "graph": {
-                        "graphId": "createQuoteWithLines",
+                        "graphId": "createQuoteWithBundle",
                         "records": records
                     }
                 };
