@@ -193,7 +193,8 @@
                                     [period]="period" [products]="productOptions" [regionOptions]="lookerRegionOptions"
                                     [isFirst]="first" [isLast]="last" [subscriptionStartDate]="termStartDate"
                                     [subscriptionEndDate]="termEndDate"
-                                    (productChanged)="onSubscriptionProductChanged()">
+                                    (productChanged)="onSubscriptionProductChanged()"
+                                    (remove)="removeSubscriptionPeriod(i)">
                                 </app-subscription-period-item>
 
                                 <!-- Add Period Button at Bottom -->

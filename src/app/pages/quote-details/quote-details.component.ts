@@ -81,6 +81,8 @@ export class QuoteDetailsComponent implements OnInit {
 
     // Term Start Date (Separate from Quote Start Date)
     termStartInput: string = '';
+    private lastValidTermStart: string = '';
+    private lastValidTermEnd: string = '';
 
     get termStartDate(): string { return this.termStartInput; }
     set termStartDate(val: string) { this.termStartInput = val; }
@@ -101,6 +103,7 @@ export class QuoteDetailsComponent implements OnInit {
 
     // Subscription State
     isSubscriptionModalOpen: boolean = false;
+    currentFrequency: string = 'Yearly';
     subscriptionPeriods: SubscriptionPeriod[] = [];
     productOptions: ProductItem[] = [];
     lookerRegionOptions: string[] = ['us-central1', 'europe-west1', 'asia-northeast1'];
@@ -285,8 +288,21 @@ export class QuoteDetailsComponent implements OnInit {
             const newStart = new Date(lastEnd);
             newStart.setDate(newStart.getDate() + 1);
 
+            const newEnd = new Date(newStart);
+            newEnd.setFullYear(newEnd.getFullYear() + 1);
+            newEnd.setDate(newEnd.getDate() - 1);
+
             const newStartIso = this.toIsoDateString(newStart);
-            this.addOnePeriod(newStartIso, this.termEndDate);
+            const newEndIso = this.toIsoDateString(newEnd);
+
+            this.addOnePeriod(newStartIso, newEndIso);
+            this.onSubscriptionProductChanged();
+        }
+    }
+
+    removeSubscriptionPeriod(index: number) {
+        if (this.subscriptionPeriods.length > 0) {
+            this.subscriptionPeriods.splice(index, 1);
             this.onSubscriptionProductChanged();
         }
     }
@@ -296,6 +312,8 @@ export class QuoteDetailsComponent implements OnInit {
     }
 
     onSubscriptionPeriodsCreated(frequency: string) {
+        this.currentFrequency = frequency;
+
         const effectiveStart = (this.isLookerSubscription && this.termStartInput) ? this.termStartInput : this.startDate;
 
         if (!effectiveStart || !this.termEndDate) {
@@ -313,37 +331,37 @@ export class QuoteDetailsComponent implements OnInit {
             return;
         }
 
-        if (frequency === 'Custom') {
-            this.addOnePeriod(effectiveStart, this.termEndDate || '');
-        } else {
-            this.subscriptionPeriods = [];
-            let currentStart = new Date(totalStart);
-            let pIndex = 1;
-
-            while (currentStart <= totalEnd) {
-                let nextStart = new Date(currentStart);
-                if (frequency === 'Yearly') nextStart.setFullYear(nextStart.getFullYear() + 1);
-                else if (frequency === 'Quarterly') nextStart.setMonth(nextStart.getMonth() + 3);
-                else if (frequency === 'Monthly') nextStart.setMonth(nextStart.getMonth() + 1);
-                else break; // Should not happen
-
-                let periodEnd = new Date(nextStart);
-                periodEnd.setDate(periodEnd.getDate() - 1);
-
-                if (periodEnd > totalEnd) {
-                    periodEnd = new Date(totalEnd);
-                }
-
-                this.addPeriodItem(pIndex++, currentStart, periodEnd);
-
-                currentStart = nextStart;
-                if (currentStart > totalEnd) break;
-                if (pIndex > 50) break; // Safety
-            }
-
-            this.loadBundleDetails();
+        if (this.currentFrequency === 'Yearly' && !this.isValidYearlyDuration(effectiveStart, this.termEndDate)) {
+            this.toastService.show('Subscription duration should be exactly in years for yearly periods', 'warning');
+            this.closeSubscriptionModal();
+            return;
         }
 
+        // Capture valid state for future reversions
+        this.lastValidTermStart = this.termStartInput;
+        this.lastValidTermEnd = this.termEndDate;
+
+        this.subscriptionPeriods = [];
+        let currentStart = new Date(totalStart);
+        let pIndex = 1;
+
+        while (currentStart <= totalEnd) {
+            let nextStart = new Date(currentStart);
+            nextStart.setFullYear(nextStart.getFullYear() + 1);
+
+            let periodEnd = new Date(nextStart);
+            periodEnd.setDate(periodEnd.getDate() - 1);
+
+            if (periodEnd > totalEnd) {
+                periodEnd = new Date(totalEnd);
+            }
+
+            this.addPeriodItem(pIndex++, currentStart, periodEnd);
+
+            currentStart = nextStart;
+            if (currentStart > totalEnd) break;
+            if (pIndex > 50) break; // Safety
+        }
 
         const sfQuoteId = this.salesforceQuoteId;
         if (sfQuoteId) {
@@ -355,27 +373,29 @@ export class QuoteDetailsComponent implements OnInit {
                 next: (results: any) => {
                     console.log('✅ APIs Fetched Successfully on Create:', results);
 
-
                     if (results.qlItems && results.qlItems.records) {
                         this.existingQuoteLineItems = results.qlItems.records;
                     }
-
 
                     if (results.prType && results.prType.records && results.prType.records.length > 0) {
                         this.productRelationshipTypeId = results.prType.records[0].Id;
                     }
 
+                    this.loadBundleDetails();
                     this.closeSubscriptionModal();
                 },
                 error: (err) => {
                     console.error('❌ Error fetching dynamic APIs on create:', err);
+                    this.loadBundleDetails();
                     this.closeSubscriptionModal();
                 }
             });
         } else {
+            this.loadBundleDetails();
             this.closeSubscriptionModal();
         }
     }
+
 
     addOnePeriod(start: string, end: string) {
         this.addPeriodItem(this.subscriptionPeriods.length + 1, new Date(start), end ? new Date(end) : null);
@@ -423,6 +443,23 @@ export class QuoteDetailsComponent implements OnInit {
     private parseDate(dateStr: string): Date {
         const [y, m, d] = dateStr.split('-').map(Number);
         return new Date(y, m - 1, d);
+    }
+
+    private isValidYearlyDuration(startDate: string, endDate: string): boolean {
+        if (!startDate || !endDate) return false;
+        const start = this.parseDate(startDate);
+        const end = this.parseDate(endDate);
+        if (isNaN(start.getTime()) || isNaN(end.getTime())) return false;
+
+        const checkDate = new Date(start);
+        while (checkDate <= end) {
+            checkDate.setFullYear(checkDate.getFullYear() + 1);
+            const expectedEnd = new Date(checkDate);
+            expectedEnd.setDate(expectedEnd.getDate() - 1);
+            if (expectedEnd.getTime() === end.getTime()) return true;
+            if (expectedEnd > end) break;
+        }
+        return false;
     }
 
     private toIsoDateString(date: Date): string {
@@ -486,6 +523,85 @@ export class QuoteDetailsComponent implements OnInit {
         return res.trim() || '0 months';
     }
 
+    onSubscriptionProductChanged() {
+        console.log('🔄 Subscription period changed, refreshing term and totals...');
+
+        // If no periods exist, just track the current dates as the "last valid" state
+        if (!this.subscriptionPeriods || this.subscriptionPeriods.length === 0) {
+            if (this.termStartInput && this.termEndDate) {
+                this.lastValidTermStart = this.termStartInput;
+                this.lastValidTermEnd = this.termEndDate;
+            }
+            return;
+        }
+
+        // Strict Yearly Validation for global boundaries
+        if (this.currentFrequency === 'Yearly' && this.termStartInput && this.termEndDate) {
+            if (!this.isValidYearlyDuration(this.termStartInput, this.termEndDate)) {
+                // Duration is invalid (likely in the middle of being edited)
+                // We return silently to allow user to continue editing without annoying toasts.
+                // Period dates will only ripple once they reach a valid yearly duration.
+                return;
+            }
+        }
+
+        // Passed validation - update last valid global dates
+        this.lastValidTermStart = this.termStartInput;
+        this.lastValidTermEnd = this.termEndDate;
+
+        const totalEnd = this.termEndDate ? this.parseDate(this.termEndDate) : null;
+
+        // Cascade dates through all periods to maintain yearly structure
+        for (let i = 0; i < this.subscriptionPeriods.length; i++) {
+            const current = this.subscriptionPeriods[i];
+
+            // 1. Set Start Date
+            if (i === 0) {
+                // First period locked to global start
+                if (this.termStartInput && current.startDate !== this.termStartInput) {
+                    current.startDate = this.termStartInput;
+                }
+            } else {
+                // Subsequent periods start day after previous end
+                const prev = this.subscriptionPeriods[i - 1];
+                if (prev.endDate) {
+                    const prevEnd = this.parseDate(prev.endDate);
+                    const nextStart = new Date(prevEnd);
+                    nextStart.setDate(nextStart.getDate() + 1);
+                    const nextStartIso = this.toIsoDateString(nextStart);
+                    if (current.startDate !== nextStartIso) {
+                        current.startDate = nextStartIso;
+                    }
+                }
+            }
+
+            // 2. Set End Date (Strict 1-year periods, capped by global end if necessary)
+            if (current.startDate) {
+                const currentStart = this.parseDate(current.startDate);
+
+                // Calculate standard 1-year end date
+                const standardEnd = new Date(currentStart);
+                standardEnd.setFullYear(standardEnd.getFullYear() + 1);
+                standardEnd.setDate(standardEnd.getDate() - 1);
+
+                let targetEnd = standardEnd;
+
+                // Cap at global totalEnd if the global end is earlier than 1 year
+                if (totalEnd && totalEnd < standardEnd) {
+                    targetEnd = totalEnd;
+                }
+
+                const targetEndIso = this.toIsoDateString(targetEnd);
+                if (current.endDate !== targetEndIso) {
+                    current.endDate = targetEndIso;
+                }
+            }
+
+            // Sync names
+            current.name = `Period ${i + 1}`;
+        }
+    }
+
     calculatePeriodTotal(p: SubscriptionPeriod): number {
         let total = 0;
         const term = this.calculateSubscriptionTerm(p.startDate, p.endDate);
@@ -511,6 +627,8 @@ export class QuoteDetailsComponent implements OnInit {
     }
 
     ngOnInit() {
+        this.lastValidTermStart = this.termStartInput;
+        this.lastValidTermEnd = this.termEndDate;
         const now = Date.now();
         if (now - QuoteDetailsComponent.lastInitTime < 500) {
             console.warn('⚠️ [QuoteDetails] Duplicate Init detected within 500ms! Skipping execution.');
@@ -1029,10 +1147,6 @@ export class QuoteDetailsComponent implements OnInit {
         return `${this.totalTerms} months`;
     }
 
-    onSubscriptionProductChanged() {
-        console.log('🔄 Subscription period changed, refreshing term and totals...');
-        // Digestion will naturally occur but we could force logic here if needed.
-    }
 
     get totalContractValue(): number {
         if (this.activeTab === 'discounts' && this.isLookerSubscription) {
@@ -1099,6 +1213,32 @@ export class QuoteDetailsComponent implements OnInit {
         if (!this.startDate) {
             this.toastService.show('Please select a start date first', 'warning');
             return;
+        }
+
+        if (this.isLookerSubscription && this.termStartInput && this.termEndDate) {
+            if (this.currentFrequency === 'Yearly' && !this.isValidYearlyDuration(this.termStartInput, this.termEndDate)) {
+                this.toastService.show('Subscription duration must be exactly in years. Please adjust Subscription Dates.', 'warning');
+                return;
+            }
+
+            // Validate period count vs duration
+            const totalMonths = this.calculateSubscriptionTerm(this.termStartInput, this.termEndDate);
+            const expectedCount = this.currentFrequency === 'Yearly'
+                ? Math.round(totalMonths / 12)
+                : Math.ceil(totalMonths / 12);
+            const currentPeriods = this.subscriptionPeriods.length;
+
+            if (currentPeriods < expectedCount) {
+                const missing = expectedCount - currentPeriods;
+                this.toastService.show(`Your subscription duration is ${this.formatTermDisplay(this.termStartInput, this.termEndDate)}. Please add ${missing} more period${missing > 1 ? 's' : ''}.`, 'warning');
+                return;
+            } else if (currentPeriods > expectedCount) {
+                this.toastService.show('Please delete extra periods before saving.', 'warning');
+                return;
+            }
+
+            // Ensure periods are perfectly synced to these final global dates
+            this.onSubscriptionProductChanged();
         }
 
         if (this.isLookerSubscription && this.subscriptionPeriods.length > 0) {
@@ -1254,7 +1394,7 @@ export class QuoteDetailsComponent implements OnInit {
     updateExpirationDate() {
         if (!this.startDate) {
             this.expirationDate = '';
-            this.termEndDate = '';
+            this.termEndDate = this.lastValidTermEnd;
             return;
         }
 
@@ -1307,7 +1447,12 @@ export class QuoteDetailsComponent implements OnInit {
 
         if (end < start) {
             this.toastService.show('Term End Date cannot be earlier than Term Start Date.', 'warning');
-            this.termEndDate = '';
+            const startVal = this.lastValidTermStart;
+            const endVal = this.lastValidTermEnd;
+            setTimeout(() => {
+                this.termStartInput = startVal;
+                this.termEndDate = endVal;
+            });
             return;
         }
 
@@ -1319,7 +1464,12 @@ export class QuoteDetailsComponent implements OnInit {
         // Example: Start 2026-01-01. Limit 2031-01-01. End 2031-01-02 is > 5 years.
         if (end > limitDate) {
             this.toastService.show('The duration between start and end dates cannot exceed 5 years.', 'warning');
-            this.termEndDate = '';
+            const startVal = this.lastValidTermStart;
+            const endVal = this.lastValidTermEnd;
+            setTimeout(() => {
+                this.termStartInput = startVal;
+                this.termEndDate = endVal;
+            });
             return;
         }
 
@@ -1336,6 +1486,7 @@ export class QuoteDetailsComponent implements OnInit {
             } else {
                 this.commitmentPeriods[0].months = fractionalMonths;
             }
+            this.onSubscriptionProductChanged();
             return;
         }
 

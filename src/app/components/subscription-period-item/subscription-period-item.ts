@@ -1,4 +1,4 @@
-import { Component, EventEmitter, HostListener, Input, Output, inject } from '@angular/core';
+import { Component, EventEmitter, HostListener, Input, OnInit, Output, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ToastService } from '../../services/toast.service';
@@ -77,8 +77,19 @@ export interface SubscriptionPeriod {
     }
   `]
 })
-export class SubscriptionPeriodItemComponent {
-    @Input() period!: SubscriptionPeriod;
+export class SubscriptionPeriodItemComponent implements OnInit {
+    private _period!: SubscriptionPeriod;
+    @Input()
+    set period(value: SubscriptionPeriod) {
+        this._period = value;
+        if (value) {
+            this.lastValidStartDate = value.startDate;
+            this.lastValidEndDate = value.endDate;
+        }
+    }
+    get period(): SubscriptionPeriod {
+        return this._period;
+    }
     private _products: ProductItem[] = [];
     @Input()
     set products(value: ProductItem[]) {
@@ -100,6 +111,41 @@ export class SubscriptionPeriodItemComponent {
     @Input() subscriptionEndDate: string = '';
 
     minDate: string = new Date().toISOString().split('T')[0];
+    private lastValidStartDate: string = '';
+    private lastValidEndDate: string = '';
+    menuOpen: boolean = false;
+
+    ngOnInit() {
+    }
+
+    toggleMenu(event: Event) {
+        this.menuOpen = !this.menuOpen;
+    }
+
+    @HostListener('document:click', ['$event'])
+    onDocumentClick(event: MouseEvent) {
+        const target = event.target as HTMLElement;
+        const isMenuClick = target.closest('.period-menu-container');
+
+        if (!isMenuClick) {
+            this.menuOpen = false;
+        }
+
+        // Always close region dropdowns if clicking outside the region area
+        const isRegionClick = target.closest('.region-dropdown-container');
+        if (!isRegionClick) {
+            this.activeRegionIndex = null;
+        }
+    }
+
+    get maxEndDate(): string {
+        if (!this.period.startDate) return '';
+        const start = this.parseDateString(this.period.startDate);
+        const max = new Date(start);
+        max.setFullYear(max.getFullYear() + 1);
+        max.setDate(max.getDate() - 1);
+        return max.toISOString().split('T')[0];
+    }
 
     onDateChange() {
         if (!this.period.startDate || !this.period.endDate) return;
@@ -108,21 +154,24 @@ export class SubscriptionPeriodItemComponent {
         const end = new Date(this.period.endDate);
 
         if (end < start) {
-            this.period.endDate = '';
+            this.period.startDate = this.lastValidStartDate;
+            this.period.endDate = this.lastValidEndDate;
             this.toastService.show('End Date cannot be earlier than Start Date.', 'warning');
             return;
         }
 
         // Period 1 Start Date Validation
         if (this.isFirst && this.subscriptionStartDate && this.period.startDate !== this.subscriptionStartDate) {
-            this.period.startDate = this.subscriptionStartDate;
+            this.period.startDate = this.subscriptionStartDate; // Revert to subscription start
+            this.lastValidStartDate = this.period.startDate; // Sync valid state
             this.toastService.show('The Period 1 start date must equal to subscription start date', 'warning');
             return;
         }
 
         // Last Period End Date Validation
         if (this.isLast && this.subscriptionEndDate && this.period.endDate !== this.subscriptionEndDate) {
-            this.period.endDate = this.subscriptionEndDate;
+            this.period.endDate = this.subscriptionEndDate; // Revert to subscription end
+            this.lastValidEndDate = this.period.endDate; // Sync valid state
             this.toastService.show('The last period end date should equal to subscription end date', 'warning');
             return;
         }
@@ -130,13 +179,18 @@ export class SubscriptionPeriodItemComponent {
         // Limit to 1 year
         const limitDate = new Date(start);
         limitDate.setFullYear(limitDate.getFullYear() + 1);
+        limitDate.setDate(limitDate.getDate() - 1);
 
         if (end > limitDate) {
-            this.period.endDate = '';
+            this.period.startDate = this.lastValidStartDate;
+            this.period.endDate = this.lastValidEndDate;
             this.toastService.show('Period duration cannot exceed 1 year.', 'warning');
             return;
         }
 
+        // All passed - update last valid state
+        this.lastValidStartDate = this.period.startDate;
+        this.lastValidEndDate = this.period.endDate;
         this.productChanged.emit();
     }
 
@@ -164,10 +218,6 @@ export class SubscriptionPeriodItemComponent {
         }
     }
 
-    @HostListener('document:click')
-    closeDropdowns() {
-        this.activeRegionIndex = null;
-    }
 
     toggleRegionDropdown(index: number) {
         if (this.activeRegionIndex === index) {
@@ -222,9 +272,9 @@ export class SubscriptionPeriodItemComponent {
         const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
 
         let res = '';
-        if (months > 0) res += `${months} month${months > 1 ? 's' : ''} `;
-        if (diffDays > 0) res += `${diffDays} day${diffDays > 1 ? 's' : ''}`;
-        return res.trim() || '0 months';
+        if (months > 0) res += `${months} Month${months > 1 ? 's' : ''} `;
+        if (diffDays > 0) res += `${diffDays} Day${diffDays > 1 ? 's' : ''}`;
+        return res.trim() || '0 Months';
     }
 
     calculateFractionalTerm(startDate: string, endDate: string): number {
@@ -257,6 +307,13 @@ export class SubscriptionPeriodItemComponent {
     private parseDateString(dateStr: string): Date {
         const parts = dateStr.split('-').map(Number);
         return new Date(parts[0], parts[1] - 1, parts[2]);
+    }
+
+    private toIsoDateString(date: Date): string {
+        const y = date.getFullYear();
+        const m = (date.getMonth() + 1).toString().padStart(2, '0');
+        const d = date.getDate().toString().padStart(2, '0');
+        return `${y}-${m}-${d}`;
     }
     restrictNumeric(event: KeyboardEvent) {
         const allowedKeys = ['Backspace', 'Tab', 'Enter', 'ArrowLeft', 'ArrowRight', 'Delete', 'End', 'Home'];

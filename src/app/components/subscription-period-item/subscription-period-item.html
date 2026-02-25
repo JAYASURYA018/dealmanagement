@@ -1,6 +1,6 @@
 <div class="bg-white rounded-xl border border-gray-200 shadow-sm mb-4 transition-all hover:shadow-md">
     <!-- Header -->
-    <div (click)="toggleExpand()" class="px-6 pt-5 pb-5 flex items-center justify-between cursor-pointer">
+    <div class="px-6 pt-5 pb-5 flex items-center justify-between">
         <div class="flex items-center gap-4">
             <h4 class="text-[16px] font-semibold text-gray-800">{{ period.name }}</h4>
         </div>
@@ -21,11 +21,28 @@
                 </div>
             </div>
 
-            <button (click)="remove.emit(); $event.stopPropagation()"
-                class="p-1 hover:bg-gray-100 rounded-full transition-colors text-gray-600 hover:text-gray-600">
-                <span class="material-icons-outlined text-lg">more_vert</span>
-            </button>
-            <span class="material-icons-outlined text-gray-800 transition-transform duration-300"
+            <div class="relative period-menu-container">
+                <button (click)="toggleMenu($event)"
+                    class="p-1 hover:bg-gray-100 rounded-full transition-colors text-gray-600 hover:text-gray-600">
+                    <span class="material-icons-outlined text-lg">more_vert</span>
+                </button>
+
+                <!-- Dropdown Menu -->
+                <div *ngIf="menuOpen"
+                    class="absolute right-0 top-[100%] mt-1 w-48 bg-white rounded-lg shadow-xl border border-gray-100 py-2 z-[200] animate-in fade-in zoom-in duration-150">
+                    <button *ngIf="isLast" (click)="remove.emit(); menuOpen = false"
+                        class="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2 font-medium">
+                        <span class="material-icons-outlined text-base">delete</span>
+                        Delete Period
+                    </button>
+                    <!-- If not last, show a placeholder or disabled option if you want, but user said ONLY last -->
+                    <div *ngIf="!isLast" class="px-4 py-2.5 text-xs text-gray-400 italic">
+                        No actions available
+                    </div>
+                </div>
+            </div>
+            <span (click)="toggleExpand(); $event.stopPropagation()"
+                class="material-icons-outlined text-gray-800 transition-transform duration-300 cursor-pointer"
                 [class.rotate-180]="period.isExpanded">
                 expand_more
             </span>
@@ -67,14 +84,10 @@
                         {{ period.name }} Start Date
                     </label>
                     <div class="relative w-full flex items-center">
-                        <input type="date" [(ngModel)]="period.startDate" [min]="minDate"
-                            (ngModelChange)="onDateChange()"
-                            class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
-                        <div class="text-sm font-semibold text-gray-800">
+                        <div class="text-sm font-semibold text-gray-400">
                             {{ formatDate(period.startDate) || 'Select' }}
                         </div>
-                        <span
-                            class="material-icons-outlined text-gray-600 text-lg ml-auto pointer-events-none">calendar_today</span>
+                        <span class="material-icons text-gray-400 text-lg ml-auto pointer-events-none">lock</span>
                     </div>
                 </div>
 
@@ -85,18 +98,14 @@
                             {{ period.name }} End Date
                         </label>
                         <div class="relative w-full flex items-center">
-                            <input type="date" [(ngModel)]="period.endDate" [min]="period.startDate || minDate"
-                                (ngModelChange)="onDateChange()"
-                                class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
-                            <div class="text-sm font-semibold text-gray-800">
+                            <div class="text-sm font-semibold text-gray-400">
                                 {{ formatDate(period.endDate) || 'Select' }}
                             </div>
-                            <span
-                                class="material-icons-outlined text-gray-600 text-lg ml-auto pointer-events-none">calendar_today</span>
+                            <span class="material-icons text-gray-400 text-lg ml-auto pointer-events-none">lock</span>
                         </div>
                     </div>
                     <div *ngIf="period.productName && getDurationLabel()"
-                        class="text-[11px] text-gray-500 font-medium mt-1 ml-4 animate-in fade-in slide-in-from-top-1 duration-300">
+                        class="text-[11px] text-gray-500 font-medium mt-1 ml-2 animate-in fade-in slide-in-from-top-1 duration-300">
                         {{ getDurationLabel() }}
                     </div>
                 </div>
@@ -138,8 +147,8 @@
                 </div>
 
                 <!-- Region (Custom Dropdown) -->
-                <div (click)="toggleRegionDropdown(i); $event.stopPropagation()"
-                    class="bg-white p-2 px-3 rounded-md border border-gray-300 hover:border-gray-400 transition-colors flex flex-col justify-center h-[56px] shadow-sm relative cursor-pointer">
+                <div (click)="toggleRegionDropdown(i)"
+                    class="bg-white p-2 px-3 rounded-md border border-gray-300 hover:border-gray-400 transition-colors flex flex-col justify-center h-[56px] shadow-sm relative cursor-pointer region-dropdown-container">
                     <label class="block text-[11px] text-gray-500 font-medium leading-none mb-1">Region</label>
                     <div class="flex items-center">
                         <div class="text-sm font-semibold truncate pr-6" [class.text-gray-400]="!row.region"
@@ -151,7 +160,7 @@
                     </div>
 
                     <!-- Custom Dropdown List -->
-                    <div *ngIf="activeRegionIndex === i" (click)="$event.stopPropagation()"
+                    <div *ngIf="activeRegionIndex === i"
                         class="absolute left-0 top-full mt-1 min-w-[280px] w-full bg-white rounded-lg shadow-2xl border border-gray-200 z-[9999] py-2 max-h-[250px] overflow-y-auto custom-scrollbar region-dropdown">
                         <button *ngFor="let option of regionOptions" (click)="selectRegion(i, option)"
                             class="w-full text-left px-4 py-2.5 text-[13px] text-gray-700 hover:bg-blue-50 transition-colors">
