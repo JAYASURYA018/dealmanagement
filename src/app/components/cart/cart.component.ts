@@ -73,15 +73,10 @@ export class CartComponent implements AfterViewInit, OnChanges {
             throw new Error('Missing Pricebook2Id on Opportunity');
         }
 
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        const endDate = tomorrow.toISOString().split('T')[0];
-
         this.salesforceApi.createQuoteWithLines(
             quoteData.opportunityId,
             quoteData.pricebook2Id,
-            cartItems,
-            endDate
+            cartItems
         ).pipe(
             switchMap((quoteResult: any) => {
                 if (quoteResult.isSuccess && quoteResult.salesTransactionId) {
@@ -103,6 +98,15 @@ export class CartComponent implements AfterViewInit, OnChanges {
             })
         ).subscribe({
             next: (quoteDetails: any) => {
+                // Extract QuoteNumber and other details if needed from the Quote
+                if (quoteDetails && quoteDetails.QuoteNumber) {
+                    const formatted = `Q-${quoteDetails.QuoteNumber}`;
+                    this.quoteDataService.setQuoteData({
+                        quoteId: quoteDetails.Id,
+                        quoteNumber: formatted
+                    });
+                }
+
                 // Clear search query
                 this.searchFilterService.setSearchQuery('');
 

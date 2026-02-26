@@ -80,7 +80,7 @@ export class RcaApiService {
                 }
 
                 // Query: SELECT Id,Name,Code,it_has_Bundle_Products__c ,No_Of_Child_Products__c,Status FROM ProductClassification WHERE Parent_Bundle_Product_ID__c ='...'
-                const query = `SELECT Id, Name, Code, It_has_Bundle_Products__c, No_Of_Child_Products__c, Status FROM ProductClassification WHERE Parent_Bundle_Product_ID__c = '${parentBundleId}'`;
+                const query = `SELECT Id, Name, Code, It_has_Bundle_Products__c, No_Of_Child_Products__c, Status FROM ProductClassification WHERE Parent_Bundle_Product_ID__c = '${parentBundleId}' AND It_has_Bundle_Products__c = false`;
                 const encodedQuery = encodeURIComponent(query);
                 const url = `${baseUrl}/services/data/v66.0/query?q=${encodedQuery}`;
 
@@ -144,7 +144,7 @@ export class RcaApiService {
 
     getDropdownOptions(parentBundleId: string): Observable<any> {
         const method = 'RcaApiService.getDropdownOptions';
-        const query = `SELECT Id, Name, Code, It_has_Bundle_Products__c, No_Of_Child_Products__c, Status FROM ProductClassification WHERE Parent_Bundle_Product_ID__c = '${parentBundleId}'`;
+        const query = `SELECT Id, Name, Code, It_has_Bundle_Products__c, No_Of_Child_Products__c, Status FROM ProductClassification WHERE Parent_Bundle_Product_ID__c = '${parentBundleId}' AND It_has_Bundle_Products__c = false`;
 
         return this.contextService.context$.pipe(
             take(1),

@@ -1,6 +1,7 @@
 ﻿import { Component, HostListener, OnInit, inject } from '@angular/core';
 import { DiscountsIncentivesComponent } from '../../components/discounts-incentives/discounts-incentives.component';
 import { CommonModule } from '@angular/common';
+import { QuoteRefreshService } from '../../services/quote-refresh.service';
 import { CartService } from '../../services/cart.service';
 import { ContextService } from '../../services/context.service';
 import { SalesforceApiService } from '../../services/salesforce-api.service';
@@ -47,6 +48,7 @@ export class QuoteDetailsComponent implements OnInit {
     private loadingService = inject(LoadingService);
     private quoteDataService = inject(QuoteDataService);
     private toastService = inject(ToastService);
+    private quoteRefreshService = inject(QuoteRefreshService);
 
     isSaving: boolean = false;
     isLoading: boolean = true; // Start in loading state
@@ -56,6 +58,8 @@ export class QuoteDetailsComponent implements OnInit {
     previewScreenshot: string | null = null;
     isCapturingScreenshot: boolean = false; // Flag to hide preview during screenshot capture
 
+    lastSavedCommitmentState: string | null = null;
+    lastSavedLookerState: string | null = null;
     commitmentPeriods: any[] = [{ months: null, amount: null, isCollapsed: false }];
     activeMenuIndex: number | null = null;
     activeTab: 'details' | 'discounts' = 'details';
@@ -73,8 +77,8 @@ export class QuoteDetailsComponent implements OnInit {
     isGCP: boolean = false;
 
     // Dates
-    startDate: string = new Date().toISOString().split('T')[0]; // Default to Today
-    expirationDate: string = new Date(Date.now() + 45 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    startDate: string = ''; // Initially empty
+    expirationDate: string = ''; // Initially empty
     previewCommitments: any[] = [];
     todayDate: Date = new Date(); // Keep for explicit today reference if needed, but startDate is now separate
     minDate: string = new Date().toISOString().split('T')[0];
@@ -123,7 +127,72 @@ export class QuoteDetailsComponent implements OnInit {
 
 
     switchTab(tab: 'details' | 'discounts') {
+        if (tab === 'discounts' && !this.isLookerSubscription) {
+            const hasValidPeriod = this.commitmentPeriods.some(p => p.months && p.amount);
+            if (!hasValidPeriod) {
+                this.toastService.show('Please provide at least one valid commitment period (Months and Amount) before proceeding.', 'warning');
+                return;
+            }
+
+            const currentState = JSON.stringify({
+                commitments: this.commitmentPeriods,
+                startDate: this.startDate,
+                expirationDate: this.expirationDate
+            });
+
+            if (currentState === this.lastSavedCommitmentState) {
+                this.activeTab = tab;
+                return;
+            }
+
+            // Auto-save commitment before switching
+            this.executeCommitFlow(() => {
+                this.activeTab = tab;
+            }, true);
+            return;
+        } else if (tab === 'discounts' && this.isLookerSubscription) {
+            if (this.subscriptionPeriods.length === 0) {
+                this.toastService.show('Please create subscription periods before proceeding.', 'warning');
+                return;
+            }
+
+            const currentLookerState = JSON.stringify({
+                periods: this.subscriptionPeriods,
+                startDate: this.startDate,
+                expirationDate: this.expirationDate,
+                termStartInput: this.termStartInput,
+                termEndDate: this.termEndDate
+            });
+
+            if (currentLookerState === this.lastSavedLookerState) {
+                this.activeTab = tab;
+                return;
+            }
+
+            // For Looker, we also trigger onSave
+            this.onSave(() => {
+                this.activeTab = tab;
+            }, true);
+            return;
+        }
+
         this.activeTab = tab;
+    }
+
+    updateBaselineStates() {
+        this.lastSavedCommitmentState = JSON.stringify({
+            commitments: this.commitmentPeriods,
+            startDate: this.startDate,
+            expirationDate: this.expirationDate
+        });
+
+        this.lastSavedLookerState = JSON.stringify({
+            periods: this.subscriptionPeriods,
+            startDate: this.startDate,
+            expirationDate: this.expirationDate,
+            termStartInput: this.termStartInput,
+            termEndDate: this.termEndDate
+        });
     }
 
     loadBundleDetails() {
@@ -366,6 +435,25 @@ export class QuoteDetailsComponent implements OnInit {
         const sfQuoteId = this.salesforceQuoteId;
         if (sfQuoteId) {
             console.log('🔄 Fetching Quote Line Items and Relationship Types...', { sfQuoteId });
+            const needRefresh = this.quoteRefreshService.consumeRefreshFlag();
+            if (!needRefresh) {
+                // No modifications, skip fetching Quote Line Items
+                console.log('⚡ Skipping getQuoteLineItems call as no changes detected.');
+                // Still fetch relationship type if needed
+                this.sfApi.getProductRelationshipType().subscribe({
+                    next: (prRes: any) => {
+                        if (prRes && prRes.records && prRes.records.length > 0) {
+                            this.productRelationshipTypeId = prRes.records[0].Id;
+                        }
+                        this.closeSubscriptionModal();
+                    },
+                    error: (err) => {
+                        console.error('❌ Error fetching product relationship type:', err);
+                        this.closeSubscriptionModal();
+                    }
+                });
+                return;
+            }
             forkJoin({
                 qlItems: this.sfApi.getQuoteLineItems(sfQuoteId),
                 prType: this.sfApi.getProductRelationshipType()
@@ -636,6 +724,15 @@ export class QuoteDetailsComponent implements OnInit {
         }
         QuoteDetailsComponent.lastInitTime = now;
 
+        // Default dates to today as per new requirement
+        const today = this.toIsoDateString(new Date());
+        this.startDate = today;
+        this.termStartInput = today;
+        this.expirationDate = '';
+        this.termEndDate = '';
+
+
+        this.updateBaselineStates();
 
         this.quoteDataService.quoteData$.subscribe(quoteData => {
             if (quoteData.opportunityName) {
@@ -659,6 +756,9 @@ export class QuoteDetailsComponent implements OnInit {
             if (quoteData.website) {
                 this.website = quoteData.website;
             }
+            if (quoteData.productName) {
+                this.productName = quoteData.productName;
+            }
         });
 
         const quoteId = this.contextService.currentContext?.quoteId;
@@ -680,18 +780,24 @@ export class QuoteDetailsComponent implements OnInit {
                             this.website = quote.Account.Website;
                         }
 
-                        if (quote.StartDate) {
-                            this.startDate = quote.StartDate;
+                        if (quote.Opportunity) {
+                            if (quote.Opportunity.Sales_Channel__c) {
+                                this.salesChannel = quote.Opportunity.Sales_Channel__c;
+                            }
+                            // Prefer relationship Name
+                            if (quote.Opportunity.Primary_Contact__r && quote.Opportunity.Primary_Contact__r.Name) {
+                                this.primaryContactName = quote.Opportunity.Primary_Contact__r.Name;
+                            } else if (quote.Opportunity.Primary_Contact__c && !this.primaryContactName) {
+                                // Fallback only if we don't already have a name from somewhere else
+                                this.primaryContactName = quote.Opportunity.Primary_Contact__c;
+                            }
                         }
 
-                        if (quote.ExpirationDate) {
-                            this.expirationDate = quote.ExpirationDate;
-                        } else {
-                            // Default Expiration Date: Today + 45 days
-                            const date = new Date();
-                            date.setDate(date.getDate() + 45);
-                            this.expirationDate = this.toIsoDateString(date);
+                        // Ensure dates remain valid; if they were cleared, reset to today
+                        if (!this.startDate) {
+                            this.startDate = this.toIsoDateString(new Date());
                         }
+                        this.updateExpirationDate();
 
 
                         if (quote.QuoteLineItems?.records?.length > 0) {
@@ -704,6 +810,8 @@ export class QuoteDetailsComponent implements OnInit {
                             this.productId = null;
                             this.bundleQuoteLineId = null;
                         }
+
+                        this.updateBaselineStates();
                     }
                     this.isLoading = false; // Data loaded
                 },
@@ -713,6 +821,7 @@ export class QuoteDetailsComponent implements OnInit {
                 }
             });
         } else {
+            this.updateBaselineStates();
             this.isLoading = false; // No valid quote ID, stop loading
         }
 
@@ -724,11 +833,18 @@ export class QuoteDetailsComponent implements OnInit {
             this.salesChannel = ctx.salesChannel;
             this.quoteId = ctx.quoteId || 'Q-1234';
             this.isGCP = !!ctx.isGCPFamily;
-            this.isGCP = !!ctx.isGCPFamily;
         });
 
-        this.loadBundleDetails();
-        this.loadAllPicklists();
+        // Delay the check slightly to ensure product details (and isLookerSubscription) are resolved
+        setTimeout(() => {
+            if (this.isLookerSubscription) {
+                console.log('🔍 Looker Subscription detected. Loading bundle and picklists.');
+                this.loadBundleDetails();
+                this.loadAllPicklists();
+            } else {
+                // console.log('⚡ Standard Commitment Quote detected. Skipping bundle and picklist APIs.');
+            }
+        }, 100);
     }
 
     loadAllPicklists() {
@@ -1247,15 +1363,40 @@ export class QuoteDetailsComponent implements OnInit {
                 this.toastService.show('you should select a platform product for all periods', 'warning');
                 return;
             }
+
+            const currentLookerState = JSON.stringify({
+                periods: this.subscriptionPeriods,
+                startDate: this.startDate,
+                expirationDate: this.expirationDate,
+                termStartInput: this.termStartInput,
+                termEndDate: this.termEndDate
+            });
+
+            if (currentLookerState === this.lastSavedLookerState) {
+                this.showSuccessPopup = true;
+                return;
+            }
+
             this.onSave();
         } else if (this.commitmentPeriods.length > 0 && this.commitmentPeriods[0].months) {
+            const currentState = JSON.stringify({
+                commitments: this.commitmentPeriods,
+                startDate: this.startDate,
+                expirationDate: this.expirationDate
+            });
+
+            if (currentState === this.lastSavedCommitmentState) {
+                this.showSuccessPopup = true;
+                return;
+            }
+
             this.executeCommitFlow();
         } else {
             this.toastService.show('Please configure periods before saving', 'warning');
         }
     }
 
-    executeCommitFlow() {
+    executeCommitFlow(onSuccess?: () => void, skipFeedback: boolean = false) {
         const fullQuoteId = this.contextService.currentContext?.quoteId;
         if (!fullQuoteId) {
             this.toastService.show('Quote ID not found', 'error');
@@ -1312,8 +1453,17 @@ export class QuoteDetailsComponent implements OnInit {
         ).subscribe({
             next: (commitmentResponse: any) => {
                 this.loadingService.hide();
-                this.toastService.show('Quote Data Saved Successfully!', 'success');
-                this.capturePreviewScreenshot();
+                this.lastSavedCommitmentState = JSON.stringify({
+                    commitments: this.commitmentPeriods,
+                    startDate: this.startDate,
+                    expirationDate: this.expirationDate
+                });
+
+                if (!skipFeedback) {
+                    this.toastService.show('Quote Data Saved Successfully!', 'success');
+                    this.capturePreviewScreenshot();
+                }
+                if (onSuccess) onSuccess();
             },
             error: (err) => {
                 this.loadingService.hide();
@@ -1328,7 +1478,10 @@ export class QuoteDetailsComponent implements OnInit {
     addPeriod() {
         if (this.commitmentPeriods.length < 5) {
             this.commitmentPeriods.push({ months: null, amount: null, isCollapsed: false });
-            this.updateExpirationDate();
+            // Only update if we have a start date
+            if (this.startDate) {
+                this.updateExpirationDate();
+            }
         }
     }
 
@@ -1392,19 +1545,26 @@ export class QuoteDetailsComponent implements OnInit {
     onMonthInput(index: number, val: string) { }
 
     updateExpirationDate() {
-        if (!this.startDate) {
+        const anchorDate = this.isLookerSubscription ? this.termStartInput : this.startDate;
+
+        if (!anchorDate) {
             this.expirationDate = '';
-            this.termEndDate = this.lastValidTermEnd;
+            if (this.isLookerSubscription) {
+                this.termEndDate = this.lastValidTermEnd;
+            } else {
+                this.termEndDate = '';
+            }
             return;
         }
 
         if (this.isLookerSubscription) {
-            if (!this.termStartInput) return; // Wait for term start
-            if (this.termStartInput < this.minDate) {
+            if (this.termStartInput && this.termStartInput < this.minDate) {
                 this.toastService.show('You cannot select a term start date less than the current date.', 'warning');
                 this.termStartInput = this.minDate;
                 return;
             }
+            // Sync startDate with termStartInput for Looker persistence
+            this.startDate = this.termStartInput;
         } else {
             if (this.startDate && this.startDate < this.minDate) {
                 this.toastService.show('Quote Start Date cannot be less than the current date.', 'warning');
@@ -1412,25 +1572,25 @@ export class QuoteDetailsComponent implements OnInit {
             }
         }
 
+        if (this.isLookerSubscription) {
+            this.updateTermFromDates();
+            return;
+        }
+
         const totalMonths = this.totalTerms;
-        if (totalMonths <= 0 && !this.isLookerSubscription) {
+        if (totalMonths <= 0) {
             this.expirationDate = '';
             return;
         }
 
-        const termsToUse = totalMonths > 0 ? totalMonths : 12;
-
-        const parts = this.startDate.split('-');
+        const termsToUse = totalMonths;
+        const parts = anchorDate.split('-');
         const date = new Date(Date.UTC(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])));
         date.setUTCMonth(date.getUTCMonth() + termsToUse);
         date.setUTCDate(date.getUTCDate() - 1);
         const isoDate = date.toISOString().split('T')[0];
 
-        if (!this.isLookerSubscription) {
-            this.expirationDate = isoDate;
-        } else {
-            this.updateTermFromDates();
-        }
+        this.expirationDate = isoDate;
     }
 
 
@@ -1486,7 +1646,6 @@ export class QuoteDetailsComponent implements OnInit {
             } else {
                 this.commitmentPeriods[0].months = fractionalMonths;
             }
-            this.onSubscriptionProductChanged();
             return;
         }
 
@@ -1514,18 +1673,17 @@ export class QuoteDetailsComponent implements OnInit {
         let cleaned = val.toLowerCase().replace(/[^0-9.kmb]/g, '');
         if (!cleaned) return 0;
 
-        const lastChar = cleaned.slice(-1);
+        // Check for shorthand character anywhere (though usually at the end)
         let multiplier = 1;
-
-        if (lastChar === 'k') {
+        if (cleaned.includes('k')) {
             multiplier = 1000;
-            cleaned = cleaned.slice(0, -1);
-        } else if (lastChar === 'm') {
+            cleaned = cleaned.replace('k', '');
+        } else if (cleaned.includes('m')) {
             multiplier = 1000000;
-            cleaned = cleaned.slice(0, -1);
-        } else if (lastChar === 'b') {
+            cleaned = cleaned.replace('m', '');
+        } else if (cleaned.includes('b')) {
             multiplier = 1000000000;
-            cleaned = cleaned.slice(0, -1);
+            cleaned = cleaned.replace('b', '');
         }
 
         const numValue = parseFloat(cleaned);
@@ -1634,7 +1792,7 @@ export class QuoteDetailsComponent implements OnInit {
         return `${month} ${day},${year}`;
     }
 
-    onSave() {
+    onSave(onSuccess?: () => void, skipFeedback: boolean = false) {
         console.log('🚀 Initiating Consolidated Quote Update (Full Graph API)...');
         if (this.isSaving) return;
         this.isSaving = true;
@@ -1666,11 +1824,11 @@ export class QuoteDetailsComponent implements OnInit {
                 const records: any[] = [];
 
                 // 1. Quote Update
-                const todayStr = new Date().toISOString().split('T')[0];
+                const startToUse = (this.isLookerSubscription && this.termStartInput) ? this.termStartInput : (this.startDate || new Date().toISOString().split('T')[0]);
                 const quoteRec: any = {
                     "attributes": { "type": "Quote", "method": "PATCH", "id": targetQuoteId },
                     "Pricebook2Id": "01sf4000003ZgtzAAC",
-                    "StartDate": todayStr
+                    "StartDate": startToUse
                 };
                 if (this.expirationDate) quoteRec["ExpirationDate"] = this.expirationDate;
 
@@ -1860,9 +2018,22 @@ export class QuoteDetailsComponent implements OnInit {
                     next: (res) => {
                         this.isSaving = false;
                         this.loadingService.hide();
-                        this.toastService.show('Quote Data Saved Successfully!', 'success');
-                        this.capturePreviewScreenshot();
+
+                        this.lastSavedLookerState = JSON.stringify({
+                            periods: this.subscriptionPeriods,
+                            startDate: this.startDate,
+                            expirationDate: this.expirationDate,
+                            termStartInput: this.termStartInput,
+                            termEndDate: this.termEndDate
+                        });
+
+                        if (!skipFeedback) {
+                            this.toastService.show('Quote Data Saved Successfully!', 'success');
+                            this.capturePreviewScreenshot();
+                        }
+                        if (onSuccess) onSuccess();
                     },
+
                     error: (err) => {
                         console.error('❌ Consolidated Sync error:', err);
                         this.isSaving = false;
@@ -1946,8 +2117,9 @@ export class QuoteDetailsComponent implements OnInit {
 
 
     resetForm() {
-        this.startDate = new Date().toISOString().split('T')[0];
-        this.expirationDate = new Date(Date.now() + 45 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        this.startDate = this.toIsoDateString(new Date());
+        this.expirationDate = '';
+        this.updateExpirationDate();
         this.commitmentPeriods = [{ months: null, amount: null, isCollapsed: false }];
         this.activeMenuIndex = null;
     }
@@ -1957,12 +2129,18 @@ export class QuoteDetailsComponent implements OnInit {
 
         const isDigit = /[0-9]/.test(event.key);
         const isDot = event.key === '.';
+        const isShorthand = /[kmbKMB]/.test(event.key);
 
-        if (!isDigit && !isDot) {
+        if (!isDigit && !isDot && !isShorthand) {
             event.preventDefault();
         }
 
         if (isDot && (event.target as HTMLInputElement).value.includes('.')) {
+            event.preventDefault();
+        }
+
+        // Only allow one shorthand character
+        if (isShorthand && /[kmbKMB]/.test((event.target as HTMLInputElement).value)) {
             event.preventDefault();
         }
     }

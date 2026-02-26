@@ -81,9 +81,19 @@
                         </div>
 
                         <div class="flex items-start gap-8 text-left">
+                            <div *ngIf="salesforceQuoteId" class="flex flex-col">
+                                <div class="text-xs text-transparent mb-1 select-none">.</div>
+                                <a [href]="'https://vector--rcaagivant.sandbox.lightning.force.com/lightning/r/Quote/' + salesforceQuoteId + '/view'"
+                                    target="_blank"
+                                    class="text-sm font-medium text-blue-600 hover:text-blue-800 underline flex items-center">
+                                    View in Salesforce
+                                    <span class="material-icons-outlined text-sm ml-1">open_in_new</span>
+                                </a>
+                            </div>
                             <div>
                                 <div class="text-xs text-gray-500 mb-1">Contract Start Date</div>
-                                <div class="text-sm font-medium text-gray-900">Upon provisioning</div>
+                                <div class="text-sm font-medium text-gray-900">{{ startDate ? formatDate(startDate) :
+                                    'Select' }}</div>
                             </div>
                             <div>
                                 <div class="text-xs text-gray-500 mb-1">Term</div>
@@ -281,10 +291,11 @@
                                 </div>
                                 <!-- Expiration Date -->
                                 <div
-                                    class="bg-slate-200 p-2 rounded-lg border-b-2 border-transparent hover:bg-slate-300 transition-colors relative group h-[52px] flex flex-col justify-center">
-                                    <label class="block text-[11px] text-gray-600 mb-0.5">Quote Expiration date</label>
-                                    <input type="date" [(ngModel)]="expirationDate" [min]="minDate"
-                                        class="w-full bg-transparent text-sm text-gray-800 outline-none cursor-pointer font-medium -mt-0.5"
+                                    class="bg-slate-200 p-2 rounded-lg border-b-2 border-transparent hover:bg-slate-300 transition-colors relative group h-[52px] flex flex-col justify-center opacity-75 cursor-not-allowed">
+                                    <label class="block text-[11px] text-gray-600 mb-0.5">Quote Expiration date
+                                    </label>
+                                    <input type="date" [(ngModel)]="expirationDate" [min]="minDate" [disabled]="true"
+                                        class="w-full bg-transparent text-sm text-gray-800 outline-none cursor-not-allowed font-medium -mt-0.5"
                                         placeholder="-">
                                 </div>
                             </div>
@@ -809,29 +820,68 @@
                 <div class="mb-6">
                     <h3 class="text-xl font-bold text-gray-900 mb-4">Products ({{
                         previewData.QuoteLineItems?.records?.length || 0 }})</h3>
-                    <table class="w-full border-collapse">
-                        <thead>
-                            <tr class="bg-blue-500 text-white">
-                                <th class="border border-gray-300 px-3 py-2 text-left text-sm font-bold">Qty</th>
-                                <th class="border border-gray-300 px-3 py-2 text-left text-sm font-bold">Name</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr *ngFor="let item of previewData.QuoteLineItems?.records" class="hover:bg-gray-50">
-                                <td class="border border-gray-300 px-3 py-2 text-sm">1.00</td>
-
-                                <td class="border border-gray-300 px-3 py-2 text-sm font-medium">{{ item.Product2?.Name
-                                    ||
-                                    productName || 'Product' }}</td>
-                            </tr>
-                            <tr *ngIf="!previewData.QuoteLineItems?.records?.length">
-                                <td colspan="3"
-                                    class="border border-gray-300 px-3 py-4 text-center text-sm text-gray-500">
-                                    No products added to this quote
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+                    <div class="overflow-x-auto">
+                        <table class="w-full border-collapse border border-gray-300">
+                            <thead>
+                                <tr class="bg-blue-500 text-white">
+                                    <th
+                                        class="border border-gray-300 px-3 py-2 text-center text-xs font-bold uppercase">
+                                        #
+                                    </th>
+                                    <th class="border border-gray-300 px-3 py-2 text-left text-xs font-bold uppercase">
+                                        Product Name</th>
+                                    <th class="border border-gray-300 px-3 py-2 text-left text-xs font-bold uppercase">
+                                        Start date</th>
+                                    <th class="border border-gray-300 px-3 py-2 text-left text-xs font-bold uppercase">
+                                        End
+                                        date</th>
+                                    <th class="border border-gray-300 px-3 py-2 text-right text-xs font-bold uppercase">
+                                        List unit price</th>
+                                    <th
+                                        class="border border-gray-300 px-3 py-2 text-center text-xs font-bold uppercase">
+                                        Unit</th>
+                                    <th class="border border-gray-300 px-3 py-2 text-right text-xs font-bold uppercase">
+                                        Additional discount</th>
+                                    <th class="border border-gray-300 px-3 py-2 text-right text-xs font-bold uppercase">
+                                        Discounted Price</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr *ngFor="let item of previewData.QuoteLineItems?.records; let i = index"
+                                    class="hover:bg-gray-50 text-gray-700">
+                                    <td class="border border-gray-300 px-3 py-2 text-center text-sm">{{ i + 1 }}</td>
+                                    <td class="border border-gray-300 px-3 py-2 text-sm font-medium">
+                                        {{ item.Product2?.Name || productName || 'Product' }}
+                                    </td>
+                                    <td class="border border-gray-300 px-3 py-2 text-sm">
+                                        {{ formatDateForDisplay(item.StartDate) }}
+                                    </td>
+                                    <td class="border border-gray-300 px-3 py-2 text-sm">
+                                        {{ formatDateForDisplay(item.EndDate) }}
+                                    </td>
+                                    <td class="border border-gray-300 px-3 py-2 text-sm text-right">
+                                        {{ item.ListPrice != null ? formatCurrency(item.ListPrice) : '-' }}
+                                    </td>
+                                    <td class="border border-gray-300 px-3 py-2 text-sm text-center">
+                                        {{ item.Quantity | number:'1.2-2' }}
+                                    </td>
+                                    <td class="border border-gray-300 px-3 py-2 text-sm text-right">
+                                        {{ item.Discount != null ? item.Discount + '%' : '-' }}
+                                    </td>
+                                    <td class="border border-gray-300 px-3 py-2 text-sm text-right font-medium">
+                                        {{ item.NetUnitPrice != null ? formatCurrency(item.NetUnitPrice) :
+                                        (item.UnitPrice != null ? formatCurrency(item.UnitPrice) : '-') }}
+                                    </td>
+                                </tr>
+                                <tr *ngIf="!previewData.QuoteLineItems?.records?.length">
+                                    <td colspan="8"
+                                        class="border border-gray-300 px-3 py-4 text-center text-sm text-gray-500">
+                                        No products added to this quote
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
 
                 <!-- Subscription Periods Section (for Looker Subscription Flow) -->

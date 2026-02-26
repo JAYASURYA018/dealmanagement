@@ -130,7 +130,7 @@ export class SalesforceApiService {
     /**
      * Creates a Quote with Quote Lines using the Salesforce Composite Graph API
      */
-    createQuoteWithLines(opportunityId: string, pricebookId: string, items: any[], endDate?: string): Observable<any> {
+    createQuoteWithLines(opportunityId: string, pricebookId: string, items: any[]): Observable<any> {
         const method = 'SalesforceApiService.createQuoteWithLines';
         const token = this.contextService.accessToken;
         const baseUrl = this.contextService.apiBaseUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com';
@@ -208,9 +208,6 @@ export class SalesforceApiService {
 
                     let recordData: any = { ...baseRecord };
 
-                    if (item.endDate || endDate) {
-                        recordData["EndDate"] = item.endDate || endDate;
-                    }
                     if (item.billingFrequency) {
                         recordData["BillingFrequency"] = item.billingFrequency;
                     }
@@ -476,63 +473,52 @@ export class SalesforceApiService {
         const method = 'SalesforceApiService.updateQuoteDates';
         const token = this.contextService.accessToken;
         const baseUrl = this.contextService.apiBaseUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com';
-        const url = `${baseUrl}/services/data/v65.0/connect/rev/sales-transaction/actions/place`;
 
-        console.log(`[API Request] ${method}`, { url, quoteId, startDate, expirationDate, term, totalCommitmentValue, quoteLineItems });
+        // Use composite/sobjects API which is a PATCH
+        const url = `${baseUrl}/services/data/v65.0/composite/sobjects`;
 
-        // Build the records array starting with the Quote record
         const records: any[] = [
             {
-                "referenceId": "refQuote",
-                "record": {
-                    "attributes": {
-                        "type": "Quote",
-                        "method": "PATCH",
-                        "id": quoteId
-                    },
-                    "StartDate": startDate,
-                    "ExpirationDate": expirationDate,
-                    "Total_Commitment_Value__c": totalCommitmentValue,
-                    "Term__c": term,
-                    "Description": "Updated via RCA API with commitment totals"
-                }
+                "attributes": {
+                    "type": "Quote"
+                },
+                "id": quoteId,
+                "StartDate": startDate,
+                "ExpirationDate": expirationDate,
+                "Total_Commitment_Value__c": Number(totalCommitmentValue),
+                "Term__c": Number(term)
             }
         ];
 
         // Add QuoteLineItem records if provided
         if (quoteLineItems && quoteLineItems.length > 0) {
-            quoteLineItems.forEach((lineItem, index) => {
+            quoteLineItems.forEach((lineItem) => {
                 records.push({
-                    "referenceId": `refQuoteLineitem${index}`,
-                    "record": {
-                        "attributes": {
-                            "type": "QuoteLineItem",
-                            "method": "PATCH",
-                            "id": lineItem.id
-                        },
-                        "Commitment_Amount__c": lineItem.commitmentAmount,
-                        "StartDate": startDate,
-                        "EndDate": expirationDate
-                    }
+                    "attributes": {
+                        "type": "QuoteLineItem"
+                    },
+                    "id": lineItem.id,
+                    "Commitment_Amount__c": String(lineItem.commitmentAmount),
+                    "StartDate": startDate,
+                    "EndDate": expirationDate
                 });
             });
         }
 
         const body = {
-            "pricingPref": "Skip",
-            "catalogRatesPref": "Skip",
-            "graph": {
-                "graphId": "updateQuoteWithFields",
-                "records": records
-            }
+            "allOrNone": true,
+            "records": records
         };
+
+        console.log(`[API Request Body] ${method}`, JSON.stringify(body, null, 2));
 
         const headers = new HttpHeaders({
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
         });
 
-        return this.http.post(url, body, { headers }).pipe(
+        // Use HTTP PATCH as requested by the user
+        return this.http.patch(url, body, { headers }).pipe(
             tap(response => console.log(`[API Response] ${method}`, response)),
             catchError(err => {
                 return this.handleError(method, err);
@@ -635,7 +621,7 @@ export class SalesforceApiService {
 
         // Build the WHERE clause with multiple IDs
         const idsString = ids.map(id => `'${id}'`).join(',');
-        const query = `SELECT Id, Name, Amount, CloseDate, AccountId, Account.Name, Owner.Name, Pricebook2Id, Primary_Contact__c, Sales_Channel__c FROM Opportunity WHERE Id IN (${idsString})`;
+        const query = `SELECT Id, Name, Amount, CloseDate, AccountId, Account.Name, Owner.Name, Pricebook2Id, Primary_Contact__c, Sales_Channel__c, (SELECT Contact.Name FROM OpportunityContactRoles WHERE IsPrimary = true) FROM Opportunity WHERE Id IN (${idsString})`;
         const encodedQuery = encodeURIComponent(query);
         const url = `${baseUrl}/services/data/v65.0/query/?q=${encodedQuery}`;
 
@@ -662,9 +648,9 @@ export class SalesforceApiService {
         const token = this.contextService.accessToken;
         const baseUrl = this.contextService.apiBaseUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com';
 
-        const query = `SELECT Name, QuoteNumber, StartDate, ExpirationDate, Opportunity.Name, Account.Name, Account.Website, (SELECT Product2Id, Product2.Name FROM QuoteLineItems) FROM Quote WHERE Id='${quoteId}'`;
+        const query = `SELECT Id, Name, QuoteNumber, Status, GrandTotal, StartDate, ExpirationDate, Opportunity.Name, Opportunity.Sales_Channel__c, Opportunity.Primary_Contact__c, Opportunity.Primary_Contact__r.Name, Account.Name, Account.Website, (SELECT Id, Product2Id, Product2.Name, Product2.ProductCode, Quantity, UnitPrice, TotalPrice, ListPrice, StartDate, EndDate, Discount, NetUnitPrice FROM QuoteLineItems) FROM Quote WHERE Id='${quoteId}'`;
         const encodedQuery = encodeURIComponent(query);
-        const url = `${baseUrl}/services/data/v65.0/query/?q=${encodedQuery}`;
+        const url = `${baseUrl}/services/data/v66.0/query/?q=${encodedQuery}`;
 
         console.log(`[API Request] ${method}`, { url, query });
 

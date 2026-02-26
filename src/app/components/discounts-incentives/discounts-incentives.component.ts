@@ -1,11 +1,12 @@
 import { Component, Input, OnChanges, SimpleChanges, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RcaApiService } from '../../services/rca-api.service';
+import { QuoteRefreshService } from '../../services/quote-refresh.service';
 import { SalesforceApiService } from '../../services/salesforce-api.service';
 import { ContextService } from '../../services/context.service';
 import { ToastService } from '../../services/toast.service';
 import { LoadingService } from '../../services/loading.service';
-import { finalize, forkJoin, map, catchError, of, switchMap } from 'rxjs';
+import { finalize, forkJoin, map, catchError, of, switchMap, lastValueFrom } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 
 @Component({
@@ -94,6 +95,11 @@ export class DiscountsIncentivesComponent implements OnChanges {
     productGroups: any[] = [];
     individualProducts: any[] = [];
 
+    // Persistent Selection State
+    persistentSelectedGroups = new Map<string, any>();
+    persistentSelectedIndividuals = new Map<string, any>();
+    // Flag to avoid refetching data on navigation back
+    private dataFetched = false;
     // Dropdown Data
     dropdownOptions: any[] = [];
     filteredDropdownOptions: any[] = [];
@@ -103,35 +109,42 @@ export class DiscountsIncentivesComponent implements OnChanges {
 
     // Individual Pagination State
     individualPageSize: number = 50;
-    individualPageOptions: number[] = [10, 20, 50];
+    individualPageOptions: number[] = [10, 20, 50, 100];
     individualCurrentOffset: number = 0;
     individualTotalLoaded: number = 0;
     isIndividualLoading: boolean = false;
 
     productSearchTerm: string = '';
     categoryId: string = '';
+    rootClassificationId: string = ''; // ID for fetching sibling bundles (e.g., NvMAI)
 
     constructor(
         private rcaApiService: RcaApiService,
         private salesforceApiService: SalesforceApiService,
         private contextService: ContextService,
         private toastService: ToastService,
-        private loadingService: LoadingService
+        private loadingService: LoadingService,
+        private quoteRefreshService: QuoteRefreshService
     ) { }
 
     ngOnInit() {
-        this.fetchDropdownOptions();
+        if (!this.dataFetched) {
+            this.fetchDropdownOptions();
+        }
     }
 
     ngOnChanges(changes: SimpleChanges) {
         if (changes['productId'] && changes['productId'].currentValue) {
-            this.fetchProductDetails();
-            this.fetchDropdownOptions();
+            if (!this.dataFetched) {
+                this.fetchProductDetails();
+                this.fetchDropdownOptions();
+            }
         }
     }
 
     fetchDropdownOptions() {
         if (!this.productId) return;
+        if (this.dataFetched) return; // Prevent duplicate calls
 
         this.rcaApiService.getDropdownOptions(this.productId).subscribe({
             next: (res: any) => {
@@ -144,6 +157,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
                 if (this.filteredDropdownOptions.length > 0) {
                     this.selectDropdownOption(this.filteredDropdownOptions[0]);
                 }
+                this.dataFetched = true; // Mark as fetched
             },
             error: (err) => {
                 console.error('Error fetching dropdown options', err);
@@ -257,6 +271,16 @@ export class DiscountsIncentivesComponent implements OnChanges {
                 } else {
                     console.warn('[fetchProductDetails] No categories found in product details response', productData);
                 }
+
+                // Capture Root Classification ID for group-to-product resolution
+                if (productData && productData.productClassification?.id) {
+                    this.rootClassificationId = productData.productClassification.id;
+                    console.log('[fetchProductDetails] Resolved rootClassificationId:', this.rootClassificationId);
+                } else {
+                    // Fallback to the provided NvMAI if not found, but logging it first
+                    this.rootClassificationId = '11BDz00000000NvMAI';
+                    console.log('[fetchProductDetails] No root classification found. Using default:', this.rootClassificationId);
+                }
             },
             error: (err) => console.error('[fetchProductDetails] Error fetching product categories', err)
         });
@@ -299,17 +323,35 @@ export class DiscountsIncentivesComponent implements OnChanges {
                 const newProducts = data.products || [];
 
                 // Map to UI model
-                const mappedProducts = newProducts.map((p: any) => ({
-                    id: p.id,
-                    name: p.name,
-                    family: currentClassName, // Use classification name as family
-                    selected: false,
-                    discount: 0,
-                    quantity: 1,
-                    price: p.unitPrice || 0,
-                    pricebookEntryId: p.pricebookEntryId || '',
-                    isBundleChild: false
-                }));
+                const mappedProducts = newProducts.map((p: any) => {
+                    // Use productId from selling model options if available, fallback to p.id (which might be the classification-product link ID)
+                    const resolvedId = p.productSellingModelOptions?.[0]?.productId || p.id;
+
+                    return {
+                        id: resolvedId,
+                        name: p.name,
+                        family: currentClassName, // Use classification name as family
+                        selected: false,
+                        discount: 0,
+                        quantity: 1,
+                        price: p.unitPrice || 0,
+                        pricebookEntryId: p.pricebookEntryId || '',
+                        isBundleChild: false
+                    };
+                });
+
+                // Restore persistent selection state
+                mappedProducts.forEach((p: any) => {
+                    if (this.persistentSelectedIndividuals.has(p.id)) {
+                        p.selected = true;
+                        // Sync back any local changes if needed (e.g. quantity/discount if they were edited)
+                        const saved = this.persistentSelectedIndividuals.get(p.id);
+                        p.discount = saved.discount;
+                        p.quantity = saved.quantity;
+                        // Update map with fresh reference from current load
+                        this.persistentSelectedIndividuals.set(p.id, p);
+                    }
+                });
 
                 this.individualProducts = mappedProducts; // Replace current view with page results
 
@@ -401,17 +443,30 @@ export class DiscountsIncentivesComponent implements OnChanges {
             next: (data) => {
                 const newProducts = data.products || [];
                 // Map to UI model
-                this.individualProducts = newProducts.map((p: any) => ({
-                    id: p.id,
-                    name: p.name,
-                    family: p.additionalFields?.Family || 'Search Result',
-                    selected: false,
-                    discount: 0,
-                    quantity: 1,
-                    price: p.unitPrice || 0,
-                    pricebookEntryId: p.pricebookEntryId || '',
-                    isBundleChild: false
-                }));
+                this.individualProducts = newProducts.map((p: any) => {
+                    const resolvedId = p.productSellingModelOptions?.[0]?.productId || p.id;
+
+                    return {
+                        id: resolvedId,
+                        name: p.name,
+                        family: p.additionalFields?.Family || 'Search Result',
+                        selected: false,
+                        discount: 0,
+                        quantity: 1,
+                        price: p.unitPrice || 0,
+                        pricebookEntryId: p.pricebookEntryId || '',
+                        isBundleChild: false
+                    };
+                });
+
+                // Restore persistent selection state
+                this.individualProducts.forEach((p: any) => {
+                    if (this.persistentSelectedIndividuals.has(p.id)) {
+                        p.selected = true;
+                        // Update map with fresh reference from search results
+                        this.persistentSelectedIndividuals.set(p.id, p);
+                    }
+                });
             },
             error: (err) => {
                 console.error('Search error', err);
@@ -432,6 +487,15 @@ export class DiscountsIncentivesComponent implements OnChanges {
             isBundleChild: false,
             components: []
         }));
+
+        // Restore persistent selection state
+        this.productGroups.forEach(g => {
+            if (this.persistentSelectedGroups.has(g.id)) {
+                g.selected = true;
+                // Update map with fresh reference
+                this.persistentSelectedGroups.set(g.id, g);
+            }
+        });
     }
 
 
@@ -458,8 +522,10 @@ export class DiscountsIncentivesComponent implements OnChanges {
                 if (group.components) {
                     group.components.forEach((comp: any) => {
                         // Only add actual components, ignore selling model options if they appear here (unlikely but safe)
+                        const resolvedId = comp.productSellingModelOptions?.[0]?.productId || comp.id;
+
                         allComponents.push({
-                            id: comp.id,
+                            id: resolvedId,
                             name: comp.name,
                             family: group.name, // Use group name as family
                             selected: false,
@@ -473,6 +539,20 @@ export class DiscountsIncentivesComponent implements OnChanges {
                 }
             });
             this.individualProducts = allComponents;
+
+            // Restore persistent selection state
+            this.individualProducts.forEach(p => {
+                if (this.persistentSelectedIndividuals.has(p.id)) {
+                    p.selected = true;
+                    this.persistentSelectedIndividuals.set(p.id, p);
+                }
+            });
+            this.productGroups.forEach(g => {
+                if (this.persistentSelectedGroups.has(g.id)) {
+                    g.selected = true;
+                    this.persistentSelectedGroups.set(g.id, g);
+                }
+            });
         } else {
             // Fallback for simple/standalone products without groups
 
@@ -505,11 +585,40 @@ export class DiscountsIncentivesComponent implements OnChanges {
     switchProductTab(tab: 'groups' | 'individual') {
         this.productTab = tab;
         this.filterQuery = ''; // Reset filter on switch
+        this.viewMode = 'all'; // Reset to "Show All" when switching tabs
     }
 
     toggleSelection(item: any) {
         item.selected = !item.selected;
+        if (!item.selected) {
+            item.discount = 0; // Reset discount to 0 when unselected
+        }
+        const map = this.productTab === 'groups' ? this.persistentSelectedGroups : this.persistentSelectedIndividuals;
+        if (item.selected) {
+            map.set(item.id, item); // Store reference for easier sync during current view edits
+        } else {
+            map.delete(item.id);
+        }
     }
+
+    updatePersistentSelected(item: any) {
+        if (!item.selected) return;
+
+        // Prevent leading zeros and cap between 0-100
+        if (item.discount !== null && item.discount !== undefined && item.discount !== '') {
+            let val = Number(item.discount);
+            if (isNaN(val)) val = 0;
+            if (val < 0) val = 0;
+            if (val > 100) val = 100;
+            item.discount = val;
+        } else if (item.discount === '') {
+            item.discount = 0;
+        }
+
+        const map = this.productTab === 'groups' ? this.persistentSelectedGroups : this.persistentSelectedIndividuals;
+        map.set(item.id, item);
+    }
+
 
     setViewMode(mode: 'all' | 'selected') {
         this.viewMode = mode;
@@ -538,7 +647,14 @@ export class DiscountsIncentivesComponent implements OnChanges {
 
         // 2. Filter by View Mode (Selected Only)
         if (this.viewMode === 'selected') {
-            items = items.filter(item => item.selected);
+            const map = this.productTab === 'groups' ? this.persistentSelectedGroups : this.persistentSelectedIndividuals;
+            return Array.from(map.values()).sort((a, b) => {
+                const valA = a[this.sortConfig.column];
+                const valB = b[this.sortConfig.column];
+                if (valA < valB) return this.sortConfig.direction === 'asc' ? -1 : 1;
+                if (valA > valB) return this.sortConfig.direction === 'asc' ? 1 : -1;
+                return 0;
+            });
         }
 
         // 3. Sort
@@ -554,8 +670,8 @@ export class DiscountsIncentivesComponent implements OnChanges {
     }
 
     getSelectedCount(type: 'groups' | 'individual'): number {
-        const list = type === 'groups' ? this.productGroups : this.individualProducts;
-        return list.filter(i => i.selected).length;
+        const map = type === 'groups' ? this.persistentSelectedGroups : this.persistentSelectedIndividuals;
+        return map.size;
     }
 
     get isAllSelected(): boolean {
@@ -565,11 +681,20 @@ export class DiscountsIncentivesComponent implements OnChanges {
 
     toggleSelectAll() {
         const allSelected = this.isAllSelected;
-        this.filteredItems.forEach(item => item.selected = !allSelected);
+        const map = this.productTab === 'groups' ? this.persistentSelectedGroups : this.persistentSelectedIndividuals;
+
+        this.filteredItems.forEach(item => {
+            item.selected = !allSelected;
+            if (item.selected) {
+                map.set(item.id, item); // Use reference instead of clone
+            } else {
+                map.delete(item.id);
+            }
+        });
     }
 
     // Management Actions
-    addDiscount() {
+    async addDiscount() {
         if (!this.discountPeriod.startDate || !this.discountPeriod.endDate) {
             this.toastService.show('Please select both Start and End dates for the discount period.', 'warning');
             return;
@@ -580,53 +705,132 @@ export class DiscountsIncentivesComponent implements OnChanges {
             return;
         }
 
-        let selectedItemsMap = new Map<string, any>();
+        const selectedGroups = Array.from(this.persistentSelectedGroups.values()).filter(g => g.selected);
+        const selectedIndividuals = Array.from(this.persistentSelectedIndividuals.values()).filter(p => p.selected);
 
-        // 1. Collect from Product Groups
-        const selectedGroups = this.productGroups.filter(g => g.selected);
-        selectedGroups.forEach(group => {
-            // Use parent bundle's product ID for the group line item
-            selectedItemsMap.set(group.id, {
-                id: this.productId, // Map group to Bundle Product ID
-                name: group.name,
-                discount: group.discount || 0,
-                quantity: 1,
-                price: group.price || 0,
-                pricebookEntryId: group.pricebookEntryId || '',
-                isBundleChild: false
-            });
-        });
-
-        // 2. Collect from Individual Products
-        const selectedIndividuals = this.individualProducts.filter(p => p.selected);
-        selectedIndividuals.forEach(p => {
-            selectedItemsMap.set(p.id, {
-                id: p.id,
-                name: p.name,
-                discount: p.discount || 0,
-                quantity: p.quantity || 1,
-                price: p.price || 0,
-                pricebookEntryId: p.pricebookEntryId || '',
-                isBundleChild: p.isBundleChild
-            });
-        });
-
-        const selectedItems = Array.from(selectedItemsMap.values());
-
-        if (selectedItems.length === 0) {
+        if (selectedGroups.length === 0 && selectedIndividuals.length === 0) {
             this.toastService.show('Please select at least one product or group', 'warning');
             return;
         }
 
-        if (this.discountForm.granularity === 'Overall' && this.discountForm.value) {
-            const overallDisc = parseFloat(this.discountForm.value) || 0;
-            selectedItems.forEach(item => {
-                item.discount = overallDisc;
-            });
+        // Validation for Discount Value
+        if (this.discountForm.granularity === 'Overall') {
+            const overallDisc = parseFloat(this.discountForm.value);
+            if (!overallDisc || overallDisc <= 0) {
+                this.toastService.show('Please enter a valid discount value greater than 0%.', 'warning');
+                return;
+            }
+            if (overallDisc > 100) {
+                this.toastService.show('Discount cannot exceed 100%.', 'warning');
+                return;
+            }
+        } else {
+            // Granular: Ensure at least one selected item has a discount > 0
+            const hasGranularDiscount = [...selectedGroups, ...selectedIndividuals].some(item => item.discount > 0);
+            if (!hasGranularDiscount) {
+                this.toastService.show('Please enter a discount value for at least one selected item.', 'warning');
+                return;
+            }
         }
 
-        console.log('[Discounts] Final Selected Items (Direct):', selectedItems);
-        this.handleGranularDiscount(selectedItems);
+        this.isLoading = true;
+        this.loadingService.show();
+        let selectedItemsMap = new Map<string, any>();
+
+        try {
+            // 0. Resolve Root Classification ID (Sibling Bundles)
+            // Use resolved rootClassificationId or the user-provided NvMAI fallback
+            const rootClassId = this.rootClassificationId || '11BDz00000000NvMAI';
+            console.log(`[Discounts] Fetching sibling bundles from root classification: ${rootClassId}`);
+
+            const rootResponse = await lastValueFrom(this.rcaApiService.getProductsByClassification(rootClassId, 100));
+            const availableBundles = rootResponse?.products || [];
+            console.log(`[Discounts] Found ${availableBundles.length} products in root list.`);
+
+            // 1. Process Groups using Root List matching
+            for (const group of selectedGroups) {
+                console.log(`[Discounts] Resolving group: "${group.name}" (ID: ${group.id})`);
+                const targetName = group.name?.toLowerCase().trim();
+
+                // Multi-stage name matching in the root list
+                let matchingProduct = availableBundles.find((p: any) => p.name?.toLowerCase().trim() === targetName);
+                if (!matchingProduct) {
+                    matchingProduct = availableBundles.find((p: any) => p.name?.toLowerCase().trim().startsWith(targetName));
+                }
+                if (!matchingProduct) {
+                    matchingProduct = availableBundles.find((p: any) => p.name?.toLowerCase().trim().includes(targetName));
+                }
+
+                if (matchingProduct) {
+                    // RESOLUTION SUCCESS: Use the bundle's Product2Id
+                    const actualProductId = matchingProduct?.productSellingModelOptions?.[0]?.productId ||
+                        matchingProduct?.productId ||
+                        matchingProduct?.id;
+
+                    console.log(`[Discounts] Resolved group "${group.name}" to Product2Id: ${actualProductId}`);
+
+                    selectedItemsMap.set(group.id, {
+                        id: actualProductId,
+                        name: group.name,
+                        discount: group.discount || 0,
+                        quantity: 1,
+                        price: group.price || 0,
+                        pricebookEntryId: group.pricebookEntryId || '',
+                        isBundleChild: false
+                    });
+                } else {
+                    console.warn(`[Discounts] No match for group: ${group.name} in root list`);
+                    selectedItemsMap.set(group.id, {
+                        id: group.id,
+                        name: group.name,
+                        discount: group.discount || 0,
+                        quantity: 1,
+                        price: group.price || 0,
+                        pricebookEntryId: group.pricebookEntryId || '',
+                        isBundleChild: false
+                    });
+                }
+            }
+
+            // 2. Collect from Individual Products
+            selectedIndividuals.forEach(p => {
+                selectedItemsMap.set(p.id, {
+                    id: p.id,
+                    name: p.name,
+                    discount: p.discount || 0,
+                    quantity: p.quantity || 1,
+                    price: p.price || 0,
+                    pricebookEntryId: p.pricebookEntryId || '',
+                    isBundleChild: p.isBundleChild
+                });
+            });
+
+            const selectedItems = Array.from(selectedItemsMap.values());
+
+            if (selectedItems.length === 0) {
+                this.toastService.show('Failed to resolve IDs for selected items', 'error');
+                this.loadingService.hide();
+                this.isLoading = false;
+                return;
+            }
+
+            // Apply overall discount if applicable
+            if (this.discountForm.granularity === 'Overall' && this.discountForm.value) {
+                const overallDisc = parseFloat(this.discountForm.value) || 0;
+                selectedItems.forEach(item => {
+                    item.discount = overallDisc;
+                });
+            }
+
+            console.log('[Discounts] Final Selected Items (Mapped):', selectedItems);
+            this.handleGranularDiscount(selectedItems);
+
+        } catch (err) {
+            console.error('[Discounts] Error in addDiscount:', err);
+            this.toastService.show('An error occurred while processing discounts', 'error');
+            this.loadingService.hide();
+            this.isLoading = false;
+        }
     }
 
     handleGranularDiscount(selectedItems: any[]) {
@@ -733,8 +937,16 @@ export class DiscountsIncentivesComponent implements OnChanges {
                     return;
                 }
                 this.toastService.show('Quote updated successfully with discounts', 'success');
-                this.addDiscountToUI(this.discountForm.granularity, result.count);
+                const selectedGroupCount = this.persistentSelectedGroups.size;
+                const selectedIndividualCount = this.persistentSelectedIndividuals.size;
+                const discValue = this.discountForm.value ? this.discountForm.value + '%' : 'Updated';
+
+                this.addDiscountToUI(this.discountForm.granularity, selectedGroupCount, selectedIndividualCount, discValue);
                 this.resetSelections();
+                // Reset dataFetched so that next time the component is opened it can refresh data if needed
+                this.dataFetched = false;
+                // Signal that quote line items need refresh due to discount changes
+                this.quoteRefreshService.setRefreshNeeded(true);
             },
             error: (err) => {
                 console.error('Failed to update quote', err);
@@ -742,16 +954,16 @@ export class DiscountsIncentivesComponent implements OnChanges {
         });
     }
 
-    private addDiscountToUI(granularity: string, count: number) {
+    private addDiscountToUI(granularity: string, groupCount: number, individualCount: number, value: string) {
         const newDiscount = {
             id: 'd' + Date.now(),
-            title: `${granularity} Discount applied`,
-            subtext: `${count} Products updated in Salesforce`,
-            value: 'See Salesforce',
+            title: `${granularity} Discount - Flat Rate (%)`,
+            subtext: `${groupCount} Product Groups, ${individualCount} Products`,
+            value: value,
             type: 'discount',
             granularity: granularity
         };
-        this.activeDiscounts.push(newDiscount);
+        this.activeDiscounts.unshift(newDiscount); // Add to top
     }
 
     addIncentive() {
@@ -789,9 +1001,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
 
     get totalProductsCount(): number {
         // Treat each selected group as ONE product line item
-        const groupCount = this.productGroups.filter(g => g.selected).length;
-        const individualCount = this.individualProducts.filter(p => p.selected).length;
-        return groupCount + individualCount;
+        return this.persistentSelectedGroups.size + this.persistentSelectedIndividuals.size;
     }
 
     duplicateItem(item: any) {
@@ -828,6 +1038,9 @@ export class DiscountsIncentivesComponent implements OnChanges {
             p.selected = false;
             p.discount = 0;
         });
+        this.persistentSelectedGroups.clear();
+        this.persistentSelectedIndividuals.clear();
+        this.discountForm.value = '';
     }
     restrictNumeric(event: KeyboardEvent) {
         const allowedKeys = ['Backspace', 'Tab', 'Enter', 'ArrowLeft', 'ArrowRight', 'Delete', 'End', 'Home'];

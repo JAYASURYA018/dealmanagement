@@ -56,3 +56,5 @@ environment.prod.ts
 # Angular
 /.angular/
 /.post-install-cache/
+.vercel
+.env*.local
