@@ -9,6 +9,7 @@
 # derivatives
 /coverage
 /iml
+.env
 
 # Node
 /node_modules
