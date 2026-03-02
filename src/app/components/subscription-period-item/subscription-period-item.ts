@@ -114,6 +114,7 @@ export class SubscriptionPeriodItemComponent implements OnInit {
     private lastValidStartDate: string = '';
     private lastValidEndDate: string = '';
     menuOpen: boolean = false;
+    platformDropdownOpen: boolean = false;
 
     ngOnInit() {
     }
@@ -135,6 +136,12 @@ export class SubscriptionPeriodItemComponent implements OnInit {
         const isRegionClick = target.closest('.region-dropdown-container');
         if (!isRegionClick) {
             this.activeRegionIndex = null;
+        }
+
+        // Close platform dropdown if clicking outside
+        const isPlatformClick = target.closest('.platform-dropdown-container');
+        if (!isPlatformClick) {
+            this.platformDropdownOpen = false;
         }
     }
 
@@ -216,6 +223,16 @@ export class SubscriptionPeriodItemComponent implements OnInit {
             }
             this.productChanged.emit();
         }
+    }
+
+    togglePlatformDropdown() {
+        this.platformDropdownOpen = !this.platformDropdownOpen;
+    }
+
+    selectPlatformProduct(product: ProductItem) {
+        this.period.productName = product.name;
+        this.onProductChange();
+        this.platformDropdownOpen = false;
     }
 
 

@@ -98,19 +98,16 @@ export class QuoteDetailsComponent implements OnInit {
 
     termEndDate: string = '';
 
-    operationTypeOptions = ['New', 'Renewal', 'Amendment'];
-    billingFrequencyOptions = [
-        'Annual in Advance Anniversary', 'Monthly in Advance Anniversary', 'Quarterly in Advance Anniversary',
-        'Annual in Advance', 'Quarterly in Advance', 'Monthly in Arrears'
-    ];
-    termStartsOnOptions = ['Fixed Start Date', 'Upon Provisioning', 'Customer Signature Date'];
+    operationTypeOptions = [];
+    billingFrequencyOptions = [];
+    termStartsOnOptions = [];
 
     // Subscription State
     isSubscriptionModalOpen: boolean = false;
     currentFrequency: string = 'Yearly';
     subscriptionPeriods: SubscriptionPeriod[] = [];
     productOptions: ProductItem[] = [];
-    lookerRegionOptions: string[] = ['us-central1', 'europe-west1', 'asia-northeast1'];
+    lookerRegionOptions: string[] = [];
 
     developerUserPrice: number = 100;
     standardUserPrice: number = 200;
@@ -124,6 +121,18 @@ export class QuoteDetailsComponent implements OnInit {
     // API Data for Save Logic
     existingQuoteLineItems: any[] = [];
     productRelationshipTypeId: string = '';
+    private lookerDataInitialized: boolean = false;
+
+
+    private initializeLookerDataIfNeeded() {
+        if (this.isLookerSubscription && !this.lookerDataInitialized) {
+            console.log('🔍 Looker Subscription detected. Initializing bundle and picklists.');
+            this.lookerDataInitialized = true;
+            this.loadBundleDetails();
+            this.loadAllPicklists();
+            this.checkAndDefaultExpirationDate();
+        }
+    }
 
 
     switchTab(tab: 'details' | 'discounts') {
@@ -733,8 +742,7 @@ export class QuoteDetailsComponent implements OnInit {
             }
             if (quoteData.productName) {
                 this.productName = quoteData.productName;
-
-                this.checkAndDefaultExpirationDate();
+                this.initializeLookerDataIfNeeded();
             }
         });
 
@@ -798,6 +806,7 @@ export class QuoteDetailsComponent implements OnInit {
 
                         this.updateExpirationDate();
                         this.updateBaselineStates();
+                        this.initializeLookerDataIfNeeded();
                     }
                     this.isLoading = false; // Data loaded
                 },
@@ -822,17 +831,7 @@ export class QuoteDetailsComponent implements OnInit {
         });
         // Delay the check slightly to ensure product details (and isLookerSubscription) are resolved
         setTimeout(() => {
-            if (this.isLookerSubscription) {
-                console.log('🔍 Looker Subscription detected. Loading bundle and picklists.');
-
-                // Final check to default expiration date if not already set
-                this.checkAndDefaultExpirationDate();
-
-                this.loadBundleDetails();
-                this.loadAllPicklists();
-            } else {
-                // console.log('⚡ Standard Commitment Quote detected. Skipping bundle and picklist APIs.');
-            }
+            this.initializeLookerDataIfNeeded();
         }, 100);
     }
 

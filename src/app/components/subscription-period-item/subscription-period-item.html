@@ -55,20 +55,28 @@
         <div class="px-6 pt-3 pb-6">
             <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div class="flex flex-col">
-                    <div
-                        class="bg-white p-2 px-3 rounded-lg border border-gray-300 hover:border-gray-400 transition-colors flex flex-col justify-center h-[56px] shadow-sm">
+                    <div (click)="togglePlatformDropdown()"
+                        class="bg-white p-2 px-3 rounded-lg border border-gray-300 hover:border-gray-400 transition-colors flex flex-col justify-center h-[56px] shadow-sm relative cursor-pointer platform-dropdown-container">
                         <label class="block text-[11px] text-gray-500 font-medium leading-none mb-1">
                             Platform
                         </label>
-                        <div class="relative flex items-center">
-                            <select [(ngModel)]="period.productName" (change)="onProductChange(); productChanged.emit()"
-                                class="w-full bg-transparent text-sm font-semibold outline-none cursor-pointer appearance-none relative z-10 pr-8"
-                                [class.text-gray-400]="!period.productName" [class.text-gray-800]="period.productName">
-                                <option value="" disabled selected>Select</option>
-                                <option *ngFor="let p of products" [value]="p.name">{{ p.name }}</option>
-                            </select>
+                        <div class="flex items-center">
+                            <div class="text-sm font-semibold truncate pr-6" [class.text-gray-400]="!period.productName"
+                                [class.text-gray-800]="period.productName">
+                                {{ period.productName || 'Select' }}
+                            </div>
                             <span
-                                class="material-icons-outlined text-gray-600 text-lg pointer-events-none absolute right-0 top-1/2 -translate-y-1/2">arrow_drop_down</span>
+                                class="material-icons-outlined text-gray-600 text-lg absolute right-2 top-1/2 -translate-y-1/2">arrow_drop_down</span>
+                        </div>
+
+                        <!-- Custom Dropdown List -->
+                        <div *ngIf="platformDropdownOpen"
+                            class="absolute left-0 top-full mt-1 w-full bg-white rounded-lg shadow-2xl border border-gray-200 z-[9999] py-2 max-h-[250px] overflow-y-auto custom-scrollbar">
+                            <button *ngFor="let p of products"
+                                (click)="selectPlatformProduct(p); $event.stopPropagation()"
+                                class="w-full text-left px-4 py-2.5 text-[13px] text-gray-700 hover:bg-blue-50 transition-colors">
+                                {{ p.name }}
+                            </button>
                         </div>
                     </div>
                     <div *ngIf="period.unitPrice != null && period.productName"
