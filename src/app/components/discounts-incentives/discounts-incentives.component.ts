@@ -577,6 +577,24 @@ export class DiscountsIncentivesComponent implements OnChanges {
         }
     }
 
+    confirmProductSelection() {
+        if (this.activeTab === 'discounts' && this.discountForm.granularity === 'Granular') {
+            const selectedGroups = Array.from(this.persistentSelectedGroups.values()).filter(g => g.selected);
+            const selectedIndividuals = Array.from(this.persistentSelectedIndividuals.values()).filter(p => p.selected);
+
+            const invalidItems = [...selectedGroups, ...selectedIndividuals].filter(item => {
+                return item.discount === null || item.discount === undefined || item.discount < 1 || item.discount > 100;
+            });
+
+            if (invalidItems.length > 0) {
+                this.toastService.show('Please provide a 1 to 100% discount for all selected products, or unselect them.', 'warning');
+                return; // Prevent closing
+            }
+        }
+
+        this.closeProductSelector();
+    }
+
     closeProductSelector() {
         this.showProductSelector = false;
         // Optionally reset temporary selection state if needed
@@ -612,11 +630,24 @@ export class DiscountsIncentivesComponent implements OnChanges {
             if (val > 100) val = 100;
             item.discount = val;
         } else if (item.discount === '') {
-            item.discount = 0;
+            item.discount = null; // Changed from 0 to null
         }
 
         const map = this.productTab === 'groups' ? this.persistentSelectedGroups : this.persistentSelectedIndividuals;
         map.set(item.id, item);
+    }
+
+    clearDiscountZero(item: any) {
+        if (item.discount === 0) {
+            item.discount = null;
+        }
+    }
+
+    restoreDiscountZero(item: any) {
+        if (item.discount === null || item.discount === undefined || item.discount === '') {
+            item.discount = 0;
+            this.updatePersistentSelected(item);
+        }
     }
 
 
@@ -725,10 +756,12 @@ export class DiscountsIncentivesComponent implements OnChanges {
                 return;
             }
         } else {
-            // Granular: Ensure at least one selected item has a discount > 0
-            const hasGranularDiscount = [...selectedGroups, ...selectedIndividuals].some(item => item.discount > 0);
-            if (!hasGranularDiscount) {
-                this.toastService.show('Please enter a discount value for at least one selected item.', 'warning');
+            // Granular: Ensure ALL selected items have a discount between 1 and 100
+            const invalidItems = [...selectedGroups, ...selectedIndividuals].filter(item => {
+                return item.discount === null || item.discount === undefined || item.discount < 1 || item.discount > 100;
+            });
+            if (invalidItems.length > 0) {
+                this.toastService.show('Please provide a 1 to 100% discount for all selected products, or unselect them.', 'warning');
                 return;
             }
         }
