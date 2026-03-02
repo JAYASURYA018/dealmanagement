@@ -369,7 +369,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
     }
 
     handlePageSizeChange(newSize: number) {
-        this.individualPageSize = newSize;
+        this.individualPageSize = Number(newSize);
         this.individualCurrentOffset = 0;
         // this.currentIndividualClassIndex = 0; // Reset to start? Or keep current class?
         // User implied "continuous" flow. Let's restart to be safe and simple.
@@ -378,13 +378,14 @@ export class DiscountsIncentivesComponent implements OnChanges {
 
     nextPage() {
         // Increment offset
-        this.individualCurrentOffset += this.individualPageSize;
+        this.individualCurrentOffset += Number(this.individualPageSize);
         this.loadIndividualProducts();
     }
 
     prevPage() {
-        if (this.individualCurrentOffset >= this.individualPageSize) {
-            this.individualCurrentOffset -= this.individualPageSize;
+        const pageSize = Number(this.individualPageSize);
+        if (this.individualCurrentOffset >= pageSize) {
+            this.individualCurrentOffset -= pageSize;
             this.loadIndividualProducts();
         }
     }
