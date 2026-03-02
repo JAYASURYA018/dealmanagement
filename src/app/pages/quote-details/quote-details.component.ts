@@ -77,10 +77,10 @@ export class QuoteDetailsComponent implements OnInit {
     isGCP: boolean = false;
 
     // Dates
-    startDate: string = ''; // Initially empty
+    startDate: string = new Date().toISOString().split('T')[0]; // Default to current date
     expirationDate: string = ''; // Initially empty
     previewCommitments: any[] = [];
-    todayDate: Date = new Date(); // Keep for explicit today reference if needed, but startDate is now separate
+    todayDate: Date = new Date(); // Keep for explicit today reference if needed
     minDate: string = new Date().toISOString().split('T')[0];
 
     // Term Start Date (Separate from Quote Start Date)
@@ -147,30 +147,6 @@ export class QuoteDetailsComponent implements OnInit {
 
             // Auto-save commitment before switching
             this.executeCommitFlow(() => {
-                this.activeTab = tab;
-            }, true);
-            return;
-        } else if (tab === 'discounts' && this.isLookerSubscription) {
-            if (this.subscriptionPeriods.length === 0) {
-                this.toastService.show('Please create subscription periods before proceeding.', 'warning');
-                return;
-            }
-
-            const currentLookerState = JSON.stringify({
-                periods: this.subscriptionPeriods,
-                startDate: this.startDate,
-                expirationDate: this.expirationDate,
-                termStartInput: this.termStartInput,
-                termEndDate: this.termEndDate
-            });
-
-            if (currentLookerState === this.lastSavedLookerState) {
-                this.activeTab = tab;
-                return;
-            }
-
-            // For Looker, we also trigger onSave
-            this.onSave(() => {
                 this.activeTab = tab;
             }, true);
             return;
@@ -724,10 +700,9 @@ export class QuoteDetailsComponent implements OnInit {
         }
         QuoteDetailsComponent.lastInitTime = now;
 
-        // Default dates to today as per new requirement
-        const today = this.toIsoDateString(new Date());
-        this.startDate = today;
-        this.termStartInput = today;
+        // Initially default Quote Start Date to today
+        this.startDate = this.toIsoDateString(new Date());
+        this.termStartInput = '';
         this.expirationDate = '';
         this.termEndDate = '';
 
@@ -758,6 +733,8 @@ export class QuoteDetailsComponent implements OnInit {
             }
             if (quoteData.productName) {
                 this.productName = quoteData.productName;
+
+                this.checkAndDefaultExpirationDate();
             }
         });
 
@@ -793,13 +770,6 @@ export class QuoteDetailsComponent implements OnInit {
                             }
                         }
 
-                        // Ensure dates remain valid; if they were cleared, reset to today
-                        if (!this.startDate) {
-                            this.startDate = this.toIsoDateString(new Date());
-                        }
-                        this.updateExpirationDate();
-
-
                         if (quote.QuoteLineItems?.records?.length > 0) {
                             const lineItem = quote.QuoteLineItems.records[0];
                             this.productName = lineItem.Product2?.Name || 'Product';
@@ -811,6 +781,22 @@ export class QuoteDetailsComponent implements OnInit {
                             this.bundleQuoteLineId = null;
                         }
 
+                        // Load existing Start Date from the record
+                        if (quote.StartDate) {
+                            this.startDate = quote.StartDate;
+                            if (this.isLookerSubscription) {
+                                this.termStartInput = quote.StartDate;
+                            }
+                        }
+
+                        // Load existing Expiration Date from the record
+                        if (quote.ExpirationDate) {
+                            this.expirationDate = quote.ExpirationDate;
+                        } else {
+                            this.checkAndDefaultExpirationDate();
+                        }
+
+                        this.updateExpirationDate();
                         this.updateBaselineStates();
                     }
                     this.isLoading = false; // Data loaded
@@ -834,11 +820,14 @@ export class QuoteDetailsComponent implements OnInit {
             this.quoteId = ctx.quoteId || 'Q-1234';
             this.isGCP = !!ctx.isGCPFamily;
         });
-
         // Delay the check slightly to ensure product details (and isLookerSubscription) are resolved
         setTimeout(() => {
             if (this.isLookerSubscription) {
                 console.log('🔍 Looker Subscription detected. Loading bundle and picklists.');
+
+                // Final check to default expiration date if not already set
+                this.checkAndDefaultExpirationDate();
+
                 this.loadBundleDetails();
                 this.loadAllPicklists();
             } else {
@@ -1535,6 +1524,15 @@ export class QuoteDetailsComponent implements OnInit {
 
     checkCollapse(index: number, event: FocusEvent) { }
 
+    private checkAndDefaultExpirationDate() {
+        if (this.isLookerSubscription && !this.expirationDate) {
+            const expiry = new Date();
+            expiry.setDate(expiry.getDate() + 45);
+            this.expirationDate = this.toIsoDateString(expiry);
+            console.log('📅 Automatically set Looker subscription expiration date to 45 days from now:', this.expirationDate);
+        }
+    }
+
     // Input handlers for commitment periods
     onMonthFocus(index: number, el: HTMLElement) { }
     onMonthBlur(index: number, el: HTMLElement) {
@@ -1545,36 +1543,24 @@ export class QuoteDetailsComponent implements OnInit {
     onMonthInput(index: number, val: string) { }
 
     updateExpirationDate() {
-        const anchorDate = this.isLookerSubscription ? this.termStartInput : this.startDate;
+        if (this.isLookerSubscription) {
+            // In subscription flow, the expiration date is set to a fixed default (Today + 45 days)
+            // and should not be recalculated or cleared here based on the anchor dates.
+            this.updateTermFromDates();
+            return;
+        }
+
+        const anchorDate = this.startDate;
 
         if (!anchorDate) {
             this.expirationDate = '';
-            if (this.isLookerSubscription) {
-                this.termEndDate = this.lastValidTermEnd;
-            } else {
-                this.termEndDate = '';
-            }
+            this.termEndDate = '';
             return;
         }
 
-        if (this.isLookerSubscription) {
-            if (this.termStartInput && this.termStartInput < this.minDate) {
-                this.toastService.show('You cannot select a term start date less than the current date.', 'warning');
-                this.termStartInput = this.minDate;
-                return;
-            }
-            // Sync startDate with termStartInput for Looker persistence
-            this.startDate = this.termStartInput;
-        } else {
-            if (this.startDate && this.startDate < this.minDate) {
-                this.toastService.show('Quote Start Date cannot be less than the current date.', 'warning');
-                this.startDate = this.minDate;
-            }
-        }
-
-        if (this.isLookerSubscription) {
-            this.updateTermFromDates();
-            return;
+        if (this.startDate && this.startDate < this.minDate) {
+            this.toastService.show('Quote Start Date cannot be less than the current date.', 'warning');
+            this.startDate = this.minDate;
         }
 
         const totalMonths = this.totalTerms;
