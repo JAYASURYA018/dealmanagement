@@ -31,6 +31,7 @@
     "@angular/build": "^19.1.0",
     "@angular/cli": "^19.1.0",
     "@angular/compiler-cli": "^19.1.0",
+    "@types/html2canvas": "^0.5.35",
     "@types/jasmine": "~5.1.0",
     "autoprefixer": "^10.4.24",
     "jasmine-core": "~5.4.0",

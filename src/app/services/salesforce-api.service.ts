@@ -388,7 +388,7 @@ export class SalesforceApiService {
         const baseUrl = this.contextService.apiBaseUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com';
 
         // Using v59.0 and specific query as requested by user
-        const query = `SELECT Id, Product2Id FROM QuoteLineItem WHERE QuoteId = '${quoteId}'`;
+        const query = `SELECT Id, Product2Id, PricebookEntryId FROM QuoteLineItem WHERE QuoteId = '${quoteId}'`;
         const encodedQuery = encodeURIComponent(query);
         const url = `${baseUrl}/services/data/v59.0/query/?q=${encodedQuery}`;
 
@@ -648,7 +648,7 @@ export class SalesforceApiService {
         const token = this.contextService.accessToken;
         const baseUrl = this.contextService.apiBaseUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com';
 
-        const query = `SELECT Id, Name, QuoteNumber, Status, GrandTotal, StartDate, ExpirationDate, Opportunity.Name, Opportunity.Sales_Channel__c, Opportunity.Primary_Contact__c, Opportunity.Primary_Contact__r.Name, Account.Name, Account.Website, (SELECT Id, Product2Id, Product2.Name, Product2.ProductCode, Quantity, UnitPrice, TotalPrice, ListPrice, StartDate, EndDate, Discount, NetUnitPrice FROM QuoteLineItems) FROM Quote WHERE Id='${quoteId}'`;
+        const query = `SELECT Id, Name, QuoteNumber, Status, GrandTotal, StartDate, ExpirationDate, Pricebook2Id, Opportunity.Name, Opportunity.Sales_Channel__c, Opportunity.Primary_Contact__c, Opportunity.Primary_Contact__r.Name, Account.Name, Account.Website, (SELECT Id, Product2Id, PricebookEntryId, Product2.Name, Product2.ProductCode, Quantity, UnitPrice, TotalPrice, ListPrice, StartDate, EndDate, Discount, NetUnitPrice FROM QuoteLineItems) FROM Quote WHERE Id='${quoteId}'`;
         const encodedQuery = encodeURIComponent(query);
         const url = `${baseUrl}/services/data/v66.0/query/?q=${encodedQuery}`;
 

@@ -73,7 +73,9 @@ export class QuoteDetailsComponent implements OnInit {
     productName: string = 'No Products';
     productId: string | null = null;
     bundleQuoteLineId: string | null = null;
+    bundlePricebookEntryId: string | null = null;
     website: string = '';
+    pricebookId: string | null = null;
     isGCP: boolean = false;
 
     // Dates
@@ -126,9 +128,9 @@ export class QuoteDetailsComponent implements OnInit {
 
     private initializeLookerDataIfNeeded() {
         if (this.isLookerSubscription && !this.lookerDataInitialized) {
-            console.log('🔍 Looker Subscription detected. Initializing bundle and picklists.');
+            console.log('🔍 Looker Subscription detected. Initializing picklists.');
             this.lookerDataInitialized = true;
-            this.loadBundleDetails();
+            // Removed: this.loadBundleDetails(); - Deferring until subscription periods are created via modal
             this.loadAllPicklists();
             this.checkAndDefaultExpirationDate();
         }
@@ -181,7 +183,14 @@ export class QuoteDetailsComponent implements OnInit {
     }
 
     loadBundleDetails() {
-        const bundleId = '01tDz00000Ea17zIAB';
+        let bundleId = this.productId;
+        if (!bundleId && this.isLookerSubscription) {
+            bundleId = '01tDz00000Ea17zIAB'; // Default Looker Bundle ID
+        }
+        if (!bundleId) {
+            console.warn('⚠️ Cannot load bundle details: productId is missing.');
+            return;
+        }
         this.loadingService.show();
 
         this.sfApi.getBundleDetails(bundleId).subscribe({
@@ -192,6 +201,19 @@ export class QuoteDetailsComponent implements OnInit {
 
                 if (result && result.productComponentGroups) {
                     const groups = result.productComponentGroups;
+
+                    // Extract bundle's own monthly PricebookEntryId
+                    if (result.prices && result.prices.length > 0) {
+                        const monthlyPrice = result.prices.find((p: any) => p.pricingModel?.frequency === 'Months');
+                        if (monthlyPrice) {
+                            this.bundlePricebookEntryId = monthlyPrice.priceBookEntryId;
+                            console.log('💎 Captured Bundle Monthly PBE:', this.bundlePricebookEntryId);
+                        } else {
+                            // Fallback to the first available price if monthly is not found
+                            this.bundlePricebookEntryId = result.prices[0].priceBookEntryId;
+                            console.log('💎 Fallback Bundle PBE captured:', this.bundlePricebookEntryId);
+                        }
+                    }
 
 
                     const platformGroup = groups.find((g: any) => g.name === 'Platform');
@@ -367,6 +389,7 @@ export class QuoteDetailsComponent implements OnInit {
 
     onSubscriptionPeriodsCreated(frequency: string) {
         this.currentFrequency = frequency;
+        this.loadBundleDetails(); // Trigger immediately on Create click
 
         const effectiveStart = (this.isLookerSubscription && this.termStartInput) ? this.termStartInput : this.startDate;
 
@@ -454,17 +477,14 @@ export class QuoteDetailsComponent implements OnInit {
                         this.productRelationshipTypeId = results.prType.records[0].Id;
                     }
 
-                    this.loadBundleDetails();
                     this.closeSubscriptionModal();
                 },
                 error: (err) => {
                     console.error('❌ Error fetching dynamic APIs on create:', err);
-                    this.loadBundleDetails();
                     this.closeSubscriptionModal();
                 }
             });
         } else {
-            this.loadBundleDetails();
             this.closeSubscriptionModal();
         }
     }
@@ -606,16 +626,6 @@ export class QuoteDetailsComponent implements OnInit {
                 this.lastValidTermEnd = this.termEndDate;
             }
             return;
-        }
-
-        // Strict Yearly Validation for global boundaries
-        if (this.currentFrequency === 'Yearly' && this.termStartInput && this.termEndDate) {
-            if (!this.isValidYearlyDuration(this.termStartInput, this.termEndDate)) {
-                // Duration is invalid (likely in the middle of being edited)
-                // We return silently to allow user to continue editing without annoying toasts.
-                // Period dates will only ripple once they reach a valid yearly duration.
-                return;
-            }
         }
 
         // Passed validation - update last valid global dates
@@ -783,10 +793,15 @@ export class QuoteDetailsComponent implements OnInit {
                             this.productName = lineItem.Product2?.Name || 'Product';
                             this.productId = lineItem.Product2Id || lineItem.Product2?.Id;
                             this.bundleQuoteLineId = lineItem.Id;
+                            this.bundlePricebookEntryId = lineItem.PricebookEntryId;
                         } else {
                             this.productName = 'No Products';
                             this.productId = null;
                             this.bundleQuoteLineId = null;
+                        }
+
+                        if (quote.Pricebook2Id) {
+                            this.pricebookId = quote.Pricebook2Id;
                         }
 
                         // Load existing Start Date from the record
@@ -1631,6 +1646,8 @@ export class QuoteDetailsComponent implements OnInit {
             } else {
                 this.commitmentPeriods[0].months = fractionalMonths;
             }
+            // Sequentially adjust existing subscription periods
+            this.onSubscriptionProductChanged();
             return;
         }
 
@@ -1802,9 +1819,10 @@ export class QuoteDetailsComponent implements OnInit {
                 const bundleRelType = relTypes.find((r: any) => r.Name === 'Bundle to Bundle Component Relationship');
                 const relationshipTypeId = bundleRelType ? bundleRelType.Id : '0yoKf0000010wFiIAI';
 
-                const bundleProductId = '01tDz00000Ea17zIAB';
-                const bundlePBEId = '01uDz00000dqXP8IAM';
-                const mainLineId = lineItems.find((item: any) => item.Product2Id === bundleProductId)?.Id || (lineItems.length > 0 ? lineItems[0].Id : null);
+                const bundleProductId = this.productId;
+                const bundleLine = lineItems.find((item: any) => item.Product2Id === bundleProductId);
+                const bundlePBEId = bundleLine ? bundleLine.PricebookEntryId : this.bundlePricebookEntryId;
+                const mainLineId = bundleLine?.Id || (lineItems.length > 0 ? lineItems[0].Id : null);
 
                 const records: any[] = [];
 
@@ -1812,7 +1830,7 @@ export class QuoteDetailsComponent implements OnInit {
                 const startToUse = (this.isLookerSubscription && this.termStartInput) ? this.termStartInput : (this.startDate || new Date().toISOString().split('T')[0]);
                 const quoteRec: any = {
                     "attributes": { "type": "Quote", "method": "PATCH", "id": targetQuoteId },
-                    "Pricebook2Id": "01sf4000003ZgtzAAC",
+                    "Pricebook2Id": this.pricebookId || "01sf4000003ZgtzAAC",
                     "StartDate": startToUse
                 };
                 if (this.expirationDate) quoteRec["ExpirationDate"] = this.expirationDate;
@@ -2050,7 +2068,7 @@ export class QuoteDetailsComponent implements OnInit {
                 "SortOrder": index + 1,
                 "QuoteId": quoteId,
                 "Product2Id": item.productId,
-                "PricebookEntryId": item.pricebookEntryId || '01uDz00000dqXP8IAM',
+                "PricebookEntryId": item.pricebookEntryId || this.bundlePricebookEntryId,
                 "Quantity": quantity,
                 "SubscriptionTerm": subTerm,
                 "SubscriptionTermUnit": "Months",
