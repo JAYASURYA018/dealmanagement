@@ -443,28 +443,30 @@ export class QuoteDetailsComponent implements OnInit {
         const sfQuoteId = this.salesforceQuoteId;
         if (sfQuoteId) {
             console.log('🔄 Fetching Quote Line Items and Relationship Types...', { sfQuoteId });
+
+            const relType$ = this.productRelationshipTypeId
+                ? of({ records: [{ Id: this.productRelationshipTypeId, Name: 'Bundle to Bundle Component Relationship' }] })
+                : this.sfApi.getProductRelationshipType();
+
             const needRefresh = this.quoteRefreshService.consumeRefreshFlag();
             if (!needRefresh) {
-                // No modifications, skip fetching Quote Line Items
                 console.log('⚡ Skipping getQuoteLineItems call as no changes detected.');
-                // Still fetch relationship type if needed
-                this.sfApi.getProductRelationshipType().subscribe({
+                relType$.subscribe({
                     next: (prRes: any) => {
-                        if (prRes && prRes.records && prRes.records.length > 0) {
-                            this.productRelationshipTypeId = prRes.records[0].Id;
-                        }
+                        this.extractRelationshipId(prRes);
                         this.closeSubscriptionModal();
                     },
                     error: (err) => {
-                        console.error('❌ Error fetching product relationship type:', err);
+                        console.error('❌ Error resolving product relationship type:', err);
                         this.closeSubscriptionModal();
                     }
                 });
                 return;
             }
+
             forkJoin({
                 qlItems: this.sfApi.getQuoteLineItems(sfQuoteId),
-                prType: this.sfApi.getProductRelationshipType()
+                prType: relType$
             }).subscribe({
                 next: (results: any) => {
                     console.log('✅ APIs Fetched Successfully on Create:', results);
@@ -473,10 +475,7 @@ export class QuoteDetailsComponent implements OnInit {
                         this.existingQuoteLineItems = results.qlItems.records;
                     }
 
-                    if (results.prType && results.prType.records && results.prType.records.length > 0) {
-                        this.productRelationshipTypeId = results.prType.records[0].Id;
-                    }
-
+                    this.extractRelationshipId(results.prType);
                     this.closeSubscriptionModal();
                 },
                 error: (err) => {
@@ -486,6 +485,19 @@ export class QuoteDetailsComponent implements OnInit {
             });
         } else {
             this.closeSubscriptionModal();
+        }
+    }
+
+    private extractRelationshipId(response: any) {
+        if (!response) return;
+        const relTypes = response.records || response.recentItems || [];
+        const bundleRelType = relTypes.find((r: any) => r.Name === 'Bundle to Bundle Component Relationship');
+
+        if (bundleRelType) {
+            this.productRelationshipTypeId = bundleRelType.Id;
+            console.log('🔗 Resolved Relationship Type ID:', this.productRelationshipTypeId);
+        } else if (relTypes.length > 0) {
+            this.productRelationshipTypeId = relTypes[0].Id;
         }
     }
 
@@ -807,9 +819,7 @@ export class QuoteDetailsComponent implements OnInit {
                         // Load existing Start Date from the record
                         if (quote.StartDate) {
                             this.startDate = quote.StartDate;
-                            if (this.isLookerSubscription) {
-                                this.termStartInput = quote.StartDate;
-                            }
+                            // termStartInput intentionally left empty by default per user request
                         }
 
                         // Load existing Expiration Date from the record
@@ -1117,7 +1127,20 @@ export class QuoteDetailsComponent implements OnInit {
         this.sfApi.getQuotePreview(quoteId).subscribe({
             next: (response) => {
                 if (response.records && response.records.length > 0) {
-                    this.previewData = response.records[0];
+                    const quote = response.records[0];
+
+                    // OVERRIDE: Update bundle product dates in preview to match UI values if configured
+                    if (this.isLookerSubscription && quote.QuoteLineItems?.records) {
+                        quote.QuoteLineItems.records.forEach((line: any) => {
+                            const isBundle = line.Product2Id === this.productId || (line.Product2 && line.Product2.Id === this.productId);
+                            if (isBundle) {
+                                if (this.termStartInput) line.StartDate = this.termStartInput;
+                                if (this.termEndDate) line.EndDate = this.termEndDate;
+                            }
+                        });
+                    }
+
+                    this.previewData = quote;
                     this.showPreviewPopup = true;
                 }
                 this.loadingService.hide();
@@ -1808,16 +1831,18 @@ export class QuoteDetailsComponent implements OnInit {
             return;
         }
 
+        const relType$ = this.productRelationshipTypeId
+            ? of({ recentItems: [{ Id: this.productRelationshipTypeId, Name: 'Bundle to Bundle Component Relationship' }] })
+            : this.sfApi.getProductRelationshipType();
+
         forkJoin({
             lineItemRes: this.sfApi.getQuoteLineItems(targetQuoteId),
-            relTypeRes: this.sfApi.getProductRelationshipType()
+            relTypeRes: relType$
         }).subscribe({
             next: (data) => {
                 const lineItems = data.lineItemRes.records || [];
-                const relTypes = data.relTypeRes.recentItems || [];
-
-                const bundleRelType = relTypes.find((r: any) => r.Name === 'Bundle to Bundle Component Relationship');
-                const relationshipTypeId = bundleRelType ? bundleRelType.Id : '0yoKf0000010wFiIAI';
+                this.extractRelationshipId(data.relTypeRes);
+                const relationshipTypeId = this.productRelationshipTypeId || '0yoKf0000010wFiIAI';
 
                 const bundleProductId = this.productId;
                 const bundleLine = lineItems.find((item: any) => item.Product2Id === bundleProductId);
@@ -1830,7 +1855,6 @@ export class QuoteDetailsComponent implements OnInit {
                 const startToUse = (this.isLookerSubscription && this.termStartInput) ? this.termStartInput : (this.startDate || new Date().toISOString().split('T')[0]);
                 const quoteRec: any = {
                     "attributes": { "type": "Quote", "method": "PATCH", "id": targetQuoteId },
-                    "Pricebook2Id": this.pricebookId || "01sf4000003ZgtzAAC",
                     "StartDate": startToUse
                 };
                 if (this.expirationDate) quoteRec["ExpirationDate"] = this.expirationDate;

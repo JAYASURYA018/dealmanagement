@@ -160,6 +160,12 @@ export class SalesforceApiService {
                 // However, user usually passes pricebookId. Let's rely on that or the one found.
                 const dynamicPricebookId = pbeRecords.length > 0 ? pbeRecords[0].Pricebook2Id : pricebookId;
 
+                const today = new Date();
+                const startDateStr = today.toISOString().split('T')[0];
+                const expDate = new Date(today);
+                expDate.setDate(expDate.getDate() + 45); // Default to 45 days duration
+                const expDateStr = expDate.toISOString().split('T')[0];
+
                 // Construct the records for the Graph API
                 const records: any[] = [
                     {
@@ -169,9 +175,11 @@ export class SalesforceApiService {
                                 "method": "POST",
                                 "type": "Quote"
                             },
-                            "Name": "DealManagement-" + new Date().getTime(),
+                            "Name": "DealManagement-" + today.getTime(),
                             "OpportunityId": opportunityId,
-                            "Pricebook2Id": dynamicPricebookId
+                            "Pricebook2Id": dynamicPricebookId,
+                            "StartDate": startDateStr,
+                            "ExpirationDate": expDateStr
                         }
                     }
                 ];
@@ -198,7 +206,8 @@ export class SalesforceApiService {
                         "Product2Id": item.id,
                         "PricebookEntryId": finalPBEId,
                         "Quantity": item.quantity || 1,
-                        "StartDate": item.startDate || new Date().toISOString().split('T')[0],
+                        "StartDate": item.startDate || startDateStr,
+                        "EndDate": expDateStr,
                         "PeriodBoundary": "Anniversary"
                     };
 
@@ -761,9 +770,12 @@ export class SalesforceApiService {
         const method = 'SalesforceApiService.getProductRelationshipType';
         const token = this.contextService.accessToken;
         const baseUrl = this.contextService.apiBaseUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com';
-        const url = `${baseUrl}/services/data/v65.0/sobjects/ProductRelationshipType`;
 
-        console.log(`[API Request] ${method}`, { url });
+        const query = `SELECT Id, Name FROM ProductRelationshipType WHERE Name = 'Bundle to Bundle Component Relationship' LIMIT 1`;
+        const encodedQuery = encodeURIComponent(query);
+        const url = `${baseUrl}/services/data/v65.0/query/?q=${encodedQuery}`;
+
+        console.log(`[API Request] ${method}`, { url, query });
 
         const headers = new HttpHeaders({
             'Authorization': `Bearer ${token}`,
