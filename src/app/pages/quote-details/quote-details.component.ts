@@ -331,7 +331,7 @@ export class QuoteDetailsComponent implements OnInit {
 
         // 1. If previous period end date equals subscription end date
         if (lastPeriod.endDate === this.termEndDate) {
-            this.toastService.show('change the subscription end date to create new period', 'warning');
+            this.toastService.show('change the subscription end date to create new period', 'error');
             return;
         }
 
@@ -340,7 +340,7 @@ export class QuoteDetailsComponent implements OnInit {
             if (lastPeriod.startDate) {
                 const term = this.calculateSubscriptionTerm(lastPeriod.startDate, lastPeriod.endDate);
                 if (term < 12) {
-                    this.toastService.show('you cannot create new period without having previous period with duration exactly 1 year', 'warning');
+                    this.toastService.show('you cannot create new period without having previous period with duration exactly 1 year', 'error');
                     return;
                 }
             }
@@ -381,7 +381,7 @@ export class QuoteDetailsComponent implements OnInit {
         const effectiveStart = (this.isLookerSubscription && this.termStartInput) ? this.termStartInput : this.startDate;
 
         if (!effectiveStart || !this.termEndDate) {
-            this.toastService.show('Please select both Subscription Start Date and End Date.', 'warning');
+            this.toastService.show('Please select both Subscription Start Date and End Date.', 'error');
             this.closeSubscriptionModal();
             return;
         }
@@ -396,7 +396,7 @@ export class QuoteDetailsComponent implements OnInit {
         }
 
         if (this.currentFrequency === 'Yearly' && !this.isValidYearlyDuration(effectiveStart, this.termEndDate)) {
-            this.toastService.show('Subscription duration should be exactly in years for yearly periods', 'warning');
+            this.toastService.show('Subscription duration should be exactly in years for yearly periods', 'error');
             this.closeSubscriptionModal();
             return;
         }
@@ -585,7 +585,7 @@ export class QuoteDetailsComponent implements OnInit {
         if (diffDays === 0) return months;
 
         const daysInMonth = new Date(temp.getFullYear(), temp.getMonth() + 1, 0).getDate();
-        return parseFloat((months + (diffDays / daysInMonth)).toFixed(4));
+        return (months + (diffDays / daysInMonth));
     }
     formatTermDisplay(startDate: string, endDate: string): string {
         if (!startDate || !endDate) return '';
@@ -982,15 +982,21 @@ export class QuoteDetailsComponent implements OnInit {
         }
 
         this.loadingService.show();
-        this.sfApi.patchQuoteDates(fullQuoteId, this.startDate, this.expirationDate || this.startDate).subscribe({
-            next: () => {
-                this.fetchQuotePreview(fullQuoteId);
-            },
-            error: (err) => {
-                this.loadingService.hide();
-                this.toastService.show('Failed to update quote dates for preview', 'error');
-            }
-        });
+
+        if (this.isLookerSubscription) {
+            // Subscription flow handles dates differently, skip patching
+            this.fetchQuotePreview(fullQuoteId);
+        } else {
+            this.sfApi.patchQuoteDates(fullQuoteId, this.startDate, this.expirationDate || this.startDate).subscribe({
+                next: () => {
+                    this.fetchQuotePreview(fullQuoteId);
+                },
+                error: (err) => {
+                    this.loadingService.hide();
+                    this.toastService.show('Failed to update quote dates for preview', 'error');
+                }
+            });
+        }
 
         this.previewCommitments = this.buildPreviewCommitments();
     }
@@ -1352,7 +1358,7 @@ export class QuoteDetailsComponent implements OnInit {
 
         if (this.isLookerSubscription && this.termStartInput && this.termEndDate) {
             if (this.currentFrequency === 'Yearly' && !this.isValidYearlyDuration(this.termStartInput, this.termEndDate)) {
-                this.toastService.show('Subscription duration must be exactly in years. Please adjust Subscription Dates.', 'warning');
+                this.toastService.show('Subscription duration must be in years. Please adjust Subscription Dates.', 'error');
                 return;
             }
 
@@ -1365,10 +1371,10 @@ export class QuoteDetailsComponent implements OnInit {
 
             if (currentPeriods < expectedCount) {
                 const missing = expectedCount - currentPeriods;
-                this.toastService.show(`Your subscription duration is ${this.formatTermDisplay(this.termStartInput, this.termEndDate)}. Please add ${missing} more period${missing > 1 ? 's' : ''}.`, 'warning');
+                this.toastService.show(`Your subscription duration is ${this.formatTermDisplay(this.termStartInput, this.termEndDate)}. Please add ${missing} more period${missing > 1 ? 's' : ''}.`, 'error');
                 return;
             } else if (currentPeriods > expectedCount) {
-                this.toastService.show('Please delete extra periods before saving.', 'warning');
+                this.toastService.show('Please delete extra periods before saving.', 'error');
                 return;
             }
 
@@ -1379,7 +1385,7 @@ export class QuoteDetailsComponent implements OnInit {
         if (this.isLookerSubscription && this.subscriptionPeriods.length > 0) {
             const hasMissingProduct = this.subscriptionPeriods.some(p => !p.productName);
             if (hasMissingProduct) {
-                this.toastService.show('you should select a platform product for all periods', 'warning');
+                this.toastService.show('you should select a platform product for all periods', 'error');
                 return;
             }
 
@@ -1608,7 +1614,7 @@ export class QuoteDetailsComponent implements OnInit {
         if (isNaN(start.getTime()) || isNaN(end.getTime())) return;
 
         if (end < start) {
-            this.toastService.show('Term End Date cannot be earlier than Term Start Date.', 'warning');
+            this.toastService.show('Term End Date cannot be earlier than Term Start Date.', 'error');
             const startVal = this.lastValidTermStart;
             const endVal = this.lastValidTermEnd;
             setTimeout(() => {

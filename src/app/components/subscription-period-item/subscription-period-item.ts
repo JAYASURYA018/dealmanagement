@@ -163,7 +163,7 @@ export class SubscriptionPeriodItemComponent implements OnInit {
         if (end < start) {
             this.period.startDate = this.lastValidStartDate;
             this.period.endDate = this.lastValidEndDate;
-            this.toastService.show('End Date cannot be earlier than Start Date.', 'warning');
+            this.toastService.show('End Date cannot be earlier than Start Date.', 'error');
             return;
         }
 
@@ -171,7 +171,7 @@ export class SubscriptionPeriodItemComponent implements OnInit {
         if (this.isFirst && this.subscriptionStartDate && this.period.startDate !== this.subscriptionStartDate) {
             this.period.startDate = this.subscriptionStartDate; // Revert to subscription start
             this.lastValidStartDate = this.period.startDate; // Sync valid state
-            this.toastService.show('The Period 1 start date must equal to subscription start date', 'warning');
+            this.toastService.show('The Period 1 start date must equal to subscription start date', 'error');
             return;
         }
 
@@ -179,7 +179,7 @@ export class SubscriptionPeriodItemComponent implements OnInit {
         if (this.isLast && this.subscriptionEndDate && this.period.endDate !== this.subscriptionEndDate) {
             this.period.endDate = this.subscriptionEndDate; // Revert to subscription end
             this.lastValidEndDate = this.period.endDate; // Sync valid state
-            this.toastService.show('The last period end date should equal to subscription end date', 'warning');
+            this.toastService.show('The last period end date should equal to subscription end date', 'error');
             return;
         }
 
@@ -191,7 +191,7 @@ export class SubscriptionPeriodItemComponent implements OnInit {
         if (end > limitDate) {
             this.period.startDate = this.lastValidStartDate;
             this.period.endDate = this.lastValidEndDate;
-            this.toastService.show('Period duration cannot exceed 1 year.', 'warning');
+            this.toastService.show('Period duration cannot exceed 1 year.', 'error');
             return;
         }
 
@@ -318,7 +318,7 @@ export class SubscriptionPeriodItemComponent implements OnInit {
         if (diffDays === 0) return months;
 
         const daysInMonth = new Date(temp.getFullYear(), temp.getMonth() + 1, 0).getDate();
-        return parseFloat((months + (diffDays / daysInMonth)).toFixed(4));
+        return (months + (diffDays / daysInMonth));
     }
 
     private parseDateString(dateStr: string): Date {
@@ -367,7 +367,9 @@ export class SubscriptionPeriodItemComponent implements OnInit {
             event.target.value = 0;
         }
         else if (value > 100) {
-            this.toastService.show('Warning: You are exceeding the 100% discount. This will result in a negative final value.', 'warning');
+            this.toastService.show('Discount cannot be more than 100%.', 'error');
+            this.period.discount = null;
+            event.target.value = '';
         }
     }
 
@@ -378,7 +380,9 @@ export class SubscriptionPeriodItemComponent implements OnInit {
             event.target.value = 0;
         }
         else if (value > 100) {
-            this.toastService.show('Warning: You are exceeding the 100% discount. This will result in a negative final value.', 'warning');
+            this.toastService.show('Discount cannot be more than 100%.', 'error');
+            row.discount = null;
+            event.target.value = '';
         }
     }
 

@@ -689,8 +689,12 @@ export class DiscountsIncentivesComponent implements OnChanges {
             let val = Number(item.discount);
             if (isNaN(val)) val = 0;
             if (val < 0) val = 0;
-            if (val > 100) val = 100;
-            item.discount = val;
+            if (val > 100) {
+                this.toastService.show('Discount cannot be more than 100%.', 'error');
+                item.discount = null;
+            } else {
+                item.discount = val;
+            }
         } else if (item.discount === '') {
             item.discount = null; // Changed from 0 to null
         }
@@ -839,7 +843,8 @@ export class DiscountsIncentivesComponent implements OnChanges {
                 return;
             }
             if (overallDisc > 100) {
-                this.toastService.show('Discount cannot exceed 100%.', 'warning');
+                this.toastService.show('Discount cannot be more than 100%.', 'error');
+                this.discountForm.value = '';
                 return;
             }
         } else {
