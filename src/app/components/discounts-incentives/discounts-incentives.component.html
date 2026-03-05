@@ -12,14 +12,14 @@
                 <div class="flex items-center gap-2 bg-white border border-gray-200 rounded-full px-3 py-1 shadow-sm">
                     <span class="material-icons-outlined text-[14px] text-blue-500">inventory_2</span>
                     <span class="text-[11px] font-semibold text-gray-600">
-                        <span class="text-blue-600 font-bold">{{ discountRemainingProducts | number }}</span>
+                        <span class="text-blue-600 font-bold">{{ remainingProductsQuota | number }}</span>
                         / {{ totalCatalogProducts | number }} products remaining
                     </span>
                     <!-- Progress bar -->
                     <div class="w-20 h-1.5 bg-gray-200 rounded-full overflow-hidden ml-1">
                         <div class="h-full rounded-full transition-all duration-500"
-                            [style.width.%]="(discountedProductCount / totalCatalogProducts) * 100"
-                            [ngClass]="discountRemainingProducts === 0 ? 'bg-red-500' : (discountedProductCount / totalCatalogProducts > 0.75 ? 'bg-orange-400' : 'bg-blue-500')">
+                            [style.width.%]="(usedQuotaCount / totalCatalogProducts) * 100"
+                            [ngClass]="remainingProductsQuota === 0 ? 'bg-red-500' : (usedQuotaCount / totalCatalogProducts > 0.75 ? 'bg-orange-400' : 'bg-blue-500')">
                         </div>
                     </div>
                 </div>
@@ -246,6 +246,17 @@
                     class="w-full h-[40px] flex items-center justify-center bg-white border border-gray-400 rounded-lg text-sm font-bold text-gray-700 hover:bg-gray-50 transition-colors shadow-sm">
                     Select products
                 </button>
+
+                <!-- Selected Products Count Summary for Discounts -->
+                <div *ngIf="persistentSelectedGroups.size > 0 || persistentSelectedIndividuals.size > 0"
+                    class="bg-blue-50 border border-blue-100 rounded-xl p-3 flex justify-between items-center">
+                    <span class="text-[12px] font-bold text-blue-700 truncate">
+                        {{ persistentSelectedGroups.size }} Product Group{{ persistentSelectedGroups.size !== 1 ? 's' :
+                        '' }}, {{ persistentSelectedIndividuals.size }} Product{{ persistentSelectedIndividuals.size !==
+                        1 ? 's' : '' }} selected
+                    </span>
+                    <span class="material-icons-outlined text-blue-500 text-[18px]">check_circle</span>
+                </div>
 
                 <!-- Discount Value Input -->
                 <div class="bg-white border border-gray-400 rounded-lg p-2 h-[52px] flex flex-col justify-center focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all"
@@ -598,26 +609,25 @@
         <!-- Footer -->
         <div class="px-6 py-4 border-t border-gray-200 bg-white flex justify-between items-center gap-3 rounded-b-xl">
 
-            <!-- Quota Counter (Discounts only) -->
-            <div *ngIf="selectorCalledFrom === 'discounts'" class="flex items-center gap-3">
+            <!-- Quota Counter -->
+            <div class="flex items-center gap-3">
                 <!-- Progress bar -->
                 <div class="flex flex-col gap-1">
                     <span class="text-[11px] text-gray-500">
                         <span class="font-bold"
-                            [ngClass]="discountLiveRemaining === 0 ? 'text-red-500' : ((totalCatalogProducts - discountLiveRemaining) / totalCatalogProducts > 0.75 ? 'text-orange-500' : 'text-blue-600')">
-                            {{ discountLiveRemaining | number }}
+                            [ngClass]="liveQuotaRemaining === 0 ? 'text-red-500' : ((totalCatalogProducts - liveQuotaRemaining) / totalCatalogProducts > 0.75 ? 'text-orange-500' : 'text-blue-600')">
+                            {{ liveQuotaRemaining | number }}
                         </span>
-                        of {{ totalCatalogProducts | number }} products remaining for discounts
+                        of {{ totalCatalogProducts | number }} products remaining
                     </span>
                     <div class="w-48 h-1.5 bg-gray-200 rounded-full overflow-hidden">
                         <div class="h-full rounded-full transition-all duration-500"
-                            [style.width.%]="((totalCatalogProducts - discountLiveRemaining) / totalCatalogProducts) * 100"
-                            [ngClass]="discountLiveRemaining === 0 ? 'bg-red-500' : ((totalCatalogProducts - discountLiveRemaining) / totalCatalogProducts > 0.75 ? 'bg-orange-400' : 'bg-blue-500')">
+                            [style.width.%]="((totalCatalogProducts - liveQuotaRemaining) / totalCatalogProducts) * 100"
+                            [ngClass]="liveQuotaRemaining === 0 ? 'bg-red-500' : ((totalCatalogProducts - liveQuotaRemaining) / totalCatalogProducts > 0.75 ? 'bg-orange-400' : 'bg-blue-500')">
                         </div>
                     </div>
                 </div>
             </div>
-            <div *ngIf="selectorCalledFrom !== 'discounts'"></div>
 
             <div class="flex items-center gap-3">
                 <button (click)="closeProductSelector()"

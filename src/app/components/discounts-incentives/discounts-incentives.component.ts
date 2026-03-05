@@ -74,20 +74,22 @@ export class DiscountsIncentivesComponent implements OnChanges {
     activeDiscounts: any[] = [];
     activeIncentives: any[] = [];
 
-    // Product Quota Tracking (Discounts)
-    // Fixed business limit: max 999 products can receive discounts per quote
+    // Product Quota Tracking
+    // Fixed business limit: max 999 products can receive discounts/incentives per quote
     totalCatalogProducts: number = 999;
-    // Running total of product line items committed in all applied discounts
-    discountedProductCount: number = 0;
+    // Running total of product line items committed in all applied discounts/incentives
+    usedQuotaCount: number = 0;
 
-    get discountRemainingProducts(): number {
-        return Math.max(0, this.totalCatalogProducts - this.discountedProductCount);
+    get remainingProductsQuota(): number {
+        return Math.max(0, this.totalCatalogProducts - this.usedQuotaCount);
     }
 
     // Live remaining = quota minus already-committed minus currently-selected-in-modal
-    get discountLiveRemaining(): number {
-        const currentSelection = this.persistentSelectedGroups.size + this.persistentSelectedIndividuals.size;
-        return Math.max(0, this.totalCatalogProducts - this.discountedProductCount - currentSelection);
+    get liveQuotaRemaining(): number {
+        const currentSelection = this.selectorCalledFrom === 'incentives'
+            ? this.persistentIncentiveGroups.size
+            : this.persistentSelectedGroups.size + this.persistentSelectedIndividuals.size;
+        return Math.max(0, this.totalCatalogProducts - this.usedQuotaCount - currentSelection);
     }
 
     // Dropdown Options
@@ -156,7 +158,32 @@ export class DiscountsIncentivesComponent implements OnChanges {
     ngOnChanges(changes: SimpleChanges) {
         if (changes['productId'] && changes['productId'].currentValue && changes['productId'].currentValue !== changes['productId'].previousValue) {
             this.dataFetched = false; // Reset if product ID actually changes
+            this.resetAllState();
         }
+    }
+
+    resetAllState() {
+        this.activeDiscounts = [];
+        this.activeIncentives = [];
+        this.usedQuotaCount = 0;
+
+        this.persistentSelectedGroups.clear();
+        this.persistentSelectedIndividuals.clear();
+        this.persistentIncentiveGroups.clear();
+
+        this.productGroups = [];
+        this.individualProducts = [];
+
+        this.discountForm.value = '';
+        this.discountForm.granularity = 'Select';
+        this.discountForm.priceReference = 'Select';
+        this.incentiveForm.amount = '';
+        this.incentiveForm.type = 'Select';
+
+        this.discountPeriod.startDate = '';
+        this.discountPeriod.endDate = '';
+        this.incentivePeriod.startDate = '';
+        this.incentivePeriod.endDate = '';
     }
 
     fetchDropdownOptions() {
@@ -623,10 +650,10 @@ export class DiscountsIncentivesComponent implements OnChanges {
     }
 
     toggleItem(item: any) {
-        // Validation: Limit to 999 products for discounts
-        if (this.selectorCalledFrom === 'discounts' && !item.selected) {
-            if (this.discountLiveRemaining <= 0) {
-                this.toastService.show('Maximum limit of 999 products for discounts reached.', 'warning');
+        // Validation: Limit to 999 products
+        if (!item.selected) {
+            if (this.liveQuotaRemaining <= 0) {
+                this.toastService.show('Maximum limit of 999 products reached.', 'warning');
                 return;
             }
         }
@@ -763,9 +790,9 @@ export class DiscountsIncentivesComponent implements OnChanges {
         this.filteredItems.forEach(item => {
             const becomingSelected = !allSelected;
 
-            // Check limit only if we are selecting for discounts
-            if (becomingSelected && this.selectorCalledFrom === 'discounts' && !item.selected) {
-                if (this.discountLiveRemaining <= 0) {
+            // Check limit when selecting
+            if (becomingSelected && !item.selected) {
+                if (this.liveQuotaRemaining <= 0) {
                     blockedByLimit = true;
                     return; // Skip this one
                 }
@@ -1052,7 +1079,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
 
     private addDiscountToUI(granularity: string, groupCount: number, individualCount: number, value: string, committedProductCount: number = 0) {
         // Update the running quota
-        this.discountedProductCount += committedProductCount;
+        this.usedQuotaCount += committedProductCount;
         const newDiscount = {
             id: 'd' + Date.now(),
             title: `${granularity} Discount - Flat Rate (%)`,
@@ -1182,6 +1209,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
                     next: () => {
                         this.toastService.show('Incentive added successfully', 'success');
                         const groupCount = selectedGroups.length;
+                        this.usedQuotaCount += groupCount;
                         this.activeIncentives.unshift({
                             id: 'i' + Date.now(),
                             title: this.incentiveForm.type,

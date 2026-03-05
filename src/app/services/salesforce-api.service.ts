@@ -666,7 +666,7 @@ export class SalesforceApiService {
         const token = this.contextService.accessToken;
         const baseUrl = this.contextService.apiBaseUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com';
 
-        const query = `SELECT Id, Name, QuoteNumber, Status, GrandTotal, StartDate, ExpirationDate, Pricebook2Id, Opportunity.Name, Opportunity.Sales_Channel__c, Opportunity.Primary_Contact__c, Opportunity.Primary_Contact__r.Name, Account.Name, Account.Website, (SELECT Id, Product2Id, PricebookEntryId, Product2.Name, Product2.ProductCode, Quantity, UnitPrice, TotalPrice, ListPrice, StartDate, EndDate, Discount, NetUnitPrice FROM QuoteLineItems) FROM Quote WHERE Id='${quoteId}'`;
+        const query = `SELECT Id, Name, QuoteNumber, Status, GrandTotal, StartDate, ExpirationDate, Pricebook2Id, Opportunity.Name, Opportunity.Sales_Channel__c, Opportunity.Primary_Contact__c, Opportunity.Primary_Contact__r.Name, Account.Name, Account.Website, (SELECT Id, Product2Id, PricebookEntryId, Product2.Name, Product2.ProductCode, Quantity, UnitPrice, TotalPrice, ListPrice, StartDate, EndDate, Discount, Incentive__c, NetUnitPrice FROM QuoteLineItems) FROM Quote WHERE Id='${quoteId}'`;
         const encodedQuery = encodeURIComponent(query);
         const url = `${baseUrl}/services/data/v66.0/query/?q=${encodedQuery}`;
 
