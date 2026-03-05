@@ -13,6 +13,7 @@ export interface QuoteData {
     primaryContactName: string | null;
     salesChannel: string | null;
     productName: string | null; // Added productName for UI display
+    categoryId: string | null;
 }
 
 @Injectable({
@@ -30,7 +31,8 @@ export class QuoteDataService {
         quoteNumber: null,
         primaryContactName: null,
         salesChannel: null,
-        productName: null
+        productName: null,
+        categoryId: null
     });
 
     quoteData$ = this.quoteDataSubject.asObservable();
@@ -56,7 +58,8 @@ export class QuoteDataService {
             quoteNumber: null,
             primaryContactName: null,
             salesChannel: null,
-            productName: null
+            productName: null,
+            categoryId: null
         });
     }
 }

@@ -5,7 +5,25 @@
 
         <!-- Discount Period Card -->
         <div class="bg-[#f0f4f9] rounded-xl p-4 ">
-            <h3 class="text-base font-bold text-gray-800 mb-4">Discount period</h3>
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-base font-bold text-gray-800">Discount period</h3>
+
+                <!-- Product Quota Badge -->
+                <div class="flex items-center gap-2 bg-white border border-gray-200 rounded-full px-3 py-1 shadow-sm">
+                    <span class="material-icons-outlined text-[14px] text-blue-500">inventory_2</span>
+                    <span class="text-[11px] font-semibold text-gray-600">
+                        <span class="text-blue-600 font-bold">{{ discountRemainingProducts | number }}</span>
+                        / {{ totalCatalogProducts | number }} products remaining
+                    </span>
+                    <!-- Progress bar -->
+                    <div class="w-20 h-1.5 bg-gray-200 rounded-full overflow-hidden ml-1">
+                        <div class="h-full rounded-full transition-all duration-500"
+                            [style.width.%]="(discountedProductCount / totalCatalogProducts) * 100"
+                            [ngClass]="discountRemainingProducts === 0 ? 'bg-red-500' : (discountedProductCount / totalCatalogProducts > 0.75 ? 'bg-orange-400' : 'bg-blue-500')">
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                 <!-- Time Period -->
@@ -36,32 +54,35 @@
                 </div>
             </div>
 
-            <!-- Active Discounts List -->
-            <div *ngIf="activeDiscounts.length > 0" class="space-y-3 mb-4 max-h-[280px] overflow-y-auto pr-1">
-                <div *ngFor="let item of activeDiscounts"
-                    class="bg-white border border-gray-100 rounded-xl p-4 flex items-center gap-4 relative shadow-sm group">
-                    <div class="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600">
-                        <span class="material-icons-outlined text-[20px]">local_offer</span>
-                    </div>
-                    <div class="flex-1 min-w-0">
-                        <h4 class="text-sm font-bold text-gray-900 truncate">{{ item.title }}</h4>
-                        <p class="text-[11px] text-gray-500 mt-0.5 truncate">{{ item.subtext }}</p>
-                    </div>
-                    <div *ngIf="item.granularity === 'Overall'"
-                        class="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[11px] font-bold">
-                        {{ item.value }}
-                    </div>
-                    <div class="relative">
-                        <button class="p-1 cursor-default opacity-30">
-                            <span class="material-icons-outlined text-gray-400">more_vert</span>
-                        </button>
+            <!-- Active Discounts List + Empty State wrapped in scrollable container -->
+            <div class="min-h-[180px] max-h-[300px] overflow-y-auto pr-1">
+                <div *ngIf="activeDiscounts.length > 0" class="space-y-3">
+                    <div *ngFor="let item of activeDiscounts"
+                        class="bg-white border border-gray-100 rounded-xl p-4 flex items-center gap-4 relative shadow-sm group">
+                        <div class="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600">
+                            <span class="material-icons-outlined text-[20px]">local_offer</span>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <h4 class="text-sm font-bold text-gray-900 truncate">{{ item.title }}</h4>
+                            <p class="text-[11px] text-gray-500 mt-0.5 truncate">{{ item.subtext }}</p>
+                        </div>
+                        <div *ngIf="item.granularity === 'Overall'"
+                            class="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[11px] font-bold">
+                            {{ item.value }}
+                        </div>
+                        <div class="relative">
+                            <button class="p-1 cursor-default opacity-30">
+                                <span class="material-icons-outlined text-gray-400">more_vert</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Empty State -->
-            <div *ngIf="activeDiscounts.length === 0" class="bg-white rounded-lg py-8 flex items-center justify-center">
-                <span class="text-sm text-gray-500 font-medium">No Discounts yet</span>
+                <!-- Empty State -->
+                <div *ngIf="activeDiscounts.length === 0"
+                    class="h-full min-h-[180px] bg-white rounded-lg flex items-center justify-center">
+                    <span class="text-sm text-gray-500 font-medium">No Discounts yet</span>
+                </div>
             </div>
         </div>
 
@@ -98,44 +119,34 @@
                 </div>
             </div>
 
-            <!-- Active Incentives List -->
-            <div *ngIf="activeIncentives.length > 0" class="space-y-3 mb-4 max-h-[280px] overflow-y-auto pr-1">
-                <div *ngFor="let item of activeIncentives"
-                    class="bg-white border border-gray-100 rounded-xl p-4 flex items-center gap-4 relative shadow-sm group">
-                    <div class="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600">
-                        <span class="material-icons-outlined text-[20px]">card_giftcard</span>
-                    </div>
-                    <div class="flex-1 min-w-0">
-                        <h4 class="text-sm font-bold text-gray-900 truncate">{{ item.title }}</h4>
-                        <p class="text-[11px] text-gray-500 mt-0.5 truncate">{{ item.subtext }}</p>
-                    </div>
-                    <div class="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[11px] font-bold">
-                        {{ item.value }}
-                    </div>
-                    <div class="relative">
-                        <button class="p-1 cursor-default opacity-30">
-                            <span class="material-icons-outlined text-gray-400">more_vert</span>
-                        </button>
-                        <!-- Action Menu -->
-                        <div *ngIf="openActionMenuId === item.id"
-                            class="absolute right-0 top-8 w-32 bg-white border border-gray-100 shadow-xl rounded-lg z-20 py-1">
-                            <button
-                                class="w-full px-4 py-2 text-left text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2 cursor-default">
-                                <span class="material-icons-outlined text-sm text-gray-400">info</span> Placeholder
-                            </button>
-                            <button
-                                class="w-full px-4 py-2 text-left text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2 cursor-default">
-                                <span class="material-icons-outlined text-sm text-gray-400">help_outline</span> Dummy
+            <!-- Active Incentives List + Empty State wrapped in scrollable container -->
+            <div class="min-h-[180px] max-h-[300px] overflow-y-auto pr-1">
+                <div *ngIf="activeIncentives.length > 0" class="space-y-3">
+                    <div *ngFor="let item of activeIncentives"
+                        class="bg-white border border-gray-100 rounded-xl p-4 flex items-center gap-4 relative shadow-sm group">
+                        <div class="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600">
+                            <span class="material-icons-outlined text-[20px]">card_giftcard</span>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <h4 class="text-sm font-bold text-gray-900 truncate">{{ item.title }}</h4>
+                            <p class="text-[11px] text-gray-500 mt-0.5 truncate">{{ item.subtext }}</p>
+                        </div>
+                        <div class="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[11px] font-bold">
+                            {{ item.value }}
+                        </div>
+                        <div class="relative">
+                            <button class="p-1 cursor-default opacity-30">
+                                <span class="material-icons-outlined text-gray-400">more_vert</span>
                             </button>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Empty State -->
-            <div *ngIf="activeIncentives.length === 0"
-                class="bg-white rounded-lg py-8 flex items-center justify-center">
-                <span class="text-sm text-gray-500 font-medium">No incentives yet</span>
+                <!-- Empty State -->
+                <div *ngIf="activeIncentives.length === 0"
+                    class="h-full min-h-[180px] bg-white rounded-lg flex items-center justify-center">
+                    <span class="text-sm text-gray-500 font-medium">No incentives yet</span>
+                </div>
             </div>
         </div>
 
@@ -280,13 +291,19 @@
                 </div>
 
                 <!-- Selected Products Summary Bar -->
-                <div (click)="openProductSelector()"
-                    class="bg-blue-50 border border-blue-100 rounded-xl p-3 flex justify-between items-center cursor-pointer hover:bg-blue-100 transition-colors group">
+                <button (click)="openProductSelector('incentives')"
+                    class="w-full h-[40px] flex items-center justify-center bg-white border border-gray-400 rounded-lg text-sm font-bold text-gray-700 hover:bg-gray-50 transition-colors shadow-sm">
+                    Select products
+                </button>
+
+                <!-- Selected Products Count Summary -->
+                <div *ngIf="persistentIncentiveGroups.size > 0"
+                    class="bg-blue-50 border border-blue-100 rounded-xl p-3 flex justify-between items-center">
                     <span class="text-[12px] font-bold text-blue-700 truncate">
-                        {{ getSelectedCount('groups') }} Product Groups, {{ getSelectedCount('individual') }} Products
+                        {{ persistentIncentiveGroups.size }} Product Group{{ persistentIncentiveGroups.size !== 1 ? 's'
+                        : '' }} selected
                     </span>
-                    <span
-                        class="material-icons-outlined text-blue-500 text-[18px] group-hover:scale-110 transition-transform">edit</span>
+                    <span class="material-icons-outlined text-blue-500 text-[18px]">check_circle</span>
                 </div>
 
                 <!-- Amount & Currency -->
@@ -343,7 +360,8 @@
                         <span class="bg-blue-100 text-blue-700 text-[10px] px-1.5 py-0.5 rounded-full font-bold ml-1">{{
                             getSelectedCount('groups') }}</span>
                     </button>
-                    <button (click)="switchProductTab('individual')"
+                    <!-- Only show Individual Products tab for Discounts flow -->
+                    <button *ngIf="selectorCalledFrom === 'discounts'" (click)="switchProductTab('individual')"
                         class="py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2"
                         [ngClass]="productTab === 'individual' ? 'text-blue-600 border-blue-600' : 'text-gray-500 border-transparent hover:text-gray-700'">
                         Individual Products
@@ -402,7 +420,12 @@
                                 </span>
                                 <input type="text" [(ngModel)]="dropdownSearchText"
                                     (ngModelChange)="filterDropdownOptions()" placeholder="Search..."
-                                    class="w-full pl-8 pr-2 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:border-blue-500">
+                                    class="w-full pl-8 pr-8 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:border-blue-500">
+                                <span *ngIf="dropdownSearchText"
+                                    class="absolute inset-y-0 right-0 flex items-center pr-2 text-gray-400 hover:text-gray-600 cursor-pointer"
+                                    (click)="dropdownSearchText = ''; filterDropdownOptions()">
+                                    <span class="material-icons-outlined text-[16px]">close</span>
+                                </span>
                             </div>
                         </div>
 
@@ -436,8 +459,14 @@
                         <span class="material-icons-outlined text-[20px]">search</span>
                     </span>
                     <input type="text" [(ngModel)]="productSearchTerm" (keyup.enter)="onProductSearch()"
-                        placeholder="Search products..."
-                        class="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all">
+                        (ngModelChange)="onSearchTermChange($event)" placeholder="Search products..."
+                        class="w-full pl-10 pr-10 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all">
+                    <!-- Clear Cross -->
+                    <span *ngIf="productSearchTerm"
+                        class="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600 cursor-pointer"
+                        (click)="productSearchTerm = ''; onProductSearch()">
+                        <span class="material-icons-outlined text-[18px]">close</span>
+                    </span>
                 </div>
             </div>
         </div>
@@ -447,7 +476,12 @@
             <span
                 class="material-icons-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-[20px]">filter_list</span>
             <input type="text" [(ngModel)]="filterQuery" placeholder="Add a filter"
-                class="w-full pl-10 pr-4 py-3 bg-transparent text-sm outline-none placeholder-gray-500">
+                class="w-full pl-10 pr-10 py-3 bg-transparent text-sm outline-none placeholder-gray-500">
+            <span *ngIf="filterQuery"
+                class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 cursor-pointer flex items-center"
+                (click)="filterQuery = ''">
+                <span class="material-icons-outlined text-[20px]">close</span>
+            </span>
         </div>
 
         <!-- Loading State for Individual Products -->
@@ -498,7 +532,7 @@
                 <tbody class="divide-y divide-gray-100">
                     <tr *ngFor="let item of filteredItems" class="hover:bg-blue-50 transition-colors group">
                         <td class="w-12 px-4 py-4 text-center">
-                            <div (click)="toggleSelection(item)"
+                            <div (click)="toggleItem(item)"
                                 class="w-5 h-5 border rounded cursor-pointer flex items-center justify-center transition-colors"
                                 [ngClass]="item.selected ? 'bg-blue-600 border-blue-600' : 'border-gray-300 bg-white group-hover:border-blue-400'">
                                 <span *ngIf="item.selected"
@@ -562,15 +596,39 @@
         </div>
 
         <!-- Footer -->
-        <div class="px-6 py-4 border-t border-gray-200 bg-white flex justify-end gap-3 rounded-b-xl">
-            <button (click)="closeProductSelector()"
-                class="px-6 py-2 rounded-full text-sm font-bold border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors">
-                Cancel
-            </button>
-            <button (click)="confirmProductSelection()"
-                class="px-6 py-2 rounded-full text-sm font-bold bg-blue-700 text-white hover:bg-blue-800 transition-colors shadow-sm">
-                Confirm
-            </button>
+        <div class="px-6 py-4 border-t border-gray-200 bg-white flex justify-between items-center gap-3 rounded-b-xl">
+
+            <!-- Quota Counter (Discounts only) -->
+            <div *ngIf="selectorCalledFrom === 'discounts'" class="flex items-center gap-3">
+                <!-- Progress bar -->
+                <div class="flex flex-col gap-1">
+                    <span class="text-[11px] text-gray-500">
+                        <span class="font-bold"
+                            [ngClass]="discountLiveRemaining === 0 ? 'text-red-500' : ((totalCatalogProducts - discountLiveRemaining) / totalCatalogProducts > 0.75 ? 'text-orange-500' : 'text-blue-600')">
+                            {{ discountLiveRemaining | number }}
+                        </span>
+                        of {{ totalCatalogProducts | number }} products remaining for discounts
+                    </span>
+                    <div class="w-48 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                        <div class="h-full rounded-full transition-all duration-500"
+                            [style.width.%]="((totalCatalogProducts - discountLiveRemaining) / totalCatalogProducts) * 100"
+                            [ngClass]="discountLiveRemaining === 0 ? 'bg-red-500' : ((totalCatalogProducts - discountLiveRemaining) / totalCatalogProducts > 0.75 ? 'bg-orange-400' : 'bg-blue-500')">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div *ngIf="selectorCalledFrom !== 'discounts'"></div>
+
+            <div class="flex items-center gap-3">
+                <button (click)="closeProductSelector()"
+                    class="px-6 py-2 rounded-full text-sm font-bold border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors">
+                    Cancel
+                </button>
+                <button (click)="confirmProductSelection()"
+                    class="px-6 py-2 rounded-full text-sm font-bold bg-blue-700 text-white hover:bg-blue-800 transition-colors shadow-sm">
+                    Confirm
+                </button>
+            </div>
         </div>
 
     </div>

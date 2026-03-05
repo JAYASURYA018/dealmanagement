@@ -177,6 +177,8 @@ export class SalesforceApiService {
                             },
                             "Name": "DealManagement-" + today.getTime(),
                             "OpportunityId": opportunityId,
+
+
                             "Pricebook2Id": dynamicPricebookId,
                             "StartDate": startDateStr,
                             "ExpirationDate": expDateStr
@@ -200,12 +202,19 @@ export class SalesforceApiService {
                         "method": "POST"
                     };
 
+                    const startStr = item.startDate || new Date().toISOString().split('T')[0];
+                    const startObj = new Date(startStr);
+                    const endObj = new Date(startObj);
+                    endObj.setDate(endObj.getDate() + 45);
+                    const endStr = endObj.toISOString().split('T')[0];
+
                     const baseRecord: any = {
                         "attributes": baseAttributes,
                         "QuoteId": "@{refQuote.id}",
                         "Product2Id": item.id,
                         "PricebookEntryId": finalPBEId,
                         "Quantity": item.quantity || 1,
+
                         "StartDate": item.startDate || startDateStr,
                         "EndDate": expDateStr,
                         "PeriodBoundary": "Anniversary"

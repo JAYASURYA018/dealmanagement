@@ -9,12 +9,14 @@
 
     <!-- Search Pill -->
     <div class="relative w-full">
-        <input type="text" (input)="onSearch($event)"
-            [value]="searchQuery$ | async"
-            class="block w-full px-8 py-3.5 border-none rounded-full bg-[#f0f3f8] text-gray-900 placeholder-gray-500 font-normal focus:outline-none focus:ring-0 transition-all text-[15px]"
+        <input type="text" (input)="onSearch($event)" #searchInput [value]="searchQuery$ | async"
+            class="block w-full pl-8 pr-16 py-3.5 border-none rounded-full bg-[#f0f3f8] text-gray-900 placeholder-gray-500 font-normal focus:outline-none focus:ring-0 transition-all text-[15px]"
             placeholder="Search by keyword">
-        <div class="absolute inset-y-0 right-0 pr-8 flex items-center pointer-events-none">
-            <span class="material-icons text-gray-400 text-[20px]">search</span>
+        <div class="absolute inset-y-0 right-0 pr-8 flex items-center gap-2">
+            <span *ngIf="(searchQuery$ | async)"
+                class="material-icons text-gray-400 hover:text-gray-600 text-[20px] cursor-pointer"
+                (click)="clearSearch(searchInput)">close</span>
+            <span class="material-icons text-gray-400 text-[20px] pointer-events-none">search</span>
         </div>
     </div>
 </div>

@@ -260,7 +260,7 @@ export class RcaApiService {
         });
     }
 
-    searchProducts(searchTerm: string, categoryIds: string[]): Observable<any> {
+    searchProducts(searchTerm: string, categoryIds: string[], pageSize?: number, offset?: number): Observable<any> {
         const method = 'RcaApiService.searchProducts';
 
         return this.contextService.context$.pipe(
@@ -268,18 +268,26 @@ export class RcaApiService {
             switchMap(context => {
                 const providedToken = '00DDz000001qvYA!ARQAQE2ut._CySv0HuqzA58fQg2KQLcac4Eomg4keHeHi6SaaLi8m3e5R6_XFyXbm217O5tEzWvSRR82lg7htONLvNqSzO5g';
                 const token = context?.accessToken || providedToken;
+                const baseUrl = context?.apiBaseUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com';
 
-                // Static URL as requested
-                const url = `https://vector--rcaagivant.sandbox.my.salesforce.com/services/data/v65.0/connect/pcm/products?include=/products`;
+                // URL based on context or fallback
+                const url = `${baseUrl}/services/data/v65.0/connect/pcm/products?include=/products`;
 
                 if (!token) {
                     throw new Error('No access token available');
                 }
 
-                const body = {
+                const body: any = {
                     categoryIds: categoryIds,
                     searchTerm: searchTerm
                 };
+
+                if (pageSize !== undefined) {
+                    body.pageSize = pageSize;
+                }
+                if (offset !== undefined) {
+                    body.offset = offset;
+                }
 
                 console.log(`[API Request] ${method}`, { url, body });
 

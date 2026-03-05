@@ -103,7 +103,8 @@ export class CartComponent implements AfterViewInit, OnChanges {
                     const formatted = `Q-${quoteDetails.QuoteNumber}`;
                     this.quoteDataService.setQuoteData({
                         quoteId: quoteDetails.Id,
-                        quoteNumber: formatted
+                        quoteNumber: formatted,
+                        categoryId: cartItems[0] ? (cartItems[0] as any).categoryId : null
                     });
                 }
 

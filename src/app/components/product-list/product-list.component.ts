@@ -40,7 +40,8 @@ export class ProductListComponent implements OnInit {
                         family: rp.additionalFields?.Family || 'Other',
                         tags: [], // Static icons for now
                         productId: rp.id, // Store as productId as well for clarity
-                        pricebookEntryId: rp.defaultPrice?.pricebookEntryId || rp.pricebookEntryId
+                        pricebookEntryId: rp.defaultPrice?.pricebookEntryId || rp.pricebookEntryId,
+                        categoryId: rp.categories && rp.categories.length > 0 ? rp.categories[0].id : null
                     } as any;
                     return product;
                 });

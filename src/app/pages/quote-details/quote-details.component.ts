@@ -74,8 +74,9 @@ export class QuoteDetailsComponent implements OnInit {
     productId: string | null = null;
     bundleQuoteLineId: string | null = null;
     bundlePricebookEntryId: string | null = null;
-    website: string = '';
+    website: string | null = null;
     pricebookId: string | null = null;
+    categoryId: string | null = null;
     isGCP: boolean = false;
 
     // Dates
@@ -145,21 +146,7 @@ export class QuoteDetailsComponent implements OnInit {
                 return;
             }
 
-            const currentState = JSON.stringify({
-                commitments: this.commitmentPeriods,
-                startDate: this.startDate,
-                expirationDate: this.expirationDate
-            });
-
-            if (currentState === this.lastSavedCommitmentState) {
-                this.activeTab = tab;
-                return;
-            }
-
-            // Auto-save commitment before switching
-            this.executeCommitFlow(() => {
-                this.activeTab = tab;
-            }, true);
+            this.activeTab = tab;
             return;
         }
 
@@ -734,7 +721,12 @@ export class QuoteDetailsComponent implements OnInit {
         // Initially default Quote Start Date to today
         this.startDate = this.toIsoDateString(new Date());
         this.termStartInput = '';
-        this.expirationDate = '';
+
+        // Quote Expiration Date generally defaults to 45 days from today
+        const expiry = new Date();
+        expiry.setDate(expiry.getDate() + 45);
+        this.expirationDate = this.toIsoDateString(expiry);
+
         this.termEndDate = '';
 
 
@@ -765,6 +757,9 @@ export class QuoteDetailsComponent implements OnInit {
             if (quoteData.productName) {
                 this.productName = quoteData.productName;
                 this.initializeLookerDataIfNeeded();
+            }
+            if (quoteData.categoryId) {
+                this.categoryId = quoteData.categoryId;
             }
         });
 
@@ -1001,11 +996,9 @@ export class QuoteDetailsComponent implements OnInit {
     }
 
     buildPreviewCommitments(): any[] {
-        if (this.isLookerSubscription && this.subscriptionPeriods.length > 0) {
+        if (this.isLookerSubscription) {
             return this.buildSubscriptionPreview();
         }
-
-
         const start = this.startDate ? new Date(this.startDate) : new Date();
         const previews: any[] = [];
         let currentStartDate = new Date(start);
@@ -1581,17 +1574,12 @@ export class QuoteDetailsComponent implements OnInit {
 
     updateExpirationDate() {
         if (this.isLookerSubscription) {
-            // In subscription flow, the expiration date is set to a fixed default (Today + 45 days)
-            // and should not be recalculated or cleared here based on the anchor dates.
             this.updateTermFromDates();
             return;
         }
 
-        const anchorDate = this.startDate;
-
-        if (!anchorDate) {
+        if (!this.startDate) {
             this.expirationDate = '';
-            this.termEndDate = '';
             return;
         }
 
@@ -1600,20 +1588,11 @@ export class QuoteDetailsComponent implements OnInit {
             this.startDate = this.minDate;
         }
 
-        const totalMonths = this.totalTerms;
-        if (totalMonths <= 0) {
-            this.expirationDate = '';
-            return;
-        }
-
-        const termsToUse = totalMonths;
-        const parts = anchorDate.split('-');
-        const date = new Date(Date.UTC(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])));
-        date.setUTCMonth(date.getUTCMonth() + termsToUse);
-        date.setUTCDate(date.getUTCDate() - 1);
-        const isoDate = date.toISOString().split('T')[0];
-
-        this.expirationDate = isoDate;
+        // Quote Expiration Date is generally 45 days from Quote Start Date
+        const parts = this.startDate.split('-');
+        const expiry = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+        expiry.setDate(expiry.getDate() + 45);
+        this.expirationDate = this.toIsoDateString(expiry);
     }
 
 

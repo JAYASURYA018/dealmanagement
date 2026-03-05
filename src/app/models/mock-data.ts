@@ -6,6 +6,7 @@ export interface Product {
     tags: string[]; // e.g., 'Promotions', 'Commission multiplier'
     productId?: string; // Salesforce Product2Id
     pricebookEntryId?: string; // Pricebook Entry ID
+    categoryId?: string;
 }
 
 export interface ProductFamily {

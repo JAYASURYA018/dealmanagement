@@ -18,4 +18,9 @@ export class HeaderComponent {
         const input = event.target as HTMLInputElement;
         this.searchFilterService.setSearchQuery(input.value);
     }
+
+    clearSearch(input: HTMLInputElement) {
+        input.value = '';
+        this.searchFilterService.setSearchQuery('');
+    }
 }
