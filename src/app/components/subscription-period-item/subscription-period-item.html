@@ -170,7 +170,8 @@
                     <!-- Custom Dropdown List -->
                     <div *ngIf="activeRegionIndex === i"
                         class="absolute left-0 top-full mt-1 min-w-[280px] w-full bg-white rounded-lg shadow-2xl border border-gray-200 z-[9999] py-2 max-h-[250px] overflow-y-auto custom-scrollbar region-dropdown">
-                        <button *ngFor="let option of regionOptions" (click)="selectRegion(i, option); $event.stopPropagation()"
+                        <button *ngFor="let option of regionOptions"
+                            (click)="selectRegion(i, option); $event.stopPropagation()"
                             class="w-full text-left px-4 py-2.5 text-[13px] text-gray-700 hover:bg-blue-50 transition-colors">
                             {{ option }}
                         </button>

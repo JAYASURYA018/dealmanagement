@@ -366,6 +366,9 @@ export class SubscriptionPeriodItemComponent implements OnInit {
             this.period.discount = 0;
             event.target.value = 0;
         }
+        else if (value > 100) {
+            this.toastService.show('Warning: You are exceeding the 100% discount. This will result in a negative final value.', 'warning');
+        }
     }
 
     validateRowDiscount(event: any, row: UserTypeRow) {
@@ -373,6 +376,9 @@ export class SubscriptionPeriodItemComponent implements OnInit {
         if (value < 0) {
             row.discount = 0;
             event.target.value = 0;
+        }
+        else if (value > 100) {
+            this.toastService.show('Warning: You are exceeding the 100% discount. This will result in a negative final value.', 'warning');
         }
     }
 
