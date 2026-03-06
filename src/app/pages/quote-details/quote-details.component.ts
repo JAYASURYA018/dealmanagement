@@ -983,20 +983,7 @@ export class QuoteDetailsComponent implements OnInit {
 
         this.loadingService.show();
 
-        if (this.isLookerSubscription) {
-            // Subscription flow handles dates differently, skip patching
-            this.fetchQuotePreview(fullQuoteId);
-        } else {
-            this.sfApi.patchQuoteDates(fullQuoteId, this.startDate, this.expirationDate || this.startDate).subscribe({
-                next: () => {
-                    this.fetchQuotePreview(fullQuoteId);
-                },
-                error: (err) => {
-                    this.loadingService.hide();
-                    this.toastService.show('Failed to update quote dates for preview', 'error');
-                }
-            });
-        }
+        this.fetchQuotePreview(fullQuoteId);
 
         this.previewCommitments = this.buildPreviewCommitments();
     }
@@ -1486,7 +1473,7 @@ export class QuoteDetailsComponent implements OnInit {
 
                 if (!skipFeedback) {
                     this.toastService.show('Quote Data Saved Successfully!', 'success');
-                    this.capturePreviewScreenshot();
+                    this.showSuccessPopup = true;
                 }
                 if (onSuccess) onSuccess();
             },
@@ -2041,7 +2028,7 @@ export class QuoteDetailsComponent implements OnInit {
 
                         if (!skipFeedback) {
                             this.toastService.show('Quote Data Saved Successfully!', 'success');
-                            this.capturePreviewScreenshot();
+                            this.showSuccessPopup = true;
                         }
                         if (onSuccess) onSuccess();
                     },
