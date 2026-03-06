@@ -862,7 +862,7 @@
                                         {{ item.Discount != null ? item.Discount + '%' : '-' }}
                                     </td>
                                     <td class="border border-gray-300 px-3 py-2 text-sm text-right">
-                                        {{ item.Incentive__c != null ? item.Incentive__c + '%' : '-' }}
+                                        {{ item.Incentive__c != null ? item.Incentive__c : '-' }}
                                     </td>
                                     <td class="border border-gray-300 px-3 py-2 text-sm text-right font-medium">
                                         {{ item.NetUnitPrice != null ? formatCurrency(item.NetUnitPrice) :

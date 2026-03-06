@@ -234,6 +234,16 @@ export class DiscountsIncentivesComponent implements OnChanges {
 
     setActiveTab(tab: 'discounts' | 'incentives') {
         this.activeTab = tab;
+        if (tab === 'incentives') {
+            const quoteId = this.contextService.currentContext?.quoteId;
+            if (quoteId) {
+                // Fetch bundle quote line items when switching to incentives tab as requested
+                this.salesforceApiService.getBundleQuoteLineItems(quoteId).subscribe({
+                    next: (res) => console.log('✅ [Incentive Tab] Bundle Line Items fetched:', res),
+                    error: (err) => console.error('❌ [Incentive Tab] Failed to fetch bundle line items:', err)
+                });
+            }
+        }
     }
 
     // Dropdown Handlers
@@ -1153,8 +1163,16 @@ export class DiscountsIncentivesComponent implements OnChanges {
                     )
                 );
 
-                forkJoin(pbeRequests.length > 0 ? pbeRequests : [of([])]).pipe(
-                    switchMap((pbeResults: any[]) => {
+                const quoteLinesRequest = this.salesforceApiService.getBundleQuoteLineItems(quoteId).pipe(
+                    catchError(() => of({ records: [] }))
+                );
+
+                forkJoin({
+                    pbeResults: pbeRequests.length > 0 ? forkJoin(pbeRequests) : of([]),
+                    quoteLines: quoteLinesRequest
+                }).pipe(
+                    switchMap(({ pbeResults, quoteLines }: any) => {
+                        const existingLines = quoteLines?.records || [];
                         const records: any[] = [
                             {
                                 "referenceId": "refQuote",
@@ -1168,24 +1186,36 @@ export class DiscountsIncentivesComponent implements OnChanges {
                             const pbeResult: any = Array.isArray(pbeResults) ? pbeResults.find((r: any) => r.itemId === item.id) : null;
                             const finalPbeId = pbeResult?.pbeId || item.pbeId || '01uDz00000dqLY8IAM';
 
-                            records.push({
-                                "referenceId": `refQuoteLine${index}`,
-                                "record": {
-                                    "attributes": { "type": "QuoteLineItem", "method": "POST" },
-                                    "QuoteId": quoteId,
-                                    "Product2Id": item.id,
-                                    "PricebookEntryId": finalPbeId,
-                                    "StartDate": this.incentivePeriod.startDate,
-                                    "EndDate": this.incentivePeriod.endDate,
-                                    "Incentive__c": amount,
-                                    "PeriodBoundary": "Anniversary",
-                                    "Quantity": 1
-                                }
-                            });
+                            const existingLine = existingLines.find((ql: any) => ql.Product2Id === item.id);
+
+                            if (existingLine && existingLine.Id) {
+                                records.push({
+                                    "referenceId": `refLineUpdate_${index}`,
+                                    "record": {
+                                        "attributes": { "type": "QuoteLineItem", "method": "PATCH", "id": existingLine.Id },
+                                        "Incentive__c": amount
+                                    }
+                                });
+                            } else {
+                                records.push({
+                                    "referenceId": `refLineUpdate_${index}`,
+                                    "record": {
+                                        "attributes": { "type": "QuoteLineItem", "method": "POST" },
+                                        "QuoteId": quoteId,
+                                        "Product2Id": item.id,
+                                        "PricebookEntryId": finalPbeId,
+                                        "StartDate": this.incentivePeriod.startDate,
+                                        "EndDate": this.incentivePeriod.endDate,
+                                        "Incentive__c": amount,
+                                        "PeriodBoundary": "Anniversary",
+                                        "Quantity": 1
+                                    }
+                                });
+                            }
                         });
 
                         const payload = {
-                            "pricingPref": "System",
+                            "pricingPref": "Skip",
                             "catalogRatesPref": "Skip",
                             "configurationPref": {
                                 "configurationMethod": "Skip",
@@ -1193,13 +1223,13 @@ export class DiscountsIncentivesComponent implements OnChanges {
                                     "validateProductCatalog": true,
                                     "validateAmendRenewCancel": true,
                                     "executeConfigurationRules": true,
-                                    "addDefaultConfiguration": true
+                                    "addDefaultConfiguration": false
                                 }
                             },
                             "taxPref": "Skip",
                             "contextDetails": {},
                             "graph": {
-                                "graphId": "createQuoteWithLines",
+                                "graphId": "insert_incentive",
                                 "records": records
                             }
                         };

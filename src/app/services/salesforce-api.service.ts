@@ -424,6 +424,34 @@ export class SalesforceApiService {
     }
 
     /**
+     * Fetches Bundle QuoteLineItems for a given Quote ID
+     * @param quoteId The Salesforce Quote ID
+     * @returns Observable containing Bundle QuoteLineItems
+     */
+    getBundleQuoteLineItems(quoteId: string): Observable<any> {
+        const method = 'SalesforceApiService.getBundleQuoteLineItems';
+        const token = this.contextService.accessToken;
+        const baseUrl = this.contextService.apiBaseUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com';
+
+        // Exact query requested by the user for v60.0
+        const query = `SELECT Id,Product2Id,Product2.Name,Product2.Type FROM QuoteLineItem WHERE QuoteId='${quoteId}' AND Product2.Type='Bundle'`;
+        const encodedQuery = encodeURIComponent(query).replace(/'/g, "%27"); // ensure quotes are properly handled if needed, encodeURIComponent does not encode '
+        const url = `${baseUrl}/services/data/v60.0/query/?q=SELECT+Id,Product2Id,Product2.Name,Product2.Type+FROM+QuoteLineItem+WHERE+QuoteId='${quoteId}'+AND+Product2.Type='Bundle'`;
+
+        console.log(`[API Request] ${method}`, { url, quoteId });
+
+        const headers = new HttpHeaders({
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        });
+
+        return this.http.get(url, { headers }).pipe(
+            tap(response => console.log(`[API Response] ${method}`, response)),
+            catchError(err => this.handleError(method, err))
+        );
+    }
+
+    /**
      * Creates Commitment Details records using composite tree API
      * @param records Array of commitment records to create
      * @returns Observable of the creation result
