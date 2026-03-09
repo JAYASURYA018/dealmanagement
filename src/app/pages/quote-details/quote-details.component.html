@@ -831,11 +831,14 @@
                                     <th
                                         class="border border-gray-300 px-3 py-2 text-center text-xs font-bold uppercase">
                                         Unit</th>
-                                    <th class="border border-gray-300 px-3 py-2 text-right text-xs font-bold uppercase">
+                                    <th *ngIf="!isLookerSubscription"
+                                        class="border border-gray-300 px-3 py-2 text-right text-xs font-bold uppercase">
                                         Additional discount</th>
-                                    <th class="border border-gray-300 px-3 py-2 text-right text-xs font-bold uppercase">
+                                    <th *ngIf="!isLookerSubscription"
+                                        class="border border-gray-300 px-3 py-2 text-right text-xs font-bold uppercase">
                                         Incentive</th>
-                                    <th class="border border-gray-300 px-3 py-2 text-right text-xs font-bold uppercase">
+                                    <th *ngIf="!isLookerSubscription"
+                                        class="border border-gray-300 px-3 py-2 text-right text-xs font-bold uppercase">
                                         Discounted Price</th>
                                 </tr>
                             </thead>
@@ -858,19 +861,22 @@
                                     <td class="border border-gray-300 px-3 py-2 text-sm text-center">
                                         {{ item.Quantity | number:'1.2-2' }}
                                     </td>
-                                    <td class="border border-gray-300 px-3 py-2 text-sm text-right">
+                                    <td *ngIf="!isLookerSubscription"
+                                        class="border border-gray-300 px-3 py-2 text-sm text-right">
                                         {{ item.Discount != null ? item.Discount + '%' : '-' }}
                                     </td>
-                                    <td class="border border-gray-300 px-3 py-2 text-sm text-right">
-                                        {{ item.Incentive__c != null ? item.Incentive__c : '-' }}
+                                    <td *ngIf="!isLookerSubscription"
+                                        class="border border-gray-300 px-3 py-2 text-sm text-right">
+                                        {{ item.Incentive__c != null ? item.Incentive__c + '%' : '-' }}
                                     </td>
-                                    <td class="border border-gray-300 px-3 py-2 text-sm text-right font-medium">
+                                    <td *ngIf="!isLookerSubscription"
+                                        class="border border-gray-300 px-3 py-2 text-sm text-right font-medium">
                                         {{ item.NetUnitPrice != null ? formatCurrency(item.NetUnitPrice) :
                                         (item.UnitPrice != null ? formatCurrency(item.UnitPrice) : '-') }}
                                     </td>
                                 </tr>
                                 <tr *ngIf="!previewData.QuoteLineItems?.records?.length">
-                                    <td colspan="9"
+                                    <td [attr.colspan]="isLookerSubscription ? 6 : 9"
                                         class="border border-gray-300 px-3 py-4 text-center text-sm text-gray-500">
                                         No products added to this quote
                                     </td>
