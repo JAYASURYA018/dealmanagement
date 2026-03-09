@@ -142,6 +142,48 @@ export class RcaApiService {
         );
     }
 
+    facetedProductSearch(classificationId: string, criteria: any[], pageSize: number = 20, offset: number = 0): Observable<any> {
+        const method = 'RcaApiService.facetedProductSearch';
+
+        return this.contextService.context$.pipe(
+            take(1),
+            switchMap(context => {
+                const providedToken = '00DDz000001qvYA!ARQAQE2ut._CySv0HuqzA58fQg2KQLcac4Eomg4keHeHi6SaaLi8m3e5R6_XFyXbm217O5tEzWvSRR82lg7htONLvNqSzO5g';
+                const token = context?.accessToken || providedToken;
+                const baseUrl = context?.apiBaseUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com';
+
+                if (!token) {
+                    throw new Error('No access token available');
+                }
+
+                const url = `${baseUrl}/services/data/v65.0/connect/pcm/products?productClassificationId=${classificationId}&include=/products`;
+
+                const body = {
+                    language: 'en_US',
+                    filter: {
+                        criteria: criteria
+                    },
+                    offset: offset,
+                    pageSize: pageSize
+                };
+
+                console.log(`[API Request] ${method}`, { url, body });
+
+                const headers = new HttpHeaders({
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                });
+
+                return this.http.post<any>(url, body, { headers });
+            }),
+            tap(response => console.log(`[API Response] ${method}`, response)),
+            catchError(err => {
+                console.error(`[API Error] ${method}`, err);
+                return of({ products: [] });
+            })
+        );
+    }
+
     getDropdownOptions(parentBundleId: string): Observable<any> {
         const method = 'RcaApiService.getDropdownOptions';
         const query = `SELECT Id, Name, Code, It_has_Bundle_Products__c, No_Of_Child_Products__c, Status FROM ProductClassification WHERE Parent_Bundle_Product_ID__c = '${parentBundleId}' AND It_has_Bundle_Products__c = false`;

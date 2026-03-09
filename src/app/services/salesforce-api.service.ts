@@ -824,4 +824,28 @@ export class SalesforceApiService {
             catchError(err => this.handleError(method, err))
         );
     }
+
+    /**
+     * Fetches picklist values for Product2 fields
+     * @returns Observable of picklist values response
+     */
+    getProductPicklistValues(): Observable<any> {
+        const method = 'SalesforceApiService.getProductPicklistValues';
+        const token = this.contextService.accessToken;
+        const baseUrl = this.contextService.apiBaseUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com';
+
+        const url = `${baseUrl}/services/data/v65.0/ui-api/object-info/Product2/picklist-values/012000000000000AAA/`;
+
+        console.log(`[API Request] ${method}`, { url });
+
+        const headers = new HttpHeaders({
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        });
+
+        return this.http.get(url, { headers }).pipe(
+            tap(response => console.log(`[API Response] ${method}`, response)),
+            catchError(err => this.handleError(method, err))
+        );
+    }
 }

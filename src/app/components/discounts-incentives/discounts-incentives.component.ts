@@ -6,7 +6,8 @@ import { SalesforceApiService } from '../../services/salesforce-api.service';
 import { ContextService } from '../../services/context.service';
 import { ToastService } from '../../services/toast.service';
 import { LoadingService } from '../../services/loading.service';
-import { finalize, forkJoin, map, catchError, of, switchMap, lastValueFrom } from 'rxjs';
+import { finalize, forkJoin, map, catchError, of, switchMap, lastValueFrom, Subject, Observable } from 'rxjs';
+import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { FormsModule } from '@angular/forms';
 
 @Component({
@@ -141,6 +142,14 @@ export class DiscountsIncentivesComponent implements OnChanges {
 
     productSearchTerm: string = '';
     rootClassificationId: string = '11BDz00000000NvMAI'; // ID for fetching sibling bundles (e.g., NvMAI)
+
+    // Faceted Filter State
+    showFacetedFilter = false;
+    isFacetedFilterLoading = false;
+    facetedFilterData = {
+        billingFrequencies: [] as { label: string; value: string; selected: boolean }[],
+        regions: [] as { label: string; value: string; selected: boolean }[]
+    };
 
     constructor(
         private rcaApiService: RcaApiService,
@@ -461,13 +470,52 @@ export class DiscountsIncentivesComponent implements OnChanges {
 
         this.individualCurrentOffset = 0; // Reset offset on new search
 
-        if (!this.categoryId) {
-            console.warn('[onProductSearch] No category ID found for search.');
-            this.toastService.show('Unable to determine product category for search.', 'warning');
+        if (!this.selectedDropdownOption || !this.selectedDropdownOption.Id) {
+            console.warn('[onProductSearch] No category/dropdown option selected for search.');
+            this.toastService.show('Please select a product category first.', 'warning');
             return;
         }
 
         this.executeSearch();
+    }
+
+    // Parses search text, generates criteria payload if any comma-separated values match the picklist.
+    private evaluateSearchAndBuildCriteria(term: string): any[] {
+        const criteria: any[] = [];
+        // Extract comma-separated raw values
+        const tokens = term.split(',').map(t => t.trim()).filter(t => t.length > 0);
+
+        // We check every token against region and billing frequency data arrays
+        for (const token of tokens) {
+            // Check if token perfectly matches any region option (case insensitive)
+            const matchedRegion = this.facetedFilterData.regions.find(
+                r => r.value.toLowerCase() === token.toLowerCase() || r.label.toLowerCase() === token.toLowerCase()
+            );
+
+            if (matchedRegion) {
+                criteria.push({
+                    "property": "RCA_Region__c",
+                    "operator": "eq",
+                    "value": matchedRegion.value
+                });
+                continue; // Move to next token
+            }
+
+            // Check if token perfectly matches any billing frequency option (case insensitive)
+            const matchedFrequency = this.facetedFilterData.billingFrequencies.find(
+                b => b.value.toLowerCase() === token.toLowerCase() || b.label.toLowerCase() === token.toLowerCase()
+            );
+
+            if (matchedFrequency) {
+                criteria.push({
+                    "property": "RCA_Billing_Frequency__c",
+                    "operator": "eq",
+                    "value": matchedFrequency.value
+                });
+            }
+        }
+
+        return criteria;
     }
 
     executeSearch() {
@@ -482,7 +530,19 @@ export class DiscountsIncentivesComponent implements OnChanges {
         }
 
         this.isIndividualLoading = true;
-        this.currentProductReq = this.rcaApiService.searchProducts(this.productSearchTerm, [this.categoryId!], this.individualPageSize, this.individualCurrentOffset).pipe(
+
+        let searchRequest$: Observable<any>;
+        const facetCriteria = this.evaluateSearchAndBuildCriteria(this.productSearchTerm);
+
+        if (facetCriteria.length > 0) {
+            console.log('[executeSearch] Found matching Facet Criteria. Executing facetedSearch API...Payload:', facetCriteria);
+            searchRequest$ = this.rcaApiService.facetedProductSearch(this.selectedDropdownOption.Id, facetCriteria, this.individualPageSize, this.individualCurrentOffset);
+        } else {
+            console.log('[executeSearch] Normal text search. Executing standard search API...');
+            searchRequest$ = this.rcaApiService.searchProducts(this.productSearchTerm, [this.categoryId!], this.individualPageSize, this.individualCurrentOffset);
+        }
+
+        this.currentProductReq = searchRequest$.pipe(
             finalize(() => this.isIndividualLoading = false)
         ).subscribe({
             next: (data) => {
@@ -646,6 +706,44 @@ export class DiscountsIncentivesComponent implements OnChanges {
         }
 
         this.closeProductSelector();
+    }
+
+    // Faceted Filter Methods
+    toggleFacetedFilter(event: Event) {
+        event.stopPropagation();
+        this.showFacetedFilter = !this.showFacetedFilter;
+        if (this.showFacetedFilter && this.facetedFilterData.billingFrequencies.length === 0) {
+            this.loadFacetedFilterOptions();
+        }
+    }
+
+    loadFacetedFilterOptions() {
+        if (this.facetedFilterData.billingFrequencies.length > 0 || this.isFacetedFilterLoading) {
+            return;
+        }
+        this.isFacetedFilterLoading = true;
+        this.salesforceApiService.getProductPicklistValues().subscribe({
+            next: (res: any) => {
+                const fields = res?.picklistFieldValues || {};
+
+                const billingFrequencies = fields.RCA_Billing_Frequency__c?.values || [];
+                this.facetedFilterData.billingFrequencies = billingFrequencies.map((v: any) => ({ label: v.label, value: v.value, selected: false }));
+
+                const regions = fields.RCA_Region__c?.values || [];
+                this.facetedFilterData.regions = regions.map((v: any) => ({ label: v.label, value: v.value, selected: false }));
+
+                this.isFacetedFilterLoading = false;
+            },
+            error: (err) => {
+                console.error('Failed to load picklist values', err);
+                this.isFacetedFilterLoading = false;
+                this.toastService.show('Failed to load filter options', 'error');
+            }
+        });
+    }
+
+    closeFacetedFilter() {
+        this.showFacetedFilter = false;
     }
 
     closeProductSelector() {
