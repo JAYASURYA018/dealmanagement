@@ -51,15 +51,16 @@
                 <!-- Start Date -->
                 <div class="bg-white p-2 rounded-lg h-[52px] flex flex-col justify-center relative">
                     <label class="text-[11px] text-gray-500 mb-0.5 ml-1">Start date</label>
-                    <input type="date" [(ngModel)]="dPeriod.startDate" [min]="minDate"
-                        (ngModelChange)="validateDiscountDates(dPeriod)"
+                    <input type="date" [(ngModel)]="dPeriod.startDate" [min]="quoteStartDate || minDate"
+                        [max]="quoteEndDate" (ngModelChange)="validateDiscountDates(dPeriod)"
                         class="w-full bg-transparent text-sm font-medium text-gray-900 outline-none cursor-pointer"
                         placeholder="Select date">
                 </div>
                 <!-- End Date -->
                 <div class="bg-white p-2 rounded-lg h-[52px] flex flex-col justify-center relative">
                     <label class="text-[11px] text-gray-500 mb-0.5 ml-1">End date</label>
-                    <input type="date" [(ngModel)]="dPeriod.endDate" [min]="dPeriod.startDate || minDate"
+                    <input type="date" [(ngModel)]="dPeriod.endDate"
+                        [min]="dPeriod.startDate || quoteStartDate || minDate" [max]="quoteEndDate"
                         (ngModelChange)="validateDiscountDates(dPeriod)"
                         class="w-full bg-transparent text-sm font-medium text-gray-900 outline-none cursor-pointer"
                         placeholder="Select date">
@@ -98,7 +99,7 @@
             </div>
         </div>
 
-        <button (click)="addDiscountPeriod()"
+        <button *ngIf="discountPeriods.length < 2" (click)="addDiscountPeriod()"
             class="mb-6 flex items-center gap-2 px-4 py-2 border border-blue-200 rounded-lg text-sm font-bold text-blue-600 bg-white hover:bg-blue-50 transition-colors w-fit">
             <span class="material-icons-outlined text-[18px]">add_circle_outline</span>
             Add another discount period
@@ -131,15 +132,16 @@
                 <!-- Start Date -->
                 <div class="bg-white p-2 rounded-lg h-[52px] flex flex-col justify-center relative">
                     <label class="text-[11px] text-gray-500 mb-0.5 ml-1">Start date</label>
-                    <input type="date" [(ngModel)]="iPeriod.startDate" [min]="minDate"
-                        (ngModelChange)="validateIncentiveDates(iPeriod)"
+                    <input type="date" [(ngModel)]="iPeriod.startDate" [min]="quoteStartDate || minDate"
+                        [max]="quoteEndDate" (ngModelChange)="validateIncentiveDates(iPeriod)"
                         class="w-full bg-transparent text-sm font-medium text-gray-900 outline-none cursor-pointer"
                         placeholder="Select date">
                 </div>
                 <!-- End Date -->
                 <div class="bg-white p-2 rounded-lg h-[52px] flex flex-col justify-center relative">
                     <label class="text-[11px] text-gray-500 mb-0.5 ml-1">End date</label>
-                    <input type="date" [(ngModel)]="iPeriod.endDate" [min]="iPeriod.startDate || minDate"
+                    <input type="date" [(ngModel)]="iPeriod.endDate"
+                        [min]="iPeriod.startDate || quoteStartDate || minDate" [max]="quoteEndDate"
                         (ngModelChange)="validateIncentiveDates(iPeriod)"
                         class="w-full bg-transparent text-sm font-medium text-gray-900 outline-none cursor-pointer"
                         placeholder="Select date">
@@ -344,23 +346,6 @@
                     <span class="material-icons-outlined text-blue-500 text-[18px]">check_circle</span>
                 </div>
 
-                <!-- Amount & Currency -->
-                <div class="grid grid-cols-2 gap-3">
-                    <div
-                        class="bg-white border border-gray-400 rounded-lg p-2 h-[52px] flex flex-col justify-center focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all">
-                        <label class="text-[11px] text-gray-500 mb-0.5">Amount</label>
-                        <input type="text" [(ngModel)]="incentiveForm.amount" placeholder="$50,000"
-                            (keydown)="restrictNumeric($event)"
-                            class="w-full outline-none text-sm font-medium text-gray-900 placeholder-gray-400">
-                    </div>
-                    <div
-                        class="bg-gray-50 border border-transparent rounded-lg p-2 h-[52px] flex flex-col justify-center opacity-60">
-                        <label class="text-[11px] text-gray-500 mb-0.5">Currency</label>
-                        <input type="text" [value]="incentiveForm.currency" disabled
-                            class="w-full bg-transparent outline-none text-sm font-medium text-gray-900">
-                    </div>
-                </div>
-
                 <!-- Add Button -->
                 <button (click)="addIncentive()"
                     class="w-full h-[40px] flex items-center justify-center bg-[#0b57d0] rounded-full text-sm font-bold text-white hover:bg-blue-700 transition-colors shadow-md mt-4">
@@ -418,8 +403,7 @@
                                 <span class="material-icons-outlined text-[20px]">search</span>
                             </span>
                             <input type="text" [(ngModel)]="productSearchTerm" (keyup.enter)="onProductSearch()"
-                                (ngModelChange)="onSearchTermChange($event)" (click)="loadFacetedFilterOptions()"
-                                placeholder="Search products..."
+                                (ngModelChange)="onSearchTermChange($event)" placeholder="Search products..."
                                 class="w-full pl-10 pr-10 py-1.5 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all">
                             <!-- Clear Cross -->
                             <span *ngIf="productSearchTerm"
@@ -456,23 +440,21 @@
                 </button>
             </div>
 
-            <!-- Classification Dropdown for Individual Products -->
-            <div *ngIf="productTab === 'individual' && !isLoading" class="flex items-center gap-4 relative z-20">
-                <!-- Dropdown Trigger -->
+            <!-- Classification + Region + Billing Frequency Dropdowns for Individual Products -->
+            <div *ngIf="productTab === 'individual' && !isLoading"
+                class="flex items-center gap-3 relative z-20 flex-wrap">
+
+                <!-- Classification Dropdown -->
                 <div class="relative">
                     <button (click)="toggleDropdown()"
-                        class="flex items-center justify-between min-w-[300px] max-w-[400px] px-3 py-1.5 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[36px]">
+                        class="flex items-center justify-between min-w-[160px] max-w-[260px] px-3 py-1.5 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[36px]">
                         <span class="block truncate text-xs font-bold text-gray-700">
                             {{ selectedDropdownOption ? selectedDropdownOption.Name : 'Select Classification' }}
                         </span>
                         <span class="material-icons-outlined text-gray-400 text-[18px]">arrow_drop_down</span>
                     </button>
-
-                    <!-- Dropdown Menu -->
                     <div *ngIf="isDropdownOpen"
                         class="absolute mt-1 w-64 bg-white border border-gray-300 rounded-md shadow-lg z-50">
-
-                        <!-- Sticky Search Input -->
                         <div class="p-2 border-b border-gray-200 sticky top-0 bg-white rounded-t-md">
                             <div class="relative">
                                 <span class="absolute inset-y-0 left-0 flex items-center pl-2 text-gray-400">
@@ -488,8 +470,6 @@
                                 </span>
                             </div>
                         </div>
-
-                        <!-- Options List -->
                         <div class="max-h-60 overflow-y-auto">
                             <div *ngFor="let option of filteredDropdownOptions" (click)="selectDropdownOption(option)"
                                 class="px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 cursor-pointer flex items-center justify-between">
@@ -505,8 +485,91 @@
                     </div>
                 </div>
 
-                <!-- Backdrop to close dropdown -->
-                <div *ngIf="isDropdownOpen" (click)="isDropdownOpen = false" class="fixed inset-0 z-40 bg-transparent">
+                <!-- Region Dropdown -->
+                <div class="relative">
+                    <button (click)="regionDropdownOpen = !regionDropdownOpen; billingDropdownOpen = false"
+                        class="flex items-center justify-between min-w-[140px] px-3 py-1.5 bg-white border rounded-md shadow-sm hover:bg-gray-50 min-h-[36px] text-xs font-bold transition-colors"
+                        [ngClass]="selectedRegion ? 'border-blue-500 text-blue-700' : 'border-gray-300 text-gray-700'">
+                        <span class="truncate">{{ selectedRegion ? selectedRegion.label : 'Region' }}</span>
+                        <span *ngIf="selectedRegion" class="material-icons-outlined text-[14px] ml-1 text-blue-500"
+                            (click)="$event.stopPropagation(); selectRegion(null)">close</span>
+                        <span *ngIf="!selectedRegion"
+                            class="material-icons-outlined text-gray-400 text-[18px]">arrow_drop_down</span>
+                    </button>
+                    <div *ngIf="regionDropdownOpen"
+                        class="absolute mt-1 w-52 bg-white border border-gray-300 rounded-md shadow-lg z-50">
+                        <div class="p-2 border-b border-gray-100">
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-0 flex items-center pl-2 text-gray-400">
+                                    <span class="material-icons-outlined text-sm">search</span>
+                                </span>
+                                <input type="text" [(ngModel)]="regionSearchText" placeholder="Search region..."
+                                    class="w-full pl-8 py-1.5 text-xs border border-gray-300 rounded-md focus:outline-none focus:border-blue-500">
+                            </div>
+                        </div>
+                        <div *ngIf="isPicklistLoading" class="p-3 text-center">
+                            <div
+                                class="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto">
+                            </div>
+                        </div>
+                        <div *ngIf="!isPicklistLoading" class="max-h-52 overflow-y-auto">
+                            <div *ngFor="let opt of filteredRegionOptions" (click)="selectRegion(opt)"
+                                class="px-3 py-2 text-xs text-gray-700 hover:bg-blue-50 cursor-pointer flex items-center justify-between">
+                                <span>{{ opt.label }}</span>
+                                <span *ngIf="selectedRegion?.value === opt.value"
+                                    class="material-icons-outlined text-blue-600 text-sm">check</span>
+                            </div>
+                            <div *ngIf="filteredRegionOptions && filteredRegionOptions.length === 0"
+                                class="px-3 py-2 text-xs text-gray-400 text-center">No results</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Billing Frequency Dropdown -->
+                <div class="relative">
+                    <button (click)="billingDropdownOpen = !billingDropdownOpen; regionDropdownOpen = false"
+                        class="flex items-center justify-between min-w-[160px] px-3 py-1.5 bg-white border rounded-md shadow-sm hover:bg-gray-50 min-h-[36px] text-xs font-bold transition-colors"
+                        [ngClass]="selectedBillingFreq ? 'border-blue-500 text-blue-700' : 'border-gray-300 text-gray-700'">
+                        <span class="truncate">{{ selectedBillingFreq ? selectedBillingFreq.label : 'Billing Frequency'
+                            }}</span>
+                        <span *ngIf="selectedBillingFreq" class="material-icons-outlined text-[14px] ml-1 text-blue-500"
+                            (click)="$event.stopPropagation(); selectBillingFreq(null)">close</span>
+                        <span *ngIf="!selectedBillingFreq"
+                            class="material-icons-outlined text-gray-400 text-[18px]">arrow_drop_down</span>
+                    </button>
+                    <div *ngIf="billingDropdownOpen"
+                        class="absolute mt-1 w-56 bg-white border border-gray-300 rounded-md shadow-lg z-50">
+                        <div class="p-2 border-b border-gray-100">
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-0 flex items-center pl-2 text-gray-400">
+                                    <span class="material-icons-outlined text-sm">search</span>
+                                </span>
+                                <input type="text" [(ngModel)]="billingSearchText" placeholder="Search billing..."
+                                    class="w-full pl-8 py-1.5 text-xs border border-gray-300 rounded-md focus:outline-none focus:border-blue-500">
+                            </div>
+                        </div>
+                        <div *ngIf="isPicklistLoading" class="p-3 text-center">
+                            <div
+                                class="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto">
+                            </div>
+                        </div>
+                        <div *ngIf="!isPicklistLoading" class="max-h-52 overflow-y-auto">
+                            <div *ngFor="let opt of filteredBillingOptions" (click)="selectBillingFreq(opt)"
+                                class="px-3 py-2 text-xs text-gray-700 hover:bg-blue-50 cursor-pointer flex items-center justify-between">
+                                <span>{{ opt.label }}</span>
+                                <span *ngIf="selectedBillingFreq?.value === opt.value"
+                                    class="material-icons-outlined text-blue-600 text-sm">check</span>
+                            </div>
+                            <div *ngIf="filteredBillingOptions && filteredBillingOptions.length === 0"
+                                class="px-3 py-2 text-xs text-gray-400 text-center">No results</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Backdrop to close dropdowns -->
+                <div *ngIf="isDropdownOpen || regionDropdownOpen || billingDropdownOpen"
+                    (click)="isDropdownOpen = false; regionDropdownOpen = false; billingDropdownOpen = false"
+                    class="fixed inset-0 z-40 bg-transparent">
                 </div>
             </div>
 
@@ -556,73 +619,13 @@
                             </div>
                         </th>
                         <th class="px-4 py-3 select-none relative group align-top">
-                            <div
-                                class="flex items-center gap-1 cursor-pointer hover:bg-gray-50 transition-colors p-1 rounded -ml-1">
-                                <!-- Filter Icon -->
-                                <span
-                                    class="material-icons-outlined text-[16px] text-gray-500 hover:text-blue-600 rounded hover:bg-blue-50 transition-colors"
-                                    (click)="toggleFacetedFilter($event)"
-                                    [ngClass]="{'bg-blue-50 text-blue-600': showFacetedFilter}">
-                                    filter_list
+                            <div class="flex items-center gap-1 cursor-pointer hover:bg-gray-50 transition-colors p-1 rounded -ml-1"
+                                (click)="handleSort('name')">
+                                {{ productTab === 'groups' ? 'Product Group' : 'Product Name' }}
+                                <span *ngIf="sortConfig.column === 'name'"
+                                    class="material-icons-outlined text-[14px] text-gray-700">
+                                    {{ sortConfig.direction === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
                                 </span>
-                                <div class="flex items-center gap-1 flex-1" (click)="handleSort('name')">
-                                    {{ productTab === 'groups' ? 'Product Group' : 'Product Name' }}
-                                    <span *ngIf="sortConfig.column === 'name'"
-                                        class="material-icons-outlined text-[14px] text-gray-700">
-                                        {{ sortConfig.direction === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
-                                    </span>
-                                </div>
-                            </div>
-
-                            <!-- Faceted Filter Modal -->
-                            <div *ngIf="showFacetedFilter" (click)="$event.stopPropagation()"
-                                class="absolute left-4 top-full mt-1 w-[280px] bg-white rounded-lg shadow-xl border border-gray-200 z-[60] cursor-default font-normal flex flex-col max-h-[400px]">
-
-                                <!-- Loading State -->
-                                <div *ngIf="isFacetedFilterLoading" class="p-6 flex justify-center items-center">
-                                    <div
-                                        class="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin">
-                                    </div>
-                                </div>
-
-                                <div *ngIf="!isFacetedFilterLoading" class="overflow-y-auto flex-1 custom-scrollbar">
-                                    <!-- Billing Frequency -->
-                                    <div class="p-3 border-b border-gray-100">
-                                        <div class="text-[11px] font-bold text-gray-900 mb-2 uppercase tracking-wide">
-                                            Billing Frequency</div>
-                                        <div class="space-y-1 max-h-[140px] overflow-y-auto pr-2 custom-scrollbar">
-                                            <label *ngFor="let opt of facetedFilterData.billingFrequencies"
-                                                class="flex items-start gap-2 cursor-pointer group hover:bg-gray-50 p-1.5 rounded transition-colors">
-                                                <input type="checkbox" [(ngModel)]="opt.selected"
-                                                    class="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5 cursor-pointer">
-                                                <span
-                                                    class="text-[11px] text-gray-700 group-hover:text-gray-900 leading-tight">{{opt.label}}</span>
-                                            </label>
-                                        </div>
-                                    </div>
-                                    <!-- Region -->
-                                    <div class="p-3">
-                                        <div class="text-[11px] font-bold text-gray-900 mb-2 uppercase tracking-wide">
-                                            Region</div>
-                                        <div class="space-y-1 max-h-[140px] overflow-y-auto pr-2 custom-scrollbar">
-                                            <label *ngFor="let opt of facetedFilterData.regions"
-                                                class="flex items-start gap-2 cursor-pointer group hover:bg-gray-50 p-1.5 rounded transition-colors">
-                                                <input type="checkbox" [(ngModel)]="opt.selected"
-                                                    class="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5 cursor-pointer">
-                                                <span
-                                                    class="text-[11px] text-gray-700 group-hover:text-gray-900 leading-tight">{{opt.label}}</span>
-                                            </label>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Footer -->
-                                <div
-                                    class="px-3 py-2 bg-gray-50 border-t border-gray-200 flex justify-end gap-2 rounded-b-lg">
-                                    <button
-                                        class="px-3 py-1 text-[11px] font-bold text-gray-600 hover:text-gray-900 hover:bg-gray-200 rounded transition-colors"
-                                        (click)="closeFacetedFilter()">Close</button>
-                                </div>
                             </div>
                         </th>
 
@@ -631,6 +634,9 @@
                         <th *ngIf="activeTab === 'discounts' && discountForm.granularity === 'Granular'"
                             class="px-4 py-3 text-right pr-6 w-32">
                             Discount</th>
+                        <!-- Always show Amount column for Incentives -->
+                        <th *ngIf="selectorCalledFrom === 'incentives'" class="px-4 py-3 text-right pr-6 w-36">
+                            Amount (USD)</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
@@ -661,6 +667,17 @@
                                     class="w-full bg-transparent text-sm font-bold text-gray-900 outline-none text-right [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                     [disabled]="!item.selected">
                                 <span class="text-[10px] font-bold text-gray-500 ml-0.5">%</span>
+                            </div>
+                        </td>
+                        <!-- Incentive Amount per group (always shown for incentives) -->
+                        <td *ngIf="selectorCalledFrom === 'incentives'" class="w-36 px-4 py-4 text-right pr-6">
+                            <div class="inline-flex items-center bg-gray-100 rounded-lg px-2 py-1.5 w-24 border border-transparent focus-within:bg-white focus-within:border-blue-500 transition-all ml-auto"
+                                [ngClass]="{'opacity-50 grayscale pointer-events-none': !item.selected}">
+                                <span class="text-[10px] font-bold text-gray-500 mr-0.5">$</span>
+                                <input type="number" [(ngModel)]="item.incentiveAmount"
+                                    (keydown)="restrictNumeric($event)"
+                                    class="w-full bg-transparent text-sm font-bold text-gray-900 outline-none text-right [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                    [disabled]="!item.selected" placeholder="0">
                             </div>
                         </td>
                     </tr>

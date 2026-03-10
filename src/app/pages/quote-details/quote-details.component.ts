@@ -1275,6 +1275,16 @@ export class QuoteDetailsComponent implements OnInit {
         return `${this.totalTerms} months`;
     }
 
+    /** The real end of the contract: startDate + totalTerms months.
+     *  Used to constrain discount/incentive date pickers. */
+    get contractEndDate(): string {
+        if (!this.startDate || !this.totalTerms) return '';
+        const parts = this.startDate.split('-');
+        const end = new Date(Number(parts[0]), Number(parts[1]) - 1 + this.totalTerms, Number(parts[2]));
+        end.setDate(end.getDate() - 1); // last day of the term
+        return end.toISOString().split('T')[0];
+    }
+
 
     get totalContractValue(): number {
         if (this.activeTab === 'discounts' && this.isLookerSubscription) {

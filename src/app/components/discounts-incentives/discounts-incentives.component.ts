@@ -21,8 +21,8 @@ export class DiscountsIncentivesComponent implements OnChanges {
     @Input() productId: string | null = null;
     @Input() parentQuoteLineId: string | null = null; // Parent Bundle Line ID
     @Input() categoryId: string | null = null;
-
-
+    @Input() quoteStartDate: string | null = null;
+    @Input() quoteEndDate: string | null = null;
     isLoading = false;
 
     // Tabs for the Right Panel
@@ -89,6 +89,14 @@ export class DiscountsIncentivesComponent implements OnChanges {
     }
 
     addDiscountPeriod() {
+        if (this.discountPeriods.length >= 2) return;
+
+        // Ensure the first period has at least one discount
+        if (this.discountPeriods[0].activeDiscounts.length === 0) {
+            this.toastService.show('Please add at least one discount to the first period before adding another.', 'warning');
+            return;
+        }
+
         const id = Date.now().toString();
         this.discountPeriods.push({
             id: id,
@@ -193,7 +201,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
     isDropdownOpen: boolean = false;
 
     // Individual Pagination State
-    individualPageSize: number = 50;
+    individualPageSize: number = 100;
     individualPageOptions: number[] = [10, 20, 50, 100];
     individualCurrentOffset: number = 0;
     individualTotalLoaded: number = 0;
@@ -203,13 +211,39 @@ export class DiscountsIncentivesComponent implements OnChanges {
     productSearchTerm: string = '';
     rootClassificationId: string = '11BDz00000000NvMAI'; // ID for fetching sibling bundles (e.g., NvMAI)
 
-    // Faceted Filter State
-    showFacetedFilter = false;
-    isFacetedFilterLoading = false;
-    facetedFilterData = {
-        billingFrequencies: [] as { label: string; value: string; selected: boolean }[],
-        regions: [] as { label: string; value: string; selected: boolean }[]
-    };
+    // Picklist Filter State (Region + Billing Frequency dropdowns)
+    picklistLoaded = false;
+    isPicklistLoading = false;
+    regionOptions: { label: string; value: string }[] = [];
+    billingFreqOptions: { label: string; value: string }[] = [];
+
+    selectedRegion: { label: string; value: string } | null = null;
+    selectedBillingFreq: { label: string; value: string } | null = null;
+
+    regionDropdownOpen = false;
+    billingDropdownOpen = false;
+    regionSearchText = '';
+    billingSearchText = '';
+
+    get filteredRegionOptions() {
+        if (!this.regionOptions) return [];
+        const q = (this.regionSearchText || '').toLowerCase();
+        return this.regionOptions.filter(o => (o.label || '').toLowerCase().includes(q));
+    }
+
+    get filteredBillingOptions() {
+        if (!this.billingFreqOptions) return [];
+        const q = (this.billingSearchText || '').toLowerCase();
+        return this.billingFreqOptions.filter(o => (o.label || '').toLowerCase().includes(q));
+    }
+
+    // Kept for backward compat with evaluateSearchAndBuildCriteria references
+    get facetedFilterData() {
+        return {
+            regions: this.regionOptions.map(o => ({ ...o, selected: this.selectedRegion?.value === o.value })),
+            billingFrequencies: this.billingFreqOptions.map(o => ({ ...o, selected: this.selectedBillingFreq?.value === o.value }))
+        };
+    }
 
     constructor(
         private rcaApiService: RcaApiService,
@@ -327,17 +361,39 @@ export class DiscountsIncentivesComponent implements OnChanges {
 
     validateDiscountDates(period: any) {
         if (!period.startDate || !period.endDate) return;
+
         if (period.endDate < period.startDate) {
             this.toastService.show('Discount End Date cannot be earlier than Start Date.', 'warning');
             period.endDate = '';
+        }
+
+        if (this.quoteStartDate && period.startDate < this.quoteStartDate) {
+            this.toastService.show(`Start Date cannot be earlier than quote start date (${this.quoteStartDate}).`, 'warning');
+            period.startDate = this.quoteStartDate;
+        }
+
+        if (this.quoteEndDate && period.endDate > this.quoteEndDate) {
+            this.toastService.show(`End Date cannot be later than quote end date (${this.quoteEndDate}).`, 'warning');
+            period.endDate = this.quoteEndDate;
         }
     }
 
     validateIncentiveDates(period: any) {
         if (!period.startDate || !period.endDate) return;
+
         if (period.endDate < period.startDate) {
             this.toastService.show('Incentive End Date cannot be earlier than Start Date.', 'warning');
             period.endDate = '';
+        }
+
+        if (this.quoteStartDate && period.startDate < this.quoteStartDate) {
+            this.toastService.show(`Start Date cannot be earlier than quote start date (${this.quoteStartDate}).`, 'warning');
+            period.startDate = this.quoteStartDate;
+        }
+
+        if (this.quoteEndDate && period.endDate > this.quoteEndDate) {
+            this.toastService.show(`End Date cannot be later than quote end date (${this.quoteEndDate}).`, 'warning');
+            period.endDate = this.quoteEndDate;
         }
     }
     // Selector Actions
@@ -355,7 +411,8 @@ export class DiscountsIncentivesComponent implements OnChanges {
         this.showProductSelector = true;
         // Always start on Product Groups tab
         this.productTab = 'groups';
-
+        // Load picklist filter options (Region, Billing Freq) if not yet loaded
+        this.loadPicklistOptions();
         if (this.productId) {
             // Always re-fetch if productGroups is empty OR coming from incentives and not yet loaded
             if (!this.dataFetched || this.productGroups.length === 0) {
@@ -514,15 +571,13 @@ export class DiscountsIncentivesComponent implements OnChanges {
     onProductSearch() {
         console.log('[onProductSearch] Triggered with term:', this.productSearchTerm);
 
-        if (!this.productSearchTerm) {
-            console.log('[onProductSearch] Search term cleared, reloading default products');
+        const criteria = this.getFacetedCriteria();
+
+        // If search term is empty AND no faceted filters, reload default category products
+        if (!this.productSearchTerm && criteria.length === 0) {
+            console.log('[onProductSearch] No search term or filters, reloading default products');
             this.loadIndividualProducts();
             return;
-        }
-
-        // We can safely bypass or reset loading state since we have track of the subscription
-        if (this.isIndividualLoading) {
-            console.log('[onProductSearch] Already loading, but allowing override...');
         }
 
         this.individualCurrentOffset = 0; // Reset offset on new search
@@ -536,67 +591,61 @@ export class DiscountsIncentivesComponent implements OnChanges {
         this.executeSearch();
     }
 
-    // Parses search text, generates criteria payload if any comma-separated values match the picklist.
-    private evaluateSearchAndBuildCriteria(term: string): any[] {
+    // Builds criteria payload from the selected Region and Billing Frequency dropdowns.
+    private getFacetedCriteria(): any[] {
         const criteria: any[] = [];
-        // Extract comma-separated raw values
-        const tokens = term.split(',').map(t => t.trim()).filter(t => t.length > 0);
 
-        // We check every token against region and billing frequency data arrays
-        for (const token of tokens) {
-            // Check if token perfectly matches any region option (case insensitive)
-            const matchedRegion = this.facetedFilterData.regions.find(
-                r => r.value.toLowerCase() === token.toLowerCase() || r.label.toLowerCase() === token.toLowerCase()
-            );
+        if (this.selectedRegion) {
+            criteria.push({
+                "property": "RCA_Region__c",
+                "operator": "eq",
+                "value": this.selectedRegion.value
+            });
+        }
 
-            if (matchedRegion) {
-                criteria.push({
-                    "property": "RCA_Region__c",
-                    "operator": "eq",
-                    "value": matchedRegion.value
-                });
-                continue; // Move to next token
-            }
-
-            // Check if token perfectly matches any billing frequency option (case insensitive)
-            const matchedFrequency = this.facetedFilterData.billingFrequencies.find(
-                b => b.value.toLowerCase() === token.toLowerCase() || b.label.toLowerCase() === token.toLowerCase()
-            );
-
-            if (matchedFrequency) {
-                criteria.push({
-                    "property": "RCA_Billing_Frequency__c",
-                    "operator": "eq",
-                    "value": matchedFrequency.value
-                });
-            }
+        if (this.selectedBillingFreq) {
+            criteria.push({
+                "property": "RCA_Billing_Frequency__c",
+                "operator": "eq",
+                "value": this.selectedBillingFreq.value
+            });
         }
 
         return criteria;
     }
 
     executeSearch() {
-        if (!this.productSearchTerm) {
-            // If search is cleared, maybe reload default classification products?
-            this.loadIndividualProducts();
-            return;
-        }
-
         if (this.currentProductReq) {
             this.currentProductReq.unsubscribe();
         }
 
+        const criteria = this.getFacetedCriteria();
+
+        // If search is cleared AND no criteria, reload default products
+        if (!this.productSearchTerm && criteria.length === 0) {
+            this.loadIndividualProducts();
+            return;
+        }
+
         this.isIndividualLoading = true;
-
         let searchRequest$: Observable<any>;
-        const facetCriteria = this.evaluateSearchAndBuildCriteria(this.productSearchTerm);
 
-        if (facetCriteria.length > 0) {
-            console.log('[executeSearch] Found matching Facet Criteria. Executing facetedSearch API...Payload:', facetCriteria);
-            searchRequest$ = this.rcaApiService.facetedProductSearch(this.selectedDropdownOption.Id, facetCriteria, this.individualPageSize, this.individualCurrentOffset);
+        if (criteria.length > 0) {
+            // If we have picklist criteria, always use faceted search
+            searchRequest$ = this.rcaApiService.facetedProductSearch(
+                this.selectedDropdownOption?.Id || this.rootClassificationId,
+                criteria,
+                this.individualPageSize,
+                this.individualCurrentOffset
+            );
         } else {
-            console.log('[executeSearch] Normal text search. Executing standard search API...');
-            searchRequest$ = this.rcaApiService.searchProducts(this.productSearchTerm, [this.categoryId!], this.individualPageSize, this.individualCurrentOffset);
+            // Global text-based search
+            searchRequest$ = this.rcaApiService.searchProducts(
+                this.productSearchTerm,
+                [this.selectedDropdownOption?.Id || this.rootClassificationId],
+                this.individualPageSize,
+                this.individualCurrentOffset
+            );
         }
 
         this.currentProductReq = searchRequest$.pipe(
@@ -765,42 +814,60 @@ export class DiscountsIncentivesComponent implements OnChanges {
         this.closeProductSelector();
     }
 
-    // Faceted Filter Methods
-    toggleFacetedFilter(event: Event) {
-        event.stopPropagation();
-        this.showFacetedFilter = !this.showFacetedFilter;
-        if (this.showFacetedFilter && this.facetedFilterData.billingFrequencies.length === 0) {
-            this.loadFacetedFilterOptions();
-        }
-    }
+    // Picklist Filter Methods
+    loadPicklistOptions() {
+        // Only load once unless specifically forced or needed
+        if (this.picklistLoaded || this.isPicklistLoading) return;
 
-    loadFacetedFilterOptions() {
-        if (this.facetedFilterData.billingFrequencies.length > 0 || this.isFacetedFilterLoading) {
-            return;
-        }
-        this.isFacetedFilterLoading = true;
+        this.isPicklistLoading = true;
         this.salesforceApiService.getProductPicklistValues().subscribe({
             next: (res: any) => {
-                const fields = res?.picklistFieldValues || {};
+                // Salesforce UI API picklist-values returns picklistFieldValues map
+                const fields = res?.picklistFieldValues || res || {};
 
-                const billingFrequencies = fields.RCA_Billing_Frequency__c?.values || [];
-                this.facetedFilterData.billingFrequencies = billingFrequencies.map((v: any) => ({ label: v.label, value: v.value, selected: false }));
+                // Extract values with extra safety checks
+                const bfData = fields.RCA_Billing_Frequency__c || fields.billing_frequency;
+                const regData = fields.RCA_Region__c || fields.region;
 
-                const regions = fields.RCA_Region__c?.values || [];
-                this.facetedFilterData.regions = regions.map((v: any) => ({ label: v.label, value: v.value, selected: false }));
+                this.billingFreqOptions = (bfData?.values || []).map((v: any) => ({ label: v.label, value: v.value }));
+                this.regionOptions = (regData?.values || []).map((v: any) => ({ label: v.label, value: v.value }));
 
-                this.isFacetedFilterLoading = false;
+                console.log('Picklist options loaded:', {
+                    regions: this.regionOptions.length,
+                    billing: this.billingFreqOptions.length
+                });
+
+                this.picklistLoaded = true;
+                this.isPicklistLoading = false;
             },
             error: (err) => {
                 console.error('Failed to load picklist values', err);
-                this.isFacetedFilterLoading = false;
-                this.toastService.show('Failed to load filter options', 'error');
+                this.isPicklistLoading = false;
             }
         });
     }
 
-    closeFacetedFilter() {
-        this.showFacetedFilter = false;
+    selectRegion(opt: { label: string; value: string } | null) {
+        this.selectedRegion = opt;
+        this.regionDropdownOpen = false;
+        this.regionSearchText = '';
+        // As requested: remove existing search values when selecting a filter
+        this.productSearchTerm = '';
+        if (this.productTab === 'individual') this.onProductSearch();
+    }
+
+    selectBillingFreq(opt: { label: string; value: string } | null) {
+        this.selectedBillingFreq = opt;
+        this.billingDropdownOpen = false;
+        this.billingSearchText = '';
+        // As requested: remove existing search values when selecting a filter
+        this.productSearchTerm = '';
+        if (this.productTab === 'individual') this.onProductSearch();
+    }
+
+    closeAllPicklistDropdowns() {
+        this.regionDropdownOpen = false;
+        this.billingDropdownOpen = false;
     }
 
     closeProductSelector() {
@@ -812,6 +879,11 @@ export class DiscountsIncentivesComponent implements OnChanges {
         this.productTab = tab;
         this.filterQuery = ''; // Reset filter on switch
         this.viewMode = 'all'; // Reset to "Show All" when switching tabs
+
+        // As requested: call picklist api when switching to individual products
+        if (tab === 'individual') {
+            this.loadPicklistOptions();
+        }
     }
 
     toggleItem(item: any) {
@@ -1278,9 +1350,10 @@ export class DiscountsIncentivesComponent implements OnChanges {
             return;
         }
 
-        const amount = parseFloat(this.incentiveForm.amount);
-        if (!amount || amount <= 0) {
-            this.toastService.show('Please enter a valid incentive amount greater than 0', 'warning');
+        // Always granular: validate each selected group has an amount
+        const invalidGroups = selectedGroups.filter(g => !g.incentiveAmount || parseFloat(g.incentiveAmount) <= 0);
+        if (invalidGroups.length > 0) {
+            this.toastService.show('Please enter a valid incentive amount for all selected Product Groups.', 'warning');
             return;
         }
 
@@ -1307,7 +1380,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
 
                     const productId = match?.productSellingModelOptions?.[0]?.productId || match?.id || group.id;
                     const pbeId = group.pricebookEntryId || '';
-                    resolvedItems.push({ id: productId, name: group.name, pbeId });
+                    resolvedItems.push({ id: productId, name: group.name, pbeId, incentiveAmount: group.incentiveAmount });
                 }
 
                 // Build pbe requests
@@ -1342,13 +1415,15 @@ export class DiscountsIncentivesComponent implements OnChanges {
                             const finalPbeId = pbeResult?.pbeId || item.pbeId || '01uDz00000dqLY8IAM';
 
                             const existingLine = existingLines.find((ql: any) => ql.Product2Id === item.id);
+                            // Always use per-item incentive amount (always granular)
+                            const itemAmount = parseFloat(item.incentiveAmount) || 0;
 
                             if (existingLine && existingLine.Id) {
                                 records.push({
                                     "referenceId": `refLineUpdate_${index}`,
                                     "record": {
                                         "attributes": { "type": "QuoteLineItem", "method": "PATCH", "id": existingLine.Id },
-                                        "Incentive__c": amount
+                                        "Incentive__c": itemAmount
                                     }
                                 });
                             } else {
@@ -1361,7 +1436,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
                                         "PricebookEntryId": finalPbeId,
                                         "StartDate": this.activeIncentivePeriod.startDate,
                                         "EndDate": this.activeIncentivePeriod.endDate,
-                                        "Incentive__c": amount,
+                                        "Incentive__c": itemAmount,
                                         "PeriodBoundary": "Anniversary",
                                         "Quantity": 1
                                     }
@@ -1400,11 +1475,12 @@ export class DiscountsIncentivesComponent implements OnChanges {
                         this.toastService.show('Incentive added successfully', 'success');
                         const groupCount = selectedGroups.length;
                         this.usedQuotaCount += groupCount;
+                        const displayValue = `${groupCount} group${groupCount !== 1 ? 's' : ''} with custom amounts`;
                         this.activeIncentivePeriod.activeIncentives.unshift({
                             id: 'i' + Date.now(),
                             title: this.incentiveForm.type,
                             subtext: `${groupCount} Product Group${groupCount !== 1 ? 's' : ''}`,
-                            value: '$' + amount.toLocaleString() + ' USD',
+                            value: displayValue,
                             type: 'incentive'
                         });
                         this.incentiveForm.amount = '';
