@@ -1,0 +1,79 @@
+<div *ngIf="isOpen" class="fixed inset-0 z-[110] flex justify-end bg-transparent">
+    <div
+        class="bg-white rounded-l-2xl shadow-2xl w-full max-w-4xl h-full flex flex-col overflow-hidden relative animate-slide-in-right">
+        <!-- Header -->
+        <div class="px-6 py-2 flex justify-between items-center bg-white border-b border-gray-100">
+            <h2 class="text-xl font-bold text-gray-900">Upload Products</h2>
+            <button (click)="onClose()"
+                class="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100 transition-colors">
+                <span class="material-icons-outlined">close</span>
+            </button>
+        </div>
+
+        <div class="px-4 pt-4 pb-8 space-y-6">
+            <!-- Hidden File Input -->
+            <input type="file" #fileInput (change)="onFileSelected($event)" accept=".csv" class="hidden">
+
+            <!-- Main Card -->
+            <div class="bg-blue-50/30 border border-gray-200 rounded-2xl p-6 shadow-sm">
+                <!-- Template Section -->
+                <div class="flex justify-between items-start mb-8">
+                    <div class="flex-1 pr-12">
+                        <h3 class="text-sm font-bold text-gray-900 mb-2">Download Standard Template</h3>
+                        <p class="text-xs text-gray-500 leading-relaxed font-medium">
+                            To ensure your data is imported correctly, please use our standard CSV template. Fill in
+                            your data without modifying the header row.
+                        </p>
+                    </div>
+                    <button
+                        class="flex items-center gap-2 px-5 py-2.5 bg-blue-200 text-slate-700 rounded-full text-xs font-bold text-blue-600 hover:bg-blue-300 transition-all shadow-sm whitespace-nowrap active:scale-95">
+                        <span class="material-icons-outlined text-sm">download</span>
+                        Download CSV
+                    </button>
+                </div>
+
+                <!-- White background container for the dropzone -->
+                <div class="bg-white rounded-2xl p-4 shadow-sm">
+                    <!-- Dotted Dropzone Container -->
+                    <div class="border-2 border-gray-200 border-dashed rounded-xl p-12 flex flex-col items-center justify-center cursor-pointer hover:border-gray-400 transition-all group bg-transparent"
+                        [ngClass]="{
+                            'border-blue-400 bg-blue-50/50': isDragging && !selectedFile,
+                            'border-gray-200': !isDragging || selectedFile
+                        }" (click)="!selectedFile ? fileInput.click() : null"
+                        (dragover)="!selectedFile ? onDragOver($event) : $event.preventDefault()"
+                        (dragleave)="!selectedFile ? onDragLeave($event) : null"
+                        (drop)="!selectedFile ? onDrop($event) : $event.preventDefault()">
+
+                        <!-- State 1: Dropzone Prompt -->
+                        <ng-container *ngIf="!selectedFile">
+                            <p class="text-sm font-medium text-gray-600">
+                                click to upload or drag and drop files
+                            </p>
+                        </ng-container>
+
+                        <!-- State 2: Uploading Process -->
+                        <div *ngIf="selectedFile" class="w-full max-w-md flex items-center gap-4"
+                            (click)="$event.stopPropagation()">
+                            <!-- Left: Stacked Name and Bar -->
+                            <div class="flex-1 flex flex-col gap-2">
+                                <span class="text-xs font-bold text-gray-700 truncate">{{ selectedFile.name }}</span>
+                                <!-- Progress Bar Shell -->
+                                <div class="w-full h-1 bg-gray-100 rounded-full overflow-hidden">
+                                    <div class="h-full bg-blue-600 transition-all duration-300 ease-out"
+                                        [style.width.%]="uploadProgress">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Right: Close Button with Black Border -->
+                            <button (click)="cancelUpload(); $event.stopPropagation()"
+                                class="w-4 h-4 rounded-full border border-black flex items-center justify-center hover:bg-gray-50 transition-all shrink-0">
+                                <span class="material-icons text-[14px] text-black font-bold">close</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

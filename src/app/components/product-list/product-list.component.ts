@@ -61,6 +61,11 @@ export class ProductListComponent implements OnInit {
             }
 
             this.filteredProducts = products.filter(product => {
+                const allowedProducts = ['Looker New RCA', 'Enterprise Services Bundle'];
+                if (!allowedProducts.includes(product.name)) {
+                    return false;
+                }
+
                 const matchesSearch = product.name.toLowerCase().includes(search.toLowerCase()) ||
                     (product.description?.toLowerCase() || '').includes(search.toLowerCase());
                 const matchesCategory = category ? product.family === category : true;

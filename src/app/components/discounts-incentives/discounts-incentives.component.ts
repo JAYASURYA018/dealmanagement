@@ -9,11 +9,12 @@ import { LoadingService } from '../../services/loading.service';
 import { finalize, forkJoin, map, catchError, of, switchMap, lastValueFrom, Subject, Observable } from 'rxjs';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { FormsModule } from '@angular/forms';
+import { UploadProductsModalComponent } from '../upload-products-modal/upload-products-modal.component';
 
 @Component({
     selector: 'app-discounts-incentives',
     standalone: true,
-    imports: [CommonModule, FormsModule],
+    imports: [CommonModule, FormsModule, UploadProductsModalComponent],
     templateUrl: './discounts-incentives.component.html',
 })
 export class DiscountsIncentivesComponent implements OnChanges {
@@ -59,21 +60,79 @@ export class DiscountsIncentivesComponent implements OnChanges {
     openActionMenuId: string | null = null;
 
     // Period Configuration
-    discountPeriod = {
+    discountPeriods = [{
+        id: '1',
+        name: 'Discount period 1',
         timePeriod: 'Date range',
         startDate: '',
-        endDate: ''
-    };
+        endDate: '',
+        activeDiscounts: [] as any[]
+    }];
+    activeDiscountPeriodId = '1';
 
-    incentivePeriod = {
+    incentivePeriods = [{
+        id: '1',
+        name: 'Incentives period 1',
         timePeriod: 'Date range',
         startDate: '',
-        endDate: ''
-    };
+        endDate: '',
+        activeIncentives: [] as any[]
+    }];
+    activeIncentivePeriodId = '1';
 
-    // Active items for left panel
-    activeDiscounts: any[] = [];
-    activeIncentives: any[] = [];
+    get activeDiscountPeriod() {
+        return this.discountPeriods.find(p => p.id === this.activeDiscountPeriodId) || this.discountPeriods[0];
+    }
+
+    get activeIncentivePeriod() {
+        return this.incentivePeriods.find(p => p.id === this.activeIncentivePeriodId) || this.incentivePeriods[0];
+    }
+
+    addDiscountPeriod() {
+        const id = Date.now().toString();
+        this.discountPeriods.push({
+            id: id,
+            name: `Discount period ${this.discountPeriods.length + 1}`,
+            timePeriod: 'Date range',
+            startDate: '',
+            endDate: '',
+            activeDiscounts: []
+        });
+        this.activeDiscountPeriodId = id;
+    }
+
+    removeDiscountPeriod(id: string) {
+        if (this.discountPeriods.length > 1) {
+            this.discountPeriods = this.discountPeriods.filter(p => p.id !== id);
+            if (this.activeDiscountPeriodId === id) {
+                this.activeDiscountPeriodId = this.discountPeriods[0].id;
+            }
+            this.discountPeriods.forEach((p, index) => p.name = `Discount period ${index + 1}`);
+        }
+    }
+
+    addIncentivePeriod() {
+        const id = Date.now().toString();
+        this.incentivePeriods.push({
+            id: id,
+            name: `Incentives period ${this.incentivePeriods.length + 1}`,
+            timePeriod: 'Date range',
+            startDate: '',
+            endDate: '',
+            activeIncentives: []
+        });
+        this.activeIncentivePeriodId = id;
+    }
+
+    removeIncentivePeriod(id: string) {
+        if (this.incentivePeriods.length > 1) {
+            this.incentivePeriods = this.incentivePeriods.filter(p => p.id !== id);
+            if (this.activeIncentivePeriodId === id) {
+                this.activeIncentivePeriodId = this.incentivePeriods[0].id;
+            }
+            this.incentivePeriods.forEach((p, index) => p.name = `Incentives period ${index + 1}`);
+        }
+    }
 
     // Product Quota Tracking
     // Fixed business limit: max 999 products can receive discounts/incentives per quote
@@ -100,6 +159,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
 
     // Product Selector Logic
     showProductSelector = false;
+    showUploadModal = false;
     productTab: 'groups' | 'individual' = 'groups';
     filterQuery: string = '';
     viewMode: 'all' | 'selected' = 'all';
@@ -172,27 +232,14 @@ export class DiscountsIncentivesComponent implements OnChanges {
     }
 
     resetAllState() {
-        this.activeDiscounts = [];
-        this.activeIncentives = [];
-        this.usedQuotaCount = 0;
-
-        this.persistentSelectedGroups.clear();
-        this.persistentSelectedIndividuals.clear();
-        this.persistentIncentiveGroups.clear();
-
-        this.productGroups = [];
-        this.individualProducts = [];
-
-        this.discountForm.value = '';
-        this.discountForm.granularity = 'Select';
-        this.discountForm.priceReference = 'Select';
-        this.incentiveForm.amount = '';
-        this.incentiveForm.type = 'Select';
-
-        this.discountPeriod.startDate = '';
-        this.discountPeriod.endDate = '';
-        this.incentivePeriod.startDate = '';
-        this.incentivePeriod.endDate = '';
+        this.discountPeriods = [{
+            id: '1', name: 'Discount period 1', timePeriod: 'Date range', startDate: '', endDate: '', activeDiscounts: []
+        }];
+        this.activeDiscountPeriodId = '1';
+        this.incentivePeriods = [{
+            id: '1', name: 'Incentives period 1', timePeriod: 'Date range', startDate: '', endDate: '', activeIncentives: []
+        }];
+        this.activeIncentivePeriodId = '1';
     }
 
     fetchDropdownOptions() {
@@ -278,19 +325,19 @@ export class DiscountsIncentivesComponent implements OnChanges {
 
     minDate: string = new Date().toISOString().split('T')[0];
 
-    validateDiscountDates() {
-        if (!this.discountPeriod.startDate || !this.discountPeriod.endDate) return;
-        if (this.discountPeriod.endDate < this.discountPeriod.startDate) {
+    validateDiscountDates(period: any) {
+        if (!period.startDate || !period.endDate) return;
+        if (period.endDate < period.startDate) {
             this.toastService.show('Discount End Date cannot be earlier than Start Date.', 'warning');
-            this.discountPeriod.endDate = '';
+            period.endDate = '';
         }
     }
 
-    validateIncentiveDates() {
-        if (!this.incentivePeriod.startDate || !this.incentivePeriod.endDate) return;
-        if (this.incentivePeriod.endDate < this.incentivePeriod.startDate) {
+    validateIncentiveDates(period: any) {
+        if (!period.startDate || !period.endDate) return;
+        if (period.endDate < period.startDate) {
             this.toastService.show('Incentive End Date cannot be earlier than Start Date.', 'warning');
-            this.incentivePeriod.endDate = '';
+            period.endDate = '';
         }
     }
     // Selector Actions
@@ -320,6 +367,16 @@ export class DiscountsIncentivesComponent implements OnChanges {
             this.productGroups = [];
             this.individualProducts = [];
         }
+    }
+
+    // Upload Modal Actions
+    openUploadModal() {
+        console.log("Clicked upload products")
+        this.showUploadModal = true;
+    }
+
+    closeUploadModal() {
+        this.showUploadModal = false;
     }
 
     debugData: any = null;
@@ -925,8 +982,8 @@ export class DiscountsIncentivesComponent implements OnChanges {
 
     // Management Actions
     async addDiscount() {
-        if (!this.discountPeriod.startDate || !this.discountPeriod.endDate) {
-            this.toastService.show('Please select both Start and End dates for the discount period.', 'warning');
+        if (!this.activeDiscountPeriod.startDate || !this.activeDiscountPeriod.endDate) {
+            this.toastService.show('Please select both Start and End dates for the active discount period.', 'warning');
             return;
         }
 
@@ -1122,8 +1179,8 @@ export class DiscountsIncentivesComponent implements OnChanges {
                             "QuoteId": quoteId, // Direct ID as per sample
                             "Product2Id": item.id,
                             "PricebookEntryId": pbeId,
-                            "StartDate": this.discountPeriod.startDate,
-                            "EndDate": this.discountPeriod.endDate,
+                            "StartDate": this.activeDiscountPeriod.startDate,
+                            "EndDate": this.activeDiscountPeriod.endDate,
                             "PeriodBoundary": "Anniversary",
                             "Quantity": Number(item.quantity) || 1,
                             "Discount": Number(item.discount) || 0
@@ -1201,12 +1258,12 @@ export class DiscountsIncentivesComponent implements OnChanges {
             type: 'discount',
             granularity: granularity
         };
-        this.activeDiscounts.unshift(newDiscount); // Add to top
+        this.activeDiscountPeriod.activeDiscounts.unshift(newDiscount); // Add to top
     }
 
     addIncentive() {
-        if (!this.incentivePeriod.startDate || !this.incentivePeriod.endDate) {
-            this.toastService.show('Please select both Start and End dates for the incentive period.', 'warning');
+        if (!this.activeIncentivePeriod.startDate || !this.activeIncentivePeriod.endDate) {
+            this.toastService.show('Please select both Start and End dates for the active incentive period.', 'warning');
             return;
         }
 
@@ -1302,8 +1359,8 @@ export class DiscountsIncentivesComponent implements OnChanges {
                                         "QuoteId": quoteId,
                                         "Product2Id": item.id,
                                         "PricebookEntryId": finalPbeId,
-                                        "StartDate": this.incentivePeriod.startDate,
-                                        "EndDate": this.incentivePeriod.endDate,
+                                        "StartDate": this.activeIncentivePeriod.startDate,
+                                        "EndDate": this.activeIncentivePeriod.endDate,
                                         "Incentive__c": amount,
                                         "PeriodBoundary": "Anniversary",
                                         "Quantity": 1
@@ -1343,7 +1400,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
                         this.toastService.show('Incentive added successfully', 'success');
                         const groupCount = selectedGroups.length;
                         this.usedQuotaCount += groupCount;
-                        this.activeIncentives.unshift({
+                        this.activeIncentivePeriod.activeIncentives.unshift({
                             id: 'i' + Date.now(),
                             title: this.incentiveForm.type,
                             subtext: `${groupCount} Product Group${groupCount !== 1 ? 's' : ''}`,
@@ -1373,22 +1430,22 @@ export class DiscountsIncentivesComponent implements OnChanges {
         return this.persistentSelectedGroups.size + this.persistentSelectedIndividuals.size;
     }
 
-    duplicateItem(item: any) {
+    duplicateItem(item: any, period: any) {
         const newItem = { ...item, id: Date.now().toString() };
         if (item.type === 'discount') {
-            this.activeDiscounts.push(newItem);
+            period.activeDiscounts.push(newItem);
         } else {
-            this.activeIncentives.push(newItem);
+            period.activeIncentives.push(newItem);
         }
         this.openActionMenuId = null;
         this.toastService.show('Item duplicated', 'success');
     }
 
-    deleteItem(item: any) {
+    deleteItem(item: any, period: any) {
         if (item.type === 'discount') {
-            this.activeDiscounts = this.activeDiscounts.filter(d => d.id !== item.id);
+            period.activeDiscounts = period.activeDiscounts.filter((d: any) => d.id !== item.id);
         } else {
-            this.activeIncentives = this.activeIncentives.filter(i => i.id !== item.id);
+            period.activeIncentives = period.activeIncentives.filter((i: any) => i.id !== item.id);
         }
         this.openActionMenuId = null;
         this.toastService.show('Item deleted', 'success');
