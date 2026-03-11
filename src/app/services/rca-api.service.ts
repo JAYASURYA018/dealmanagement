@@ -320,6 +320,7 @@ export class RcaApiService {
                 }
 
                 const body: any = {
+                    language: 'en_US',
                     categoryIds: categoryIds,
                     searchTerm: searchTerm
                 };

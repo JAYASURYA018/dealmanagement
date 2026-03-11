@@ -8,7 +8,7 @@
             (click)="activeDiscountPeriodId = dPeriod.id">
             <div class="flex items-center justify-between mb-4">
                 <div class="flex items-center gap-3">
-                    <h3 class="text-base font-bold text-gray-800">Discount period</h3>
+                    <h3 class="text-base font-bold text-gray-800">{{ dPeriod.name }}</h3>
                 </div>
 
                 <div class="flex items-center gap-3">
@@ -99,7 +99,7 @@
             </div>
         </div>
 
-        <button *ngIf="discountPeriods.length < 2" (click)="addDiscountPeriod()"
+        <button (click)="addDiscountPeriod()"
             class="mb-6 flex items-center gap-2 px-4 py-2 border border-blue-200 rounded-lg text-sm font-bold text-blue-600 bg-white hover:bg-blue-50 transition-colors w-fit">
             <span class="material-icons-outlined text-[18px]">add_circle_outline</span>
             Add another discount period
@@ -111,7 +111,7 @@
 
             <div class="flex items-center justify-between mb-4">
                 <div class="flex items-center gap-3">
-                    <h3 class="text-base font-bold text-gray-800">Incentives period</h3>
+                    <h3 class="text-base font-bold text-gray-800">{{ iPeriod.name }}</h3>
                 </div>
 
                 <div class="flex items-center gap-3">
@@ -203,6 +203,29 @@
 
             <!-- Discounts Tab -->
             <div *ngIf="activeTab === 'discounts'" class="space-y-5">
+                <!-- Period Selection -->
+                <div class="relative">
+                    <div (click)="periodDropdownOpen = !periodDropdownOpen"
+                        class="bg-white border border-gray-400 rounded-lg p-2 h-[52px] flex justify-between items-center cursor-pointer hover:border-gray-300 transition-colors">
+                        <div class="flex flex-col justify-center">
+                            <label class="text-[11px] text-gray-500 mb-0.5 leading-none">Discount period</label>
+                            <span class="text-sm font-medium text-gray-900 leading-tight">
+                                {{ activeDiscountPeriod.name }}
+                            </span>
+                        </div>
+                        <span class="material-icons-outlined text-gray-500">arrow_drop_down</span>
+                    </div>
+                    <!-- Dropdown -->
+                    <div *ngIf="periodDropdownOpen" (click)="$event.stopPropagation()"
+                        class="absolute left-0 top-[56px] w-full bg-white rounded-lg shadow-xl border border-gray-400 z-20 py-1">
+                        <button *ngFor="let p of discountPeriods"
+                            (click)="activeDiscountPeriodId = p.id; periodDropdownOpen = false"
+                            class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                            {{ p.name }}
+                        </button>
+                    </div>
+                </div>
+
                 <!-- Granularity -->
                 <div class="relative">
                     <div (click)="granularityOpen = !granularityOpen"
@@ -308,6 +331,29 @@
 
             <!-- Incentives Tab -->
             <div *ngIf="activeTab === 'incentives'" class="space-y-4">
+                <!-- Period Selection -->
+                <div class="relative">
+                    <div (click)="periodDropdownOpen = !periodDropdownOpen"
+                        class="bg-white border border-gray-400 rounded-lg p-2 h-[52px] flex justify-between items-center cursor-pointer hover:border-gray-300 transition-colors">
+                        <div class="flex flex-col justify-center">
+                            <label class="text-[11px] text-gray-500 mb-0.5 leading-none">Incentive period</label>
+                            <span class="text-sm font-medium text-gray-900 leading-tight">
+                                {{ activeIncentivePeriod.name }}
+                            </span>
+                        </div>
+                        <span class="material-icons-outlined text-gray-500">arrow_drop_down</span>
+                    </div>
+                    <!-- Dropdown -->
+                    <div *ngIf="periodDropdownOpen" (click)="$event.stopPropagation()"
+                        class="absolute left-0 top-[56px] w-full bg-white rounded-lg shadow-xl border border-gray-400 z-20 py-1">
+                        <button *ngFor="let p of incentivePeriods"
+                            (click)="activeIncentivePeriodId = p.id; periodDropdownOpen = false"
+                            class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                            {{ p.name }}
+                        </button>
+                    </div>
+                </div>
+
                 <!-- Incentive Type -->
                 <div class="relative">
                     <div (click)="incentiveTypeOpen = !incentiveTypeOpen"

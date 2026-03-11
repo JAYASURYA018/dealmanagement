@@ -848,4 +848,37 @@ export class SalesforceApiService {
             catchError(err => this.handleError(method, err))
         );
     }
+
+    /**
+     * Performs a global search for products using the Salesforce PCM Connect API
+     * @param categoryIds Array of Category IDs to filter by
+     * @param searchTerm The search string
+     * @param pageSize Number of results per page
+     * @param offset Result offset for pagination
+     */
+    globalSearchProducts(categoryIds: string[], searchTerm: string, pageSize: number = 100, offset: number = 0): Observable<any> {
+        const method = 'SalesforceApiService.globalSearchProducts';
+        const token = this.contextService.accessToken;
+        const baseUrl = this.contextService.apiBaseUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com';
+        const url = `${baseUrl}/services/data/v65.0/connect/pcm/products?include=/products`;
+
+        const body = {
+            categoryIds: categoryIds,
+            searchTerm: searchTerm,
+            pageSize: pageSize,
+            offset: offset
+        };
+
+        console.log(`[API Request] ${method}`, { url, body });
+
+        const headers = new HttpHeaders({
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        });
+
+        return this.http.post(url, body, { headers }).pipe(
+            tap(response => console.log(`[API Response] ${method}`, response)),
+            catchError(err => this.handleError(method, err))
+        );
+    }
 }

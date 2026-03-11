@@ -58,11 +58,12 @@ export class DiscountsIncentivesComponent implements OnChanges {
 
     // Action menus state
     openActionMenuId: string | null = null;
+    periodDropdownOpen = false;
 
     // Period Configuration
     discountPeriods = [{
         id: '1',
-        name: 'Discount period 1',
+        name: 'Discount period - 1',
         timePeriod: 'Date range',
         startDate: '',
         endDate: '',
@@ -72,7 +73,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
 
     incentivePeriods = [{
         id: '1',
-        name: 'Incentives period 1',
+        name: 'Incentives period - 1',
         timePeriod: 'Date range',
         startDate: '',
         endDate: '',
@@ -89,18 +90,11 @@ export class DiscountsIncentivesComponent implements OnChanges {
     }
 
     addDiscountPeriod() {
-        if (this.discountPeriods.length >= 2) return;
-
-        // Ensure the first period has at least one discount
-        if (this.discountPeriods[0].activeDiscounts.length === 0) {
-            this.toastService.show('Please add at least one discount to the first period before adding another.', 'warning');
-            return;
-        }
-
+        // Validation removed as requested
         const id = Date.now().toString();
         this.discountPeriods.push({
             id: id,
-            name: `Discount period ${this.discountPeriods.length + 1}`,
+            name: `Discount period - ${this.discountPeriods.length + 1}`,
             timePeriod: 'Date range',
             startDate: '',
             endDate: '',
@@ -115,7 +109,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
             if (this.activeDiscountPeriodId === id) {
                 this.activeDiscountPeriodId = this.discountPeriods[0].id;
             }
-            this.discountPeriods.forEach((p, index) => p.name = `Discount period ${index + 1}`);
+            this.discountPeriods.forEach((p, index) => p.name = `Discount period - ${index + 1}`);
         }
     }
 
@@ -123,7 +117,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
         const id = Date.now().toString();
         this.incentivePeriods.push({
             id: id,
-            name: `Incentives period ${this.incentivePeriods.length + 1}`,
+            name: `Incentives period - ${this.incentivePeriods.length + 1}`,
             timePeriod: 'Date range',
             startDate: '',
             endDate: '',
@@ -138,7 +132,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
             if (this.activeIncentivePeriodId === id) {
                 this.activeIncentivePeriodId = this.incentivePeriods[0].id;
             }
-            this.incentivePeriods.forEach((p, index) => p.name = `Incentives period ${index + 1}`);
+            this.incentivePeriods.forEach((p, index) => p.name = `Incentives period - ${index + 1}`);
         }
     }
 
@@ -210,6 +204,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
 
     productSearchTerm: string = '';
     rootClassificationId: string = '11BDz00000000NvMAI'; // ID for fetching sibling bundles (e.g., NvMAI)
+    bundleCategoryId: string | null = null;
 
     // Picklist Filter State (Region + Billing Frequency dropdowns)
     picklistLoaded = false;
@@ -307,6 +302,14 @@ export class DiscountsIncentivesComponent implements OnChanges {
     selectDropdownOption(option: any) {
         this.selectedDropdownOption = option;
         this.isDropdownOpen = false;
+
+        // Clear all filters when changing classification as requested
+        this.productSearchTerm = '';
+        this.selectedRegion = null;
+        this.selectedBillingFreq = null;
+        this.regionSearchText = '';
+        this.billingSearchText = '';
+
         this.individualCurrentOffset = 0; // Reset pagination
         this.loadIndividualProducts();
     }
@@ -324,6 +327,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
 
     setActiveTab(tab: 'discounts' | 'incentives') {
         this.activeTab = tab;
+        this.periodDropdownOpen = false;
         if (tab === 'incentives') {
             const quoteId = this.contextService.currentContext?.quoteId;
             if (quoteId) {
@@ -444,10 +448,20 @@ export class DiscountsIncentivesComponent implements OnChanges {
         this.isLoading = true;
         this.debugData = null; // Clear previous
 
-        // 1. We now receive categoryId via @Input from Product Discovery Page.
-        // We use default rootClassificationId fallback directly.
+        // 1. Fetch Bundle PCM Details to get the Category ID (0ZG...)
+        // This is used for global search as per user requirement.
+        this.rcaApiService.getProductDetails(this.productId).subscribe({
+            next: (data) => {
+                const categories = data.categories || [];
+                if (categories.length > 0) {
+                    this.bundleCategoryId = categories[0].id;
+                    console.log('✅ Found Bundle Category ID:', this.bundleCategoryId);
+                }
+            },
+            error: (err) => console.error('❌ Error fetching Bundle PCM details:', err)
+        });
 
-        // 2. Get Classifications for the current Bundle ID
+        // 2. Get Classifications for the current Bundle ID (for faceted search / structure)
         this.rcaApiService.getProductClassifications(this.productId).pipe(
             finalize(() => this.isLoading = false)
         ).subscribe({
@@ -631,18 +645,27 @@ export class DiscountsIncentivesComponent implements OnChanges {
         let searchRequest$: Observable<any>;
 
         if (criteria.length > 0) {
-            // If we have picklist criteria, always use faceted search
+            // Faceted search: Use classification-based URL with filtering criteria
+            // Pass the classification ID from the dropdown as requested
+            const classId = this.selectedDropdownOption?.Id || this.rootClassificationId;
             searchRequest$ = this.rcaApiService.facetedProductSearch(
-                this.selectedDropdownOption?.Id || this.rootClassificationId,
+                classId,
                 criteria,
                 this.individualPageSize,
                 this.individualCurrentOffset
             );
         } else {
-            // Global text-based search
+            // Global text-based search: Use global URL with categoryIds (0ZG...) in body
+            // We use the categoryId passed via @Input OR the one we fetched dynamically from getProductDetails
+            const searchCategoryId = this.categoryId || this.bundleCategoryId;
+
+            if (!searchCategoryId) {
+                console.warn('⚠️ No Category ID available for global search. Falling back to search without category restriction.');
+            }
+
             searchRequest$ = this.rcaApiService.searchProducts(
                 this.productSearchTerm,
-                [this.selectedDropdownOption?.Id || this.rootClassificationId],
+                searchCategoryId ? [searchCategoryId] : [],
                 this.individualPageSize,
                 this.individualCurrentOffset
             );
