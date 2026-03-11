@@ -1293,6 +1293,86 @@ export class QuoteDetailsComponent implements OnInit {
         return this.commitmentPeriods.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
     }
 
+    get previewIncentives(): any[] {
+        if (!this.previewData?.QuoteLineItems?.records) return [];
+        return this.previewData.QuoteLineItems.records.filter((item: any) =>
+            (Number(item.Incentive__c) || 0) > 0
+        );
+    }
+
+    get previewDiscountGroups(): any[] {
+        if (!this.previewData?.QuoteLineItems?.records) return [];
+        return this.previewData.QuoteLineItems.records.filter((item: any) =>
+            (Number(item.Discount) || 0) > 0 &&
+            (item.Product2?.Family === 'Product Group' || !item.Product2?.Family || item.Product2?.Family === 'Compute' || item.Product2?.Family === 'Storage')
+            && !this.isIndividualProduct(item)
+        );
+    }
+
+    get groupedDiscountGroups(): any[] {
+        return this.groupByDateRange(this.previewDiscountGroups);
+    }
+
+    get previewDiscountIndividuals(): any[] {
+        if (!this.previewData?.QuoteLineItems?.records) return [];
+        return this.previewData.QuoteLineItems.records.filter((item: any) =>
+            (Number(item.Discount) || 0) > 0 && this.isIndividualProduct(item)
+        );
+    }
+
+    get groupedDiscountIndividuals(): any[] {
+        return this.groupByDateRange(this.previewDiscountIndividuals);
+    }
+
+    private groupByDateRange(items: any[]): any[] {
+        if (!items || items.length === 0) return [];
+        const ranges: any[] = [];
+        items.forEach(item => {
+            const startDate = item.StartDate;
+            const endDate = item.EndDate;
+            let range = ranges.find(r => r.startDate === startDate && r.endDate === endDate);
+            if (!range) {
+                range = { startDate, endDate, items: [] };
+                ranges.push(range);
+            }
+            range.items.push(item);
+        });
+        return ranges;
+    }
+
+    private isIndividualProduct(item: any): boolean {
+        // Individual products in GCP often have specific codes or families. 
+        // For now, let's look at the name as a fallback if we don't have a solid flag.
+        const name = (item.Product2?.Name || '').toLowerCase();
+        const individualKeywords = ['dataproc', 'composer', 'vm', 'storage', 'gcs', 'disk', 'dns', 'cdn', 'interconnect'];
+        return individualKeywords.some(key => name.includes(key));
+    }
+
+    get totalIncentivesValue(): number {
+        if (!this.previewData?.QuoteLineItems?.records) return 0;
+        return this.previewData.QuoteLineItems.records.reduce((acc: number, item: any) => acc + (Number(item.Incentive__c) || 0), 0);
+    }
+
+    /** Formats a value in millions. 
+     * Handles both raw millions (e.g. 12) and raw dollars (e.g. 12000000).
+     * e.g. 0.85 -> 850k, 6 -> 6, 12000000 -> 12 */
+    formatMillionValue(value: any): string {
+        let num = Number(value) || 0;
+        if (num === 0) return '0';
+
+        // If value is very large, assume it's raw currency and convert to millions
+        if (num >= 100000) {
+            num = num / 1000000;
+        }
+
+        if (num < 1) {
+            return (num * 1000).toFixed(0) + 'k';
+        }
+
+        // Return rounded to 2 decimal places if not an integer
+        return num % 1 === 0 ? num.toString() : num.toFixed(2);
+    }
+
     buildCommitmentRecords(quoteId: string, quoteLineItemId: string): any[] {
         if (!this.startDate) {
             console.warn('[QuoteDetails] Start date not set, cannot build commitments');
