@@ -51,11 +51,9 @@
                     </button>
 
 
-                    <!-- Create contract button - always visible, but no action for subscription flow -->
-                    <button (click)="!isLookerSubscription ? onSave() : null" [disabled]="isSaving"
-                        [class.opacity-50]="isSaving"
-                        class="px-5 py-2 bg-blue-50 text-slate-700 rounded-full text-sm font-semibold shadow-sm flex items-center transition-colors border border-blue-100"
-                        [class.hover:bg-blue-100]="!isLookerSubscription" [class.cursor-default]="isLookerSubscription">
+                    <!-- Create contract button - now unified for both flows -->
+                    <button (click)="onSave()" [disabled]="isSaving" [class.opacity-50]="isSaving"
+                        class="px-5 py-2 bg-blue-50 text-slate-700 rounded-full text-sm font-semibold shadow-sm flex items-center transition-colors border border-blue-100 hover:bg-blue-100">
                         <span class="material-icons-outlined text-lg mr-2 text-slate-700">feed</span>
                         <span *ngIf="!isSaving">Create contract</span>
                         <span *ngIf="isSaving">Creating...</span>
@@ -200,8 +198,9 @@
                                 <app-subscription-period-item
                                     *ngFor="let period of subscriptionPeriods; let i = index; let first = first; let last = last"
                                     [period]="period" [products]="productOptions" [regionOptions]="lookerRegionOptions"
-                                    [isFirst]="first" [isLast]="last" [subscriptionStartDate]="termStartDate"
-                                    [subscriptionEndDate]="termEndDate"
+                                    [frequency]="currentFrequency" [isFirst]="first" [isLast]="last"
+                                    [subscriptionStartDate]="termStartDate" [subscriptionEndDate]="termEndDate"
+                                    [previousPeriodEndDate]="i > 0 ? subscriptionPeriods[i-1].endDate : ''"
                                     (productChanged)="onSubscriptionProductChanged()"
                                     (remove)="removeSubscriptionPeriod(i)">
                                 </app-subscription-period-item>
@@ -827,10 +826,10 @@
                                         End
                                         date</th>
                                     <th class="border border-gray-300 px-3 py-2 text-right text-xs font-bold uppercase">
-                                        List unit price</th>
+                                        List price</th>
                                     <th
                                         class="border border-gray-300 px-3 py-2 text-center text-xs font-bold uppercase">
-                                        Unit</th>
+                                        Quantity</th>
                                     <th *ngIf="!isLookerSubscription"
                                         class="border border-gray-300 px-3 py-2 text-right text-xs font-bold uppercase">
                                         Additional discount</th>
@@ -968,6 +967,14 @@
                                     </tr>
                                 </tbody>
                             </table>
+                        </div>
+                    </div>
+
+                    <!-- Grand Total for All Periods -->
+                    <div class="mt-4 flex justify-end">
+                        <div class="text-right py-2">
+                            <span class="text-base font-bold text-gray-900">Grand Total (USD): </span>
+                            <span class="text-base font-bold ml-4">{{ formatCurrency(totalContractValue) }}</span>
                         </div>
                     </div>
                 </div>

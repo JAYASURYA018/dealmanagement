@@ -45,6 +45,8 @@ export interface SubscriptionPeriod {
     userRows: UserTypeRow[];
     productId?: string;
     pricebookEntryId?: string;
+    durationDays?: number; // Added
+    isManual?: boolean;
 }
 
 @Component({
@@ -104,11 +106,13 @@ export class SubscriptionPeriodItemComponent implements OnInit {
     private toastService = inject(ToastService);
     activeRegionIndex: number | null = null;
 
+    @Input() subscriptionStartDate: string = '';
+    @Input() subscriptionEndDate: string = '';
+    @Input() frequency: string = 'Yearly';
+    @Input() previousPeriodEndDate: string = '';
     @Input() regionOptions: string[] = [];
     @Input() isFirst: boolean = false;
     @Input() isLast: boolean = false;
-    @Input() subscriptionStartDate: string = '';
-    @Input() subscriptionEndDate: string = '';
 
     minDate: string = new Date().toISOString().split('T')[0];
     private lastValidStartDate: string = '';
@@ -117,6 +121,13 @@ export class SubscriptionPeriodItemComponent implements OnInit {
     platformDropdownOpen: boolean = false;
 
     ngOnInit() {
+        if (this.period) {
+            this.lastValidStartDate = this.period.startDate;
+            this.lastValidEndDate = this.period.endDate;
+            if (!this.period.durationDays) {
+                this.updateDurationDays();
+            }
+        }
     }
 
     toggleMenu(event: Event) {
@@ -145,60 +156,92 @@ export class SubscriptionPeriodItemComponent implements OnInit {
         }
     }
 
-    get maxEndDate(): string {
-        if (!this.period.startDate) return '';
-        const start = this.parseDateString(this.period.startDate);
-        const max = new Date(start);
-        max.setFullYear(max.getFullYear() + 1);
-        max.setDate(max.getDate() - 1);
-        return max.toISOString().split('T')[0];
+    private updateDurationDays() {
+        if (this.period.startDate && this.period.endDate) {
+            const start = this.parseDateString(this.period.startDate);
+            const end = this.parseDateString(this.period.endDate);
+            const diffTime = Math.abs(end.getTime() - start.getTime());
+            this.period.durationDays = Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1;
+        }
     }
 
-    onDateChange() {
-        if (!this.period.startDate || !this.period.endDate) return;
+    onStartDateChange() {
+        if (!this.period.startDate) return;
+        const start = this.parseDateString(this.period.startDate);
+        const startIso = this.toIsoDateString(start);
+        const freq = (this.frequency || '').toLowerCase();
 
-        const start = new Date(this.period.startDate);
-        const end = new Date(this.period.endDate);
+        // Custom Frequency Logic
+        if (freq === 'custom') {
+            if (!this.isFirst) {
+                if (this.previousPeriodEndDate) {
+                    const prevEnd = this.parseDateString(this.previousPeriodEndDate);
+                    const expectedStart = new Date(prevEnd.getTime());
+                    expectedStart.setDate(expectedStart.getDate() + 1);
+                    const expectedStartIso = this.toIsoDateString(expectedStart);
 
-        if (end < start) {
-            this.period.startDate = this.lastValidStartDate;
-            this.period.endDate = this.lastValidEndDate;
-            this.toastService.show('End Date cannot be earlier than Start Date.', 'error');
-            return;
+                    if (startIso !== expectedStartIso) {
+                        this.toastService.show('Start date must be exactly one day after the previous period end date.', 'error');
+                        this.period.startDate = '';
+                    }
+                } else {
+                    this.toastService.show('Please enter the previous period end date first.', 'error');
+                    this.period.startDate = '';
+                }
+            } else if (this.subscriptionStartDate && startIso !== this.subscriptionStartDate) {
+                this.toastService.show('The Period 1 start date must equal to subscription start date.', 'error');
+                this.period.startDate = '';
+            }
+        } else {
+            // Non-Custom (Yearly) Frequency Logic
+            if (this.isFirst && this.subscriptionStartDate && startIso !== this.subscriptionStartDate) {
+                this.toastService.show('The Period 1 start date must equal to subscription start date', 'error');
+                this.period.startDate = '';
+            }
         }
 
-        // Period 1 Start Date Validation
-        if (this.isFirst && this.subscriptionStartDate && this.period.startDate !== this.subscriptionStartDate) {
-            this.period.startDate = this.subscriptionStartDate; // Revert to subscription start
-            this.lastValidStartDate = this.period.startDate; // Sync valid state
-            this.toastService.show('The Period 1 start date must equal to subscription start date', 'error');
-            return;
+        this.validateAndUpdate();
+    }
+
+    onEndDateChange() {
+        if (!this.period.endDate) return;
+        const end = this.parseDateString(this.period.endDate);
+        const freq = (this.frequency || '').toLowerCase();
+
+        if (this.period.startDate) {
+            const start = this.parseDateString(this.period.startDate);
+            if (end < start) {
+                this.toastService.show('End Date cannot be earlier than Start Date.', 'error');
+                this.period.endDate = '';
+                return;
+            }
+
+            // Limit to 1 year (Mandatory for all)
+            const limitDate = new Date(start);
+            limitDate.setFullYear(limitDate.getFullYear() + 1);
+            limitDate.setDate(limitDate.getDate() - 1);
+
+            if (end > limitDate) {
+                this.toastService.show('Period duration cannot exceed 1 year.', 'error');
+                this.period.endDate = '';
+                return;
+            }
         }
 
-        // Last Period End Date Validation
+        // Last Period End Date Validation (Global)
+        // User now wants the header to reflect the last period's end date
         if (this.isLast && this.subscriptionEndDate && this.period.endDate !== this.subscriptionEndDate) {
-            this.period.endDate = this.subscriptionEndDate; // Revert to subscription end
-            this.lastValidEndDate = this.period.endDate; // Sync valid state
-            this.toastService.show('The last period end date should equal to subscription end date', 'error');
-            return;
+             // We let the parent handle the synchronization via (productChanged)
         }
 
-        // Limit to 1 year
-        const limitDate = new Date(start);
-        limitDate.setFullYear(limitDate.getFullYear() + 1);
-        limitDate.setDate(limitDate.getDate() - 1);
+        this.validateAndUpdate();
+    }
 
-        if (end > limitDate) {
-            this.period.startDate = this.lastValidStartDate;
-            this.period.endDate = this.lastValidEndDate;
-            this.toastService.show('Period duration cannot exceed 1 year.', 'error');
-            return;
+    private validateAndUpdate() {
+        if (this.period.startDate && this.period.endDate) {
+            this.updateDurationDays();
+            this.productChanged.emit();
         }
-
-        // All passed - update last valid state
-        this.lastValidStartDate = this.period.startDate;
-        this.lastValidEndDate = this.period.endDate;
-        this.productChanged.emit();
     }
 
     toggleExpand() {
