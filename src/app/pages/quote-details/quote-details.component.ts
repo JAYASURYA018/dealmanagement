@@ -1287,7 +1287,7 @@ export class QuoteDetailsComponent implements OnInit {
 
 
     get totalContractValue(): number {
-        if (this.activeTab === 'discounts' && this.isLookerSubscription) {
+        if (this.isLookerSubscription) {
             return this.subscriptionPeriods.reduce((sum, p) => sum + this.calculatePeriodTotal(p), 0);
         }
         return this.commitmentPeriods.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
@@ -1295,17 +1295,26 @@ export class QuoteDetailsComponent implements OnInit {
 
     get previewIncentives(): any[] {
         if (!this.previewData?.QuoteLineItems?.records) return [];
-        return this.previewData.QuoteLineItems.records.filter((item: any) =>
-            (Number(item.Incentive__c) || 0) > 0
+        return this.previewData.QuoteLineItems.records
+            .filter((item: any) => (Number(item.Incentive__c) || 0) > 0)
+            .sort((a: any, b: any) => {
+                const dateA = new Date(a.StartDate || 0).getTime();
+                const dateB = new Date(b.StartDate || 0).getTime();
+                return dateA - dateB;
+            });
+    }
+
+    get bundleLineItem(): any {
+        if (!this.previewData?.QuoteLineItems?.records) return null;
+        return this.previewData.QuoteLineItems.records.find((line: any) =>
+            line.Product2Id === this.productId || (line.Product2 && line.Product2.Id === this.productId)
         );
     }
 
     get previewDiscountGroups(): any[] {
         if (!this.previewData?.QuoteLineItems?.records) return [];
         return this.previewData.QuoteLineItems.records.filter((item: any) =>
-            (Number(item.Discount) || 0) > 0 &&
-            (item.Product2?.Family === 'Product Group' || !item.Product2?.Family || item.Product2?.Family === 'Compute' || item.Product2?.Family === 'Storage')
-            && !this.isIndividualProduct(item)
+            (Number(item.Discount) || 0) > 0 && this.isGroupProduct(item)
         );
     }
 
@@ -1316,12 +1325,36 @@ export class QuoteDetailsComponent implements OnInit {
     get previewDiscountIndividuals(): any[] {
         if (!this.previewData?.QuoteLineItems?.records) return [];
         return this.previewData.QuoteLineItems.records.filter((item: any) =>
-            (Number(item.Discount) || 0) > 0 && this.isIndividualProduct(item)
+            (Number(item.Discount) || 0) > 0 && !this.isGroupProduct(item)
         );
     }
 
     get groupedDiscountIndividuals(): any[] {
         return this.groupByDateRange(this.previewDiscountIndividuals);
+    }
+
+    get allUniqueDiscountRanges(): any[] {
+        if (!this.previewData?.QuoteLineItems?.records) return [];
+        const unique = new Map<string, any>();
+        this.previewData.QuoteLineItems.records.forEach((item: any) => {
+            if ((Number(item.Discount) || 0) > 0) {
+                const key = `${item.StartDate}_${item.EndDate}`;
+                if (!unique.has(key)) {
+                    unique.set(key, { startDate: item.StartDate, endDate: item.EndDate });
+                }
+            }
+        });
+        return Array.from(unique.values()).sort((a, b) => {
+            const dateA = new Date(a.startDate || 0).getTime();
+            const dateB = new Date(b.startDate || 0).getTime();
+            return dateA - dateB;
+        });
+    }
+
+    getPeriodNumber(startDate: string, endDate: string): number {
+        const ranges = this.allUniqueDiscountRanges;
+        const index = ranges.findIndex(r => r.startDate === startDate && r.endDate === endDate);
+        return index !== -1 ? index + 1 : 1;
     }
 
     private groupByDateRange(items: any[]): any[] {
@@ -1337,12 +1370,28 @@ export class QuoteDetailsComponent implements OnInit {
             }
             range.items.push(item);
         });
+
+        // Sort ranges chronologically by start date to ensure "Period 1" is the earliest
+        ranges.sort((a, b) => {
+            const dateA = new Date(a.startDate || 0).getTime();
+            const dateB = new Date(b.startDate || 0).getTime();
+            return dateA - dateB;
+        });
+
         return ranges;
     }
 
+    private isGroupProduct(item: any): boolean {
+        const family = item.Product2?.Family;
+        // Group criteria: matches specific "bundle" families or has no family (classification-level bundles)
+        if (family === 'Product Group' || !family || family === 'Compute' || family === 'Storage') {
+            return true;
+        }
+        return false;
+    }
+
     private isIndividualProduct(item: any): boolean {
-        // Individual products in GCP often have specific codes or families. 
-        // For now, let's look at the name as a fallback if we don't have a solid flag.
+        // Fallback name-based heuristic if family isn't conclusive
         const name = (item.Product2?.Name || '').toLowerCase();
         const individualKeywords = ['dataproc', 'composer', 'vm', 'storage', 'gcs', 'disk', 'dns', 'cdn', 'interconnect'];
         return individualKeywords.some(key => name.includes(key));
@@ -1353,24 +1402,10 @@ export class QuoteDetailsComponent implements OnInit {
         return this.previewData.QuoteLineItems.records.reduce((acc: number, item: any) => acc + (Number(item.Incentive__c) || 0), 0);
     }
 
-    /** Formats a value in millions. 
-     * Handles both raw millions (e.g. 12) and raw dollars (e.g. 12000000).
-     * e.g. 0.85 -> 850k, 6 -> 6, 12000000 -> 12 */
+    /** Formats a monetary value as USD currency.
+     * Replaces previous millions-based formatting. */
     formatMillionValue(value: any): string {
-        let num = Number(value) || 0;
-        if (num === 0) return '0';
-
-        // If value is very large, assume it's raw currency and convert to millions
-        if (num >= 100000) {
-            num = num / 1000000;
-        }
-
-        if (num < 1) {
-            return (num * 1000).toFixed(0) + 'k';
-        }
-
-        // Return rounded to 2 decimal places if not an integer
-        return num % 1 === 0 ? num.toString() : num.toFixed(2);
+        return this.formatCurrency(value);
     }
 
     buildCommitmentRecords(quoteId: string, quoteLineItemId: string): any[] {

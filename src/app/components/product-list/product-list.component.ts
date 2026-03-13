@@ -32,12 +32,22 @@ export class ProductListComponent implements OnInit {
         const rcaProducts$ = this.rcaApiService.products$.pipe(
             map(rcaProducts => {
                 return rcaProducts.map(rp => {
-                    // The RCA API returns products with 'id' as the Salesforce Product2Id
+                    let displayName = rp.additionalFields?.Name || rp.name;
+                    let productFamily = rp.additionalFields?.Family || 'Other';
+
+                    // Rename Enterprise Services Bundle to Google Cloud Platform RCA
+                    if (displayName === 'Enterprise Services Bundle') {
+                        displayName = 'Google Cloud Platform RCA';
+                        productFamily = 'GCP';
+                    } else if (displayName === 'Looker New RCA') {
+                        productFamily = 'GCP';
+                    }
+
                     const product = {
                         id: rp.id, // This is the Product2Id from Salesforce
-                        name: rp.additionalFields?.Name || rp.name,
+                        name: displayName,
                         description: rp.description,
-                        family: rp.additionalFields?.Family || 'Other',
+                        family: productFamily,
                         tags: [], // Static icons for now
                         productId: rp.id, // Store as productId as well for clarity
                         pricebookEntryId: rp.defaultPrice?.pricebookEntryId || rp.pricebookEntryId,
@@ -61,7 +71,7 @@ export class ProductListComponent implements OnInit {
             }
 
             this.filteredProducts = products.filter(product => {
-                const allowedProducts = ['Looker New RCA', 'Enterprise Services Bundle'];
+                const allowedProducts = ['Looker New RCA', 'Google Cloud Platform RCA'];
                 if (!allowedProducts.includes(product.name)) {
                     return false;
                 }

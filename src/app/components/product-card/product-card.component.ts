@@ -17,6 +17,10 @@ export class ProductCardComponent {
         map(items => !!items.find(item => item.id === this.product.id))
     );
 
+    cartHasOtherItems$ = this.cartService.cartItems$.pipe(
+        map(items => items.length > 0 && !items.find(item => item.id === this.product.id))
+    );
+
     toggleCart() {
         const currentItems = this.cartService.getCartItems();
         const isAlreadyAdded = currentItems.find(item => item.id === this.product.id);

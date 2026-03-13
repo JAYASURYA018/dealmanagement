@@ -321,6 +321,20 @@ export class RcaApiService {
 
                 const body: any = {
                     language: 'en_US',
+                    filter: {
+                        criteria: [
+                            {
+                                "property": "isActive",
+                                "operator": "eq",
+                                "value": true
+                            },
+                            {
+                                "property": "Type",
+                                "operator": "eq",
+                                "value": ""
+                            }
+                        ]
+                    },
                     categoryIds: categoryIds,
                     searchTerm: searchTerm
                 };

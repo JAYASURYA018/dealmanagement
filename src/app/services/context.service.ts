@@ -143,7 +143,7 @@ export class ContextService {
      * Fetches a fresh session token from the external auth API
      */
     fetchSessionToken(): Observable<string> {
-        const authUrl = 'https://dealmanagementbackend-production.up.railway.app/auth/session';
+        const authUrl = 'https://dealmanagementbackend-production-49da.up.railway.app/auth/session';
         console.log('[ContextService] Fetching new session token from:', authUrl);
 
         const startTime = new Date();

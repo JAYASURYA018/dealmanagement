@@ -1,15 +1,15 @@
 <div class="w-full">
     <!-- Product Row -->
     <div
-        class="group bg-white rounded-[20px] border border-gray-200 p-4 pr-6 flex items-center justify-between hover:border-gray-300 transition-all">
-        <div class="flex flex-col gap-1">
+        class="group bg-white rounded-[20px] border border-gray-200 p-3 pr-4 flex items-center justify-between hover:border-gray-300 transition-all">
+        <div class="flex flex-col gap-0.5">
             <!-- Product Name (Top) -->
             <div class="text-[14.5px] font-semibold text-[#202124]">
                 {{product.name}}
             </div>
 
             <!-- Family Section (Logo + Family Name) -->
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-1">
                 <!-- Logo -->
                 <div class="w-[18px] h-[18px] flex items-center justify-center flex-shrink-0">
                     <img src="https://fonts.gstatic.com/s/i/productlogos/googleg/v6/24px.svg" alt="logo"
@@ -26,8 +26,8 @@
         <!-- Action Button -->
         <div class="flex-shrink-0">
             <ng-container *ngIf="!(isAdded$ | async); else addedBtn">
-                <button (click)="toggleCart()"
-                    class="flex items-center px-6 py-2 text-[#3c4043] text-[13px] font-medium rounded-full transition-colors border border-gray-300 enabled:bg-white enabled:hover:bg-gray-50">
+                <button (click)="toggleCart()" [disabled]="cartHasOtherItems$ | async"
+                    class="flex items-center px-6 py-2 text-[#3c4043] text-[13px] font-medium rounded-full transition-colors border border-gray-300 enabled:bg-white enabled:hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-gray-50">
                     <span class="mr-2 text-lg font-light leading-none">+</span>
                     Add
                 </button>

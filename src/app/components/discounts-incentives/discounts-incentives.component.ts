@@ -60,20 +60,21 @@ export class DiscountsIncentivesComponent implements OnChanges {
     openActionMenuId: string | null = null;
     periodDropdownOpen = false;
 
-    // Period Configuration
-    discountPeriods = [{
-        id: '1',
-        name: 'Discount period - 1',
-        timePeriod: 'Date range',
-        startDate: '',
-        endDate: '',
-        activeDiscounts: [] as any[]
-    }];
+    discountPeriods = [
+        {
+            id: '1',
+            name: 'DiscountPeriod 1',
+            timePeriod: 'Date range',
+            startDate: '',
+            endDate: '',
+            activeDiscounts: [] as any[]
+        }
+    ];
     activeDiscountPeriodId = '1';
 
     incentivePeriods = [{
         id: '1',
-        name: 'Incentives period - 1',
+        name: 'Incentives period 1',
         timePeriod: 'Date range',
         startDate: '',
         endDate: '',
@@ -82,7 +83,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
     activeIncentivePeriodId = '1';
 
     get activeDiscountPeriod() {
-        return this.discountPeriods.find(p => p.id === this.activeDiscountPeriodId) || this.discountPeriods[0];
+        return this.discountPeriods.find(p => p.id === this.activeDiscountPeriodId);
     }
 
     get activeIncentivePeriod() {
@@ -90,11 +91,12 @@ export class DiscountsIncentivesComponent implements OnChanges {
     }
 
     addDiscountPeriod() {
-        // Validation removed as requested
+        if (this.discountPeriods.length >= 2) return;
+
         const id = Date.now().toString();
         this.discountPeriods.push({
             id: id,
-            name: `Discount period - ${this.discountPeriods.length + 1}`,
+            name: `DiscountPeriod ${this.discountPeriods.length + 1}`,
             timePeriod: 'Date range',
             startDate: '',
             endDate: '',
@@ -107,9 +109,9 @@ export class DiscountsIncentivesComponent implements OnChanges {
         if (this.discountPeriods.length > 1) {
             this.discountPeriods = this.discountPeriods.filter(p => p.id !== id);
             if (this.activeDiscountPeriodId === id) {
-                this.activeDiscountPeriodId = this.discountPeriods[0].id;
+                this.activeDiscountPeriodId = '';
             }
-            this.discountPeriods.forEach((p, index) => p.name = `Discount period - ${index + 1}`);
+            this.discountPeriods.forEach((p, index) => p.name = `DiscountPeriod ${index + 1}`);
         }
     }
 
@@ -117,7 +119,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
         const id = Date.now().toString();
         this.incentivePeriods.push({
             id: id,
-            name: `Incentives period - ${this.incentivePeriods.length + 1}`,
+            name: `Incentives period ${this.incentivePeriods.length + 1}`,
             timePeriod: 'Date range',
             startDate: '',
             endDate: '',
@@ -132,7 +134,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
             if (this.activeIncentivePeriodId === id) {
                 this.activeIncentivePeriodId = this.incentivePeriods[0].id;
             }
-            this.incentivePeriods.forEach((p, index) => p.name = `Incentives period - ${index + 1}`);
+            this.incentivePeriods.forEach((p, index) => p.name = `Incentives period ${index + 1}`);
         }
     }
 
@@ -189,10 +191,8 @@ export class DiscountsIncentivesComponent implements OnChanges {
     private dataFetched = false;
     // Dropdown Data
     dropdownOptions: any[] = [];
-    filteredDropdownOptions: any[] = [];
     selectedDropdownOption: any = null;
     dropdownSearchText: string = '';
-    isDropdownOpen: boolean = false;
 
     // Individual Pagination State
     individualPageSize: number = 100;
@@ -261,14 +261,15 @@ export class DiscountsIncentivesComponent implements OnChanges {
     }
 
     resetAllState() {
-        this.discountPeriods = [{
-            id: '1', name: 'Discount period 1', timePeriod: 'Date range', startDate: '', endDate: '', activeDiscounts: []
-        }];
+        this.discountPeriods = [
+            { id: '1', name: 'DiscountPeriod 1', timePeriod: 'Date range', startDate: '', endDate: '', activeDiscounts: [] }
+        ];
         this.activeDiscountPeriodId = '1';
         this.incentivePeriods = [{
             id: '1', name: 'Incentives period 1', timePeriod: 'Date range', startDate: '', endDate: '', activeIncentives: []
         }];
         this.activeIncentivePeriodId = '1';
+        this.activeTab = 'discounts';
     }
 
     fetchDropdownOptions() {
@@ -280,11 +281,10 @@ export class DiscountsIncentivesComponent implements OnChanges {
                 const records = res.records || [];
                 // Filter only those with It_has_Bundle_Products__c = false (Individual Products)
                 this.dropdownOptions = records.filter((r: any) => r.It_has_Bundle_Products__c === false);
-                this.filteredDropdownOptions = [...this.dropdownOptions];
 
                 // Select the first option by default if available
-                if (this.filteredDropdownOptions.length > 0) {
-                    this.selectDropdownOption(this.filteredDropdownOptions[0]);
+                if (this.dropdownOptions.length > 0) {
+                    this.selectDropdownOption(this.dropdownOptions[0]);
                 }
                 this.dataFetched = true; // Mark as fetched
             },
@@ -295,13 +295,60 @@ export class DiscountsIncentivesComponent implements OnChanges {
         });
     }
 
-    toggleDropdown() {
-        this.isDropdownOpen = !this.isDropdownOpen;
+
+    /**
+     * Getter for the filtered and sorted list of groups.
+     * This ensures the UI updates instantly when the search text changes or when a product is selected.
+     */
+    get displayDropdownOptions(): any[] {
+        let options = [...this.dropdownOptions];
+
+        // 1. Filter by search text
+        if (this.dropdownSearchText) {
+            const term = this.dropdownSearchText.toLowerCase();
+            options = options.filter(opt => opt.Name && opt.Name.toLowerCase().includes(term));
+        }
+
+        // 2. Pre-calculate selected counts to optimize sort performance
+        const familyCounts = new Map<string, number>();
+        this.persistentSelectedIndividuals.forEach((item) => {
+            if (item.family) {
+                familyCounts.set(item.family, (familyCounts.get(item.family) || 0) + 1);
+            }
+        });
+
+        // 3. Sort logic:
+        // - Groups with selections move to the front.
+        // - Then sorted by count (higher first).
+        // - Then sorted alphabetically.
+        options.sort((a, b) => {
+            const countA = familyCounts.get(a.Name) || 0;
+            const countB = familyCounts.get(b.Name) || 0;
+
+            if (countA > 0 && countB === 0) return -1;
+            if (countB > 0 && countA === 0) return 1;
+            if (countA > countB) return -1;
+            if (countB > countA) return 1;
+
+            return (a.Name || '').localeCompare(b.Name || '');
+        });
+
+        return options;
+    }
+
+    /**
+     * Returns the number of selected products belonging to a specific classification.
+     */
+    getSelectedCountForClassification(classificationName: string): number {
+        let count = 0;
+        this.persistentSelectedIndividuals.forEach((item) => {
+            if (item.family === classificationName) count++;
+        });
+        return count;
     }
 
     selectDropdownOption(option: any) {
         this.selectedDropdownOption = option;
-        this.isDropdownOpen = false;
 
         // Clear all filters when changing classification as requested
         this.productSearchTerm = '';
@@ -312,17 +359,6 @@ export class DiscountsIncentivesComponent implements OnChanges {
 
         this.individualCurrentOffset = 0; // Reset pagination
         this.loadIndividualProducts();
-    }
-
-    filterDropdownOptions() {
-        if (!this.dropdownSearchText) {
-            this.filteredDropdownOptions = [...this.dropdownOptions];
-        } else {
-            const searchLower = this.dropdownSearchText.toLowerCase();
-            this.filteredDropdownOptions = this.dropdownOptions.filter(opt =>
-                opt.Name.toLowerCase().includes(searchLower)
-            );
-        }
     }
 
     setActiveTab(tab: 'discounts' | 'incentives') {
@@ -607,7 +643,18 @@ export class DiscountsIncentivesComponent implements OnChanges {
 
     // Builds criteria payload from the selected Region and Billing Frequency dropdowns.
     private getFacetedCriteria(): any[] {
-        const criteria: any[] = [];
+        const criteria: any[] = [
+            {
+                "property": "isActive",
+                "operator": "eq",
+                "value": true
+            },
+            {
+                "property": "Type",
+                "operator": "eq",
+                "value": ""
+            }
+        ];
 
         if (this.selectedRegion) {
             criteria.push({
@@ -635,8 +682,9 @@ export class DiscountsIncentivesComponent implements OnChanges {
 
         const criteria = this.getFacetedCriteria();
 
-        // If search is cleared AND no criteria, reload default products
-        if (!this.productSearchTerm && criteria.length === 0) {
+        // Check if search is cleared AND only default criteria are present (isActive and Type)
+        // criteria.length <= 2 means only the default filters are there.
+        if (!this.productSearchTerm && criteria.length <= 2) {
             this.loadIndividualProducts();
             return;
         }
@@ -644,10 +692,11 @@ export class DiscountsIncentivesComponent implements OnChanges {
         this.isIndividualLoading = true;
         let searchRequest$: Observable<any>;
 
-        if (criteria.length > 0) {
+        if (this.selectedRegion || this.selectedBillingFreq) {
             // Faceted search: Use classification-based URL with filtering criteria
-            // Pass the classification ID from the dropdown as requested
-            const classId = this.selectedDropdownOption?.Id || this.rootClassificationId;
+            // Use selected option ID, or fallback to category/bundle ID as requested by user
+            const classId = this.selectedDropdownOption?.Id || this.categoryId || this.bundleCategoryId || this.rootClassificationId;
+
             searchRequest$ = this.rcaApiService.facetedProductSearch(
                 classId,
                 criteria,
@@ -655,13 +704,8 @@ export class DiscountsIncentivesComponent implements OnChanges {
                 this.individualCurrentOffset
             );
         } else {
-            // Global text-based search: Use global URL with categoryIds (0ZG...) in body
-            // We use the categoryId passed via @Input OR the one we fetched dynamically from getProductDetails
+            // Global text-based search: Use global URL with categoryIds in body
             const searchCategoryId = this.categoryId || this.bundleCategoryId;
-
-            if (!searchCategoryId) {
-                console.warn('⚠️ No Category ID available for global search. Falling back to search without category restriction.');
-            }
 
             searchRequest$ = this.rcaApiService.searchProducts(
                 this.productSearchTerm,
@@ -1077,6 +1121,12 @@ export class DiscountsIncentivesComponent implements OnChanges {
 
     // Management Actions
     async addDiscount() {
+        if (!this.activeDiscountPeriod) {
+            this.toastService.show('Please select a discount period first.', 'warning');
+            this.periodDropdownOpen = true;
+            return;
+        }
+
         if (!this.activeDiscountPeriod.startDate || !this.activeDiscountPeriod.endDate) {
             this.toastService.show('Please select both Start and End dates for the active discount period.', 'warning');
             return;
@@ -1274,8 +1324,8 @@ export class DiscountsIncentivesComponent implements OnChanges {
                             "QuoteId": quoteId, // Direct ID as per sample
                             "Product2Id": item.id,
                             "PricebookEntryId": pbeId,
-                            "StartDate": this.activeDiscountPeriod.startDate,
-                            "EndDate": this.activeDiscountPeriod.endDate,
+                            "StartDate": this.activeDiscountPeriod?.startDate,
+                            "EndDate": this.activeDiscountPeriod?.endDate,
                             "PeriodBoundary": "Anniversary",
                             "Quantity": Number(item.quantity) || 1,
                             "Discount": Number(item.discount) || 0
@@ -1336,7 +1386,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
                 // Signal that quote line items need refresh due to discount changes
                 this.quoteRefreshService.setRefreshNeeded(true);
             },
-            error: (err) => {
+            error: (err: any) => {
                 console.error('Failed to update quote', err);
             }
         });
@@ -1353,6 +1403,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
             type: 'discount',
             granularity: granularity
         };
+        if (!this.activeDiscountPeriod) return;
         this.activeDiscountPeriod.activeDiscounts.unshift(newDiscount); // Add to top
     }
 
@@ -1414,16 +1465,10 @@ export class DiscountsIncentivesComponent implements OnChanges {
                     )
                 );
 
-                const quoteLinesRequest = this.salesforceApiService.getBundleQuoteLineItems(quoteId).pipe(
-                    catchError(() => of({ records: [] }))
-                );
+                const pbeResults$ = pbeRequests.length > 0 ? forkJoin(pbeRequests) : of([]);
 
-                forkJoin({
-                    pbeResults: pbeRequests.length > 0 ? forkJoin(pbeRequests) : of([]),
-                    quoteLines: quoteLinesRequest
-                }).pipe(
-                    switchMap(({ pbeResults, quoteLines }: any) => {
-                        const existingLines = quoteLines?.records || [];
+                pbeResults$.pipe(
+                    switchMap((pbeResults: any) => {
                         const records: any[] = [
                             {
                                 "referenceId": "refQuote",
@@ -1437,34 +1482,23 @@ export class DiscountsIncentivesComponent implements OnChanges {
                             const pbeResult: any = Array.isArray(pbeResults) ? pbeResults.find((r: any) => r.itemId === item.id) : null;
                             const finalPbeId = pbeResult?.pbeId || item.pbeId || '01uDz00000dqLY8IAM';
 
-                            const existingLine = existingLines.find((ql: any) => ql.Product2Id === item.id);
-                            // Always use per-item incentive amount (always granular)
-                            const itemAmount = parseFloat(item.incentiveAmount) || 0;
+                            // Use raw USD value directly
+                            const itemAmount = (parseFloat(item.incentiveAmount) || 0);
 
-                            if (existingLine && existingLine.Id) {
-                                records.push({
-                                    "referenceId": `refLineUpdate_${index}`,
-                                    "record": {
-                                        "attributes": { "type": "QuoteLineItem", "method": "PATCH", "id": existingLine.Id },
-                                        "Incentive__c": itemAmount
-                                    }
-                                });
-                            } else {
-                                records.push({
-                                    "referenceId": `refLineUpdate_${index}`,
-                                    "record": {
-                                        "attributes": { "type": "QuoteLineItem", "method": "POST" },
-                                        "QuoteId": quoteId,
-                                        "Product2Id": item.id,
-                                        "PricebookEntryId": finalPbeId,
-                                        "StartDate": this.activeIncentivePeriod.startDate,
-                                        "EndDate": this.activeIncentivePeriod.endDate,
-                                        "Incentive__c": itemAmount,
-                                        "PeriodBoundary": "Anniversary",
-                                        "Quantity": 1
-                                    }
-                                });
-                            }
+                            records.push({
+                                "referenceId": `refIncentive_${index}`,
+                                "record": {
+                                    "attributes": { "type": "QuoteLineItem", "method": "POST" },
+                                    "QuoteId": quoteId,
+                                    "Product2Id": item.id,
+                                    "PricebookEntryId": finalPbeId,
+                                    "StartDate": this.activeIncentivePeriod.startDate,
+                                    "EndDate": this.activeIncentivePeriod.endDate,
+                                    "Incentive__c": itemAmount,
+                                    "PeriodBoundary": "Anniversary",
+                                    "Quantity": 1
+                                }
+                            });
                         });
 
                         const payload = {
@@ -1511,12 +1545,12 @@ export class DiscountsIncentivesComponent implements OnChanges {
                         this.productGroups.forEach(g => { g.selected = false; });
                         this.quoteRefreshService.setRefreshNeeded(true);
                     },
-                    error: (err) => {
+                    error: (err: any) => {
                         console.error('[Incentives] Error adding incentive:', err);
                     }
                 });
             })
-            .catch(err => {
+            .catch((err: any) => {
                 console.error('[Incentives] Error resolving bundles:', err);
                 this.toastService.show('Error resolving product groups', 'error');
                 this.loadingService.hide();

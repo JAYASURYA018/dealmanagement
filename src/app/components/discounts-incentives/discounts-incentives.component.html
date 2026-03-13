@@ -4,17 +4,24 @@
     <div class="flex-1 w-full lg:w-3/4 space-y-6">
 
         <!-- Discount Periods -->
-        <div *ngFor="let dPeriod of discountPeriods; let i = index" class="bg-[#f0f4f9] rounded-xl p-4 mb-6"
-            (click)="activeDiscountPeriodId = dPeriod.id">
+        <div *ngFor="let dPeriod of discountPeriods; let i = index"
+            [ngClass]="activeTab === 'discounts' && activeDiscountPeriodId === dPeriod.id ? 'ring-2 ring-blue-500 shadow-md' : 'border border-transparent'"
+            class="bg-[#f0f4f9] rounded-xl p-4 mb-6 cursor-pointer transition-all"
+            (click)="activeDiscountPeriodId = dPeriod.id; setActiveTab('discounts')">
             <div class="flex items-center justify-between mb-4">
                 <div class="flex items-center gap-3">
                     <h3 class="text-base font-bold text-gray-800">{{ dPeriod.name }}</h3>
+                    <span *ngIf="activeTab === 'discounts' && activeDiscountPeriodId === dPeriod.id"
+                        class="bg-blue-600 text-white text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">Active
+                        Configuration</span>
                 </div>
 
                 <div class="flex items-center gap-3">
                     <button *ngIf="discountPeriods.length > 1"
-                        (click)="removeDiscountPeriod(dPeriod.id); $event.stopPropagation()"
-                        class="text-gray-400 hover:text-red-500 transition-colors p-1 rounded-full hover:bg-white flex items-center justify-center shadow-sm"
+                        (click)="dPeriod.activeDiscounts.length === 0 && removeDiscountPeriod(dPeriod.id); $event.stopPropagation()"
+                        [disabled]="dPeriod.activeDiscounts.length > 0"
+                        [ngClass]="dPeriod.activeDiscounts.length > 0 ? 'text-gray-300 opacity-50 cursor-not-allowed' : 'text-gray-400 hover:text-red-500 hover:bg-white'"
+                        class="transition-colors p-1 rounded-full flex items-center justify-center shadow-sm bg-white"
                         title="Remove Period">
                         <span class="material-icons-outlined text-[18px]">delete</span>
                     </button>
@@ -99,22 +106,36 @@
             </div>
         </div>
 
-        <button (click)="addDiscountPeriod()"
-            class="mb-6 flex items-center gap-2 px-4 py-2 border border-blue-200 rounded-lg text-sm font-bold text-blue-600 bg-white hover:bg-blue-50 transition-colors w-fit">
+
+        <button *ngIf="discountPeriods.length < 2" (click)="addDiscountPeriod()"
+            class="mb-6 flex items-center gap-2 px-4 py-2 border border-blue-600 rounded-lg text-sm font-bold text-blue-600 bg-white hover:bg-blue-50 transition-colors w-fit shadow-sm">
             <span class="material-icons-outlined text-[18px]">add_circle_outline</span>
             Add another discount period
         </button>
 
         <!-- Incentives Period Card -->
-        <div *ngFor="let iPeriod of incentivePeriods; let i = index" class="bg-[#f0f4f9] rounded-xl p-4 mb-6"
-            (click)="activeIncentivePeriodId = iPeriod.id">
+        <div *ngFor="let iPeriod of incentivePeriods; let i = index"
+            [ngClass]="activeTab === 'incentives' && activeIncentivePeriodId === iPeriod.id ? 'ring-2 ring-blue-500 shadow-md' : 'border border-transparent'"
+            class="bg-[#f0f4f9] rounded-xl p-4 mb-6 cursor-pointer transition-all"
+            (click)="activeIncentivePeriodId = iPeriod.id; setActiveTab('incentives')">
 
             <div class="flex items-center justify-between mb-4">
                 <div class="flex items-center gap-3">
                     <h3 class="text-base font-bold text-gray-800">{{ iPeriod.name }}</h3>
+                    <span *ngIf="activeTab === 'incentives' && activeIncentivePeriodId === iPeriod.id"
+                        class="bg-blue-600 text-white text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">Active
+                        Configuration</span>
                 </div>
 
                 <div class="flex items-center gap-3">
+                    <button *ngIf="incentivePeriods.length > 1"
+                        (click)="iPeriod.activeIncentives.length === 0 && removeIncentivePeriod(iPeriod.id); $event.stopPropagation()"
+                        [disabled]="iPeriod.activeIncentives.length > 0"
+                        [ngClass]="iPeriod.activeIncentives.length > 0 ? 'text-gray-300 opacity-50 cursor-not-allowed' : 'text-gray-400 hover:text-red-500 hover:bg-white'"
+                        class="transition-colors p-1 rounded-full flex items-center justify-center shadow-sm bg-white"
+                        title="Remove Period">
+                        <span class="material-icons-outlined text-[18px]">delete</span>
+                    </button>
                 </div>
             </div>
 
@@ -179,9 +200,14 @@
             </div>
         </div>
 
+        <!-- <button *ngIf="incentivePeriods.length < 2" (click)="addIncentivePeriod()"
+            class="mb-6 flex items-center gap-2 px-4 py-2 border border-blue-600 rounded-lg text-sm font-bold text-blue-600 bg-white hover:bg-blue-50 transition-colors w-fit shadow-sm">
+            <span class="material-icons-outlined text-[18px]">add_circle_outline</span>
+            Add another incentive period
+        </button> -->
     </div>
 
-    <!-- Right Panel: Configuration (Span 3/12) -->
+    <!-- Right Panel: Configuration -->
     <div class="w-full lg:w-1/4 bg-white rounded-xl border border-gray-400 shadow-sm p-4 h-fit">
 
         <!-- Tabs -->
@@ -209,8 +235,9 @@
                         class="bg-white border border-gray-400 rounded-lg p-2 h-[52px] flex justify-between items-center cursor-pointer hover:border-gray-300 transition-colors">
                         <div class="flex flex-col justify-center">
                             <label class="text-[11px] text-gray-500 mb-0.5 leading-none">Discount period</label>
-                            <span class="text-sm font-medium text-gray-900 leading-tight">
-                                {{ activeDiscountPeriod.name }}
+                            <span class="text-sm font-medium leading-tight"
+                                [ngClass]="activeDiscountPeriod ? 'text-gray-900' : 'text-gray-400'">
+                                {{ activeDiscountPeriod ? activeDiscountPeriod.name : 'Select Period' }}
                             </span>
                         </div>
                         <span class="material-icons-outlined text-gray-500">arrow_drop_down</span>
@@ -231,8 +258,10 @@
                     <div (click)="granularityOpen = !granularityOpen"
                         class="bg-white border border-gray-400 rounded-lg p-2 h-[52px] flex justify-between items-center cursor-pointer hover:border-gray-300 transition-colors">
                         <div class="flex flex-col justify-center">
-                            <label class="text-[11px] text-gray-500 mb-0.5 leading-none">Discount Granularity</label>
-                            <span class="text-sm font-medium text-gray-900 leading-tight">{{ discountForm.granularity
+                            <label class="text-[11px] text-gray-500 mb-0.5 leading-none">Discount
+                                Granularity</label>
+                            <span class="text-sm font-medium text-gray-900 leading-tight">{{
+                                discountForm.granularity
                                 }}</span>
                         </div>
                         <span class="material-icons-outlined text-gray-500">arrow_drop_down</span>
@@ -254,7 +283,8 @@
                         <div (click)="typeOpen = !typeOpen"
                             class="bg-white border border-gray-400 rounded-lg p-2 h-[52px] flex justify-between items-center cursor-pointer hover:border-gray-300 transition-colors">
                             <div class="flex flex-col justify-center overflow-hidden">
-                                <label class="text-[11px] text-gray-500 mb-0.5 leading-none">Discount type</label>
+                                <label class="text-[11px] text-gray-500 mb-0.5 leading-none">Discount
+                                    type</label>
                                 <span class="text-sm font-medium text-gray-900 leading-tight truncate">{{
                                     discountForm.type
                                     }}</span>
@@ -276,7 +306,8 @@
                         <div (click)="priceRefOpen = !priceRefOpen"
                             class="bg-white border border-gray-400 rounded-lg p-2 h-[52px] flex justify-between items-center cursor-pointer hover:border-gray-300 transition-colors">
                             <div class="flex flex-col justify-center overflow-hidden">
-                                <label class="text-[11px] text-gray-500 mb-0.5 leading-none">Price reference</label>
+                                <label class="text-[11px] text-gray-500 mb-0.5 leading-none">Price
+                                    reference</label>
                                 <span class="text-sm font-medium text-gray-900 leading-tight truncate">{{
                                     discountForm.priceReference }}</span>
                             </div>
@@ -303,8 +334,10 @@
                 <div *ngIf="persistentSelectedGroups.size > 0 || persistentSelectedIndividuals.size > 0"
                     class="bg-blue-50 border border-blue-100 rounded-xl p-3 flex justify-between items-center">
                     <span class="text-[12px] font-bold text-blue-700 truncate">
-                        {{ persistentSelectedGroups.size }} Product Group{{ persistentSelectedGroups.size !== 1 ? 's' :
-                        '' }}, {{ persistentSelectedIndividuals.size }} Product{{ persistentSelectedIndividuals.size !==
+                        {{ persistentSelectedGroups.size }} Product Group{{ persistentSelectedGroups.size !== 1
+                        ? 's' :
+                        '' }}, {{ persistentSelectedIndividuals.size }} Product{{
+                        persistentSelectedIndividuals.size !==
                         1 ? 's' : '' }} selected
                     </span>
                     <span class="material-icons-outlined text-blue-500 text-[18px]">check_circle</span>
@@ -336,7 +369,8 @@
                     <div (click)="periodDropdownOpen = !periodDropdownOpen"
                         class="bg-white border border-gray-400 rounded-lg p-2 h-[52px] flex justify-between items-center cursor-pointer hover:border-gray-300 transition-colors">
                         <div class="flex flex-col justify-center">
-                            <label class="text-[11px] text-gray-500 mb-0.5 leading-none">Incentive period</label>
+                            <label class="text-[11px] text-gray-500 mb-0.5 leading-none">Incentive
+                                period</label>
                             <span class="text-sm font-medium text-gray-900 leading-tight">
                                 {{ activeIncentivePeriod.name }}
                             </span>
@@ -386,7 +420,8 @@
                 <div *ngIf="persistentIncentiveGroups.size > 0"
                     class="bg-blue-50 border border-blue-100 rounded-xl p-3 flex justify-between items-center">
                     <span class="text-[12px] font-bold text-blue-700 truncate">
-                        {{ persistentIncentiveGroups.size }} Product Group{{ persistentIncentiveGroups.size !== 1 ? 's'
+                        {{ persistentIncentiveGroups.size }} Product Group{{ persistentIncentiveGroups.size !==
+                        1 ? 's'
                         : '' }} selected
                     </span>
                     <span class="material-icons-outlined text-blue-500 text-[18px]">check_circle</span>
@@ -409,7 +444,7 @@
         class="bg-white rounded-l-2xl shadow-2xl w-full max-w-4xl h-full flex flex-col overflow-hidden relative animate-slide-in-right">
 
         <!-- Header -->
-        <div class="px-6 py-2 flex justify-between items-center bg-white">
+        <div class="px-6 py-1.5 flex justify-between items-center bg-white">
             <h2 class="text-xl font-bold text-gray-900">Select products</h2>
             <button (click)="closeProductSelector()"
                 class="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100 transition-colors">
@@ -423,7 +458,7 @@
                 <!-- Tabs -->
                 <div class="flex space-x-6">
                     <button (click)="switchProductTab('groups')"
-                        class="py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2"
+                        class="py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2"
                         [ngClass]="productTab === 'groups' ? 'text-blue-600 border-blue-600' : 'text-gray-500 border-transparent hover:text-gray-700'">
                         Product Groups
                         <span class="bg-blue-100 text-blue-700 text-[10px] px-1.5 py-0.5 rounded-full font-bold ml-1">{{
@@ -431,7 +466,7 @@
                     </button>
                     <!-- Only show Individual Products tab for Discounts flow -->
                     <button *ngIf="selectorCalledFrom === 'discounts'" (click)="switchProductTab('individual')"
-                        class="py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2"
+                        class="py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2"
                         [ngClass]="productTab === 'individual' ? 'text-blue-600 border-blue-600' : 'text-gray-500 border-transparent hover:text-gray-700'">
                         Individual Products
                         <span class="bg-blue-100 text-blue-700 text-[10px] px-1.5 py-0.5 rounded-full font-bold ml-1">{{
@@ -470,7 +505,7 @@
         </div>
 
         <!-- Toolbar (View Toggle & Dropdown) -->
-        <div class="px-6 py-3 bg-white flex items-center gap-4">
+        <div class="px-6 py-2 bg-white flex items-center gap-4">
             <!-- View Toggle -->
             <div class="flex items-center bg-white border border-gray-300 rounded-lg p-1">
                 <button (click)="setViewMode('all')" [class.bg-blue-100]="viewMode === 'all'"
@@ -490,46 +525,6 @@
             <div *ngIf="productTab === 'individual' && !isLoading"
                 class="flex items-center gap-3 relative z-20 flex-wrap">
 
-                <!-- Classification Dropdown -->
-                <div class="relative">
-                    <button (click)="toggleDropdown()"
-                        class="flex items-center justify-between min-w-[160px] max-w-[260px] px-3 py-1.5 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[36px]">
-                        <span class="block truncate text-xs font-bold text-gray-700">
-                            {{ selectedDropdownOption ? selectedDropdownOption.Name : 'Select Classification' }}
-                        </span>
-                        <span class="material-icons-outlined text-gray-400 text-[18px]">arrow_drop_down</span>
-                    </button>
-                    <div *ngIf="isDropdownOpen"
-                        class="absolute mt-1 w-64 bg-white border border-gray-300 rounded-md shadow-lg z-50">
-                        <div class="p-2 border-b border-gray-200 sticky top-0 bg-white rounded-t-md">
-                            <div class="relative">
-                                <span class="absolute inset-y-0 left-0 flex items-center pl-2 text-gray-400">
-                                    <span class="material-icons-outlined text-sm">search</span>
-                                </span>
-                                <input type="text" [(ngModel)]="dropdownSearchText"
-                                    (ngModelChange)="filterDropdownOptions()" placeholder="Search..."
-                                    class="w-full pl-8 pr-8 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:border-blue-500">
-                                <span *ngIf="dropdownSearchText"
-                                    class="absolute inset-y-0 right-0 flex items-center pr-2 text-gray-400 hover:text-gray-600 cursor-pointer"
-                                    (click)="dropdownSearchText = ''; filterDropdownOptions()">
-                                    <span class="material-icons-outlined text-[16px]">close</span>
-                                </span>
-                            </div>
-                        </div>
-                        <div class="max-h-60 overflow-y-auto">
-                            <div *ngFor="let option of filteredDropdownOptions" (click)="selectDropdownOption(option)"
-                                class="px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 cursor-pointer flex items-center justify-between">
-                                <span class="truncate">{{ option.Name }}</span>
-                                <span *ngIf="selectedDropdownOption?.Id === option.Id"
-                                    class="material-icons-outlined text-blue-600 text-sm">check</span>
-                            </div>
-                            <div *ngIf="filteredDropdownOptions.length === 0"
-                                class="px-4 py-2 text-sm text-gray-500 text-center">
-                                No results found
-                            </div>
-                        </div>
-                    </div>
-                </div>
 
                 <!-- Region Dropdown -->
                 <div class="relative">
@@ -576,7 +571,8 @@
                     <button (click)="billingDropdownOpen = !billingDropdownOpen; regionDropdownOpen = false"
                         class="flex items-center justify-between min-w-[160px] px-3 py-1.5 bg-white border rounded-md shadow-sm hover:bg-gray-50 min-h-[36px] text-xs font-bold transition-colors"
                         [ngClass]="selectedBillingFreq ? 'border-blue-500 text-blue-700' : 'border-gray-300 text-gray-700'">
-                        <span class="truncate">{{ selectedBillingFreq ? selectedBillingFreq.label : 'Billing Frequency'
+                        <span class="truncate">{{ selectedBillingFreq ? selectedBillingFreq.label : 'Billing
+                            Frequency'
                             }}</span>
                         <span *ngIf="selectedBillingFreq" class="material-icons-outlined text-[14px] ml-1 text-blue-500"
                             (click)="$event.stopPropagation(); selectBillingFreq(null)">close</span>
@@ -613,26 +609,56 @@
                 </div>
 
                 <!-- Backdrop to close dropdowns -->
-                <div *ngIf="isDropdownOpen || regionDropdownOpen || billingDropdownOpen"
-                    (click)="isDropdownOpen = false; regionDropdownOpen = false; billingDropdownOpen = false"
+                <div *ngIf="regionDropdownOpen || billingDropdownOpen"
+                    (click)="regionDropdownOpen = false; billingDropdownOpen = false"
                     class="fixed inset-0 z-40 bg-transparent">
                 </div>
             </div>
 
         </div>
 
-        <!-- Filter Row -->
-        <div class="mx-10 mt-4 border border-gray-300 rounded-t-lg bg-white relative">
-            <span
-                class="material-icons-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-[20px]">filter_list</span>
-            <input type="text" [(ngModel)]="filterQuery" placeholder="Add a filter"
-                class="w-full pl-10 pr-10 py-3 bg-transparent text-sm outline-none placeholder-gray-500">
-            <span *ngIf="filterQuery"
-                class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 cursor-pointer flex items-center"
-                (click)="filterQuery = ''">
-                <span class="material-icons-outlined text-[20px]">close</span>
-            </span>
+        <!-- Classification Cards for Individual Products -->
+        <div *ngIf="productTab === 'individual' && !isLoading" class="mx-6 mt-1 shrink-0">
+            <div class="bg-white border border-gray-300 rounded-lg p-2 shadow-sm flex items-stretch gap-3">
+
+                <!-- 1. Static Search Box -->
+                <div class="relative w-48 shrink-0 flex items-center border-r border-gray-200 pr-3">
+                    <span
+                        class="material-icons-outlined absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-[18px]">search</span>
+
+                    <input type="text" [(ngModel)]="dropdownSearchText" placeholder="Search product groups"
+                        class="w-full pl-8 pr-6 py-2 border border-gray-300 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-gray-700">
+
+                    <!-- Clear Button -->
+                    <span *ngIf="dropdownSearchText" (click)="dropdownSearchText = ''"
+                        class="material-icons-outlined absolute right-5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-[14px] cursor-pointer bg-white rounded-full">close</span>
+                </div>
+
+                <!-- 2. Scrollable Grid of Groups -->
+                <div class="grid gap-2 overflow-x-auto pb-1 flex-1"
+                    style="grid-template-rows: repeat(3, auto); grid-auto-flow: column; grid-auto-columns: max-content; scrollbar-width: thin;">
+
+                    <button *ngFor="let option of displayDropdownOptions" (click)="selectDropdownOption(option)"
+                        class="px-3 py-1.5 border rounded-lg cursor-pointer transition-all flex items-center justify-center shrink-0 w-full"
+                        [ngClass]="selectedDropdownOption?.Id === option.Id ? 'bg-blue-50 border-blue-600 ring-1 ring-blue-600 text-blue-800 font-bold' : 'border-gray-300 text-gray-700 hover:bg-gray-100 hover:border-gray-400'">
+
+                        <span class="text-xs whitespace-nowrap">
+                            {{ option.Name }}
+                            <!-- Show count if products in this group are selected -->
+                            <ng-container *ngIf="getSelectedCountForClassification(option.Name) > 0">
+                                ({{ getSelectedCountForClassification(option.Name) }})
+                            </ng-container>
+                        </span>
+                    </button>
+
+                    <!-- Empty State -->
+                    <div *ngIf="displayDropdownOptions.length === 0" class="text-sm text-gray-500 py-1">
+                        No classifications available
+                    </div>
+                </div>
+            </div>
         </div>
+
 
         <!-- Loading State for Individual Products -->
         <div *ngIf="isIndividualLoading" class="flex flex-col items-center justify-center p-12">
@@ -652,11 +678,11 @@
 
         <!-- Table Content -->
         <div *ngIf="!isLoading && !isIndividualLoading"
-            class="flex-1 overflow-y-auto bg-white mx-10 border-x border-b border-gray-300 mb-4 rounded-b-lg px-4">
+            class="flex-1 overflow-y-auto bg-white mx-6 border border-gray-300 mt-2 mb-2 rounded-lg px-4">
             <table class="w-full border-collapse table-fixed">
                 <thead class="sticky top-0 bg-white z-10 shadow-sm border-b border-gray-200">
                     <tr class="text-left text-xs font-bold text-gray-500">
-                        <th class="w-12 px-4 py-3 text-center">
+                        <th class="w-12 px-3 py-2 text-center">
                             <div (click)="toggleSelectAll()"
                                 class="w-4 h-4 border rounded cursor-pointer flex items-center justify-center transition-colors"
                                 [ngClass]="isAllSelected ? 'bg-blue-600 border-blue-600' : 'border-gray-300 bg-white'">
@@ -664,7 +690,7 @@
                                     class="material-icons-outlined text-white text-[12px]">check</span>
                             </div>
                         </th>
-                        <th class="px-4 py-3 select-none relative group align-top">
+                        <th class="px-3 py-2 select-none relative group align-top">
                             <div class="flex items-center gap-1 cursor-pointer hover:bg-gray-50 transition-colors p-1 rounded -ml-1"
                                 (click)="handleSort('name')">
                                 {{ productTab === 'groups' ? 'Product Group' : 'Product Name' }}
@@ -675,19 +701,20 @@
                             </div>
                         </th>
 
-                        <th *ngIf="productTab === 'groups'" class="px-4 py-3 text-left w-48">Number of Products
+                        <th *ngIf="productTab === 'groups'" class="px-3 py-2 text-left w-48">Number of Products
                         </th>
                         <th *ngIf="activeTab === 'discounts' && discountForm.granularity === 'Granular'"
-                            class="px-4 py-3 text-right pr-6 w-32">
+                            class="px-3 py-2 text-right pr-6 w-32">
                             Discount</th>
                         <!-- Always show Amount column for Incentives -->
-                        <th *ngIf="selectorCalledFrom === 'incentives'" class="px-4 py-3 text-right pr-6 w-36">
-                            Amount (USD)</th>
+                        <th *ngIf="selectorCalledFrom === 'incentives'"
+                            class="px-3 py-2 text-right pr-6 w-36 text-blue-600">
+                            Incentive</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
                     <tr *ngFor="let item of filteredItems" class="hover:bg-blue-50 transition-colors group">
-                        <td class="w-12 px-4 py-4 text-center">
+                        <td class="w-12 px-3 py-2 text-center">
                             <div (click)="toggleItem(item)"
                                 class="w-5 h-5 border rounded cursor-pointer flex items-center justify-center transition-colors"
                                 [ngClass]="item.selected ? 'bg-blue-600 border-blue-600' : 'border-gray-300 bg-white group-hover:border-blue-400'">
@@ -695,16 +722,16 @@
                                     class="material-icons-outlined text-white text-[16px]">check</span>
                             </div>
                         </td>
-                        <td class="px-4 py-4 text-sm font-medium text-gray-900">
+                        <td class="px-3 py-2 text-sm font-medium text-gray-900">
                             <div class="truncate">{{ item.name }}</div>
                         </td>
 
                         <td *ngIf="productTab === 'groups'"
-                            class="w-48 px-4 py-4 text-sm text-gray-600 font-medium text-left">
+                            class="w-48 px-3 py-2 text-sm text-gray-600 font-medium text-left">
                             {{ item.No_Of_Child_Products__c || 0 }} Products
                         </td>
                         <td *ngIf="activeTab === 'discounts' && discountForm.granularity === 'Granular'"
-                            class="w-32 px-4 py-4 text-right pr-6">
+                            class="w-32 px-3 py-2 text-right pr-6">
                             <div class="inline-flex items-center bg-gray-100 rounded-lg px-2 py-1.5 w-16 border border-transparent focus-within:bg-white focus-within:border-blue-500 transition-all ml-auto"
                                 [ngClass]="{'opacity-50 grayscale pointer-events-none': !item.selected}">
                                 <input type="number" [(ngModel)]="item.discount"
@@ -716,14 +743,16 @@
                             </div>
                         </td>
                         <!-- Incentive Amount per group (always shown for incentives) -->
-                        <td *ngIf="selectorCalledFrom === 'incentives'" class="w-36 px-4 py-4 text-right pr-6">
-                            <div class="inline-flex items-center bg-gray-100 rounded-lg px-2 py-1.5 w-24 border border-transparent focus-within:bg-white focus-within:border-blue-500 transition-all ml-auto"
-                                [ngClass]="{'opacity-50 grayscale pointer-events-none': !item.selected}">
-                                <span class="text-[10px] font-bold text-gray-500 mr-0.5">$</span>
-                                <input type="number" [(ngModel)]="item.incentiveAmount"
-                                    (keydown)="restrictNumeric($event)"
-                                    class="w-full bg-transparent text-sm font-bold text-gray-900 outline-none text-right [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                    [disabled]="!item.selected" placeholder="0">
+                        <td *ngIf="selectorCalledFrom === 'incentives'" class="w-36 px-3 py-2 text-right pr-6">
+                            <div class="flex flex-col items-end">
+                                <div class="inline-flex items-center bg-gray-100 rounded-lg px-2 py-1.5 w-24 border border-transparent focus-within:bg-white focus-within:border-blue-500 transition-all ml-auto"
+                                    [ngClass]="{'opacity-50 grayscale pointer-events-none': !item.selected}">
+                                    <span class="text-[10px] font-bold text-gray-500 mr-0.5">$</span>
+                                    <input type="number" [(ngModel)]="item.incentiveAmount"
+                                        (keydown)="restrictNumeric($event)"
+                                        class="w-full bg-transparent text-sm font-bold text-gray-900 outline-none text-right [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                        [disabled]="!item.selected" placeholder="0">
+                                </div>
                             </div>
                         </td>
                     </tr>
@@ -739,35 +768,11 @@
         </div>
 
 
-        <!-- Pagination Controls (Individual Tab Only) -->
-        <div *ngIf="productTab === 'individual' && !isLoading"
-            class="px-6 py-3 border-t border-gray-200 bg-gray-50 flex items-center justify-between">
-
-            <div class="flex items-center gap-2">
-                <span class="text-xs text-gray-500 font-medium">Rows per page:</span>
-                <select [ngModel]="individualPageSize" (ngModelChange)="handlePageSizeChange($event)"
-                    class="bg-transparent border-none text-gray-700 text-xs font-semibold outline-none cursor-pointer">
-                    <option *ngFor="let size of individualPageOptions" [value]="size">{{ size }}</option>
-                </select>
-            </div>
-
-            <div class="flex items-center gap-2">
-                <button (click)="prevPage()" [disabled]="individualCurrentOffset === 0"
-                    class="p-1 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
-                    <span class="material-icons-outlined text-gray-600">chevron_left</span>
-                </button>
-                <button (click)="nextPage()" class="p-1 rounded hover:bg-gray-200 transition-colors">
-                    <span class="material-icons-outlined text-gray-600">chevron_right</span>
-                </button>
-            </div>
-        </div>
-
         <!-- Footer -->
-        <div class="px-6 py-4 border-t border-gray-200 bg-white flex justify-between items-center gap-3 rounded-b-xl">
+        <div class="px-6 py-2.5 border-t border-gray-200 bg-white flex justify-between items-center gap-3 rounded-b-xl">
 
-            <!-- Quota Counter -->
+            <!-- Left: Quota Counter -->
             <div class="flex items-center gap-3">
-                <!-- Progress bar -->
                 <div class="flex flex-col gap-1">
                     <span class="text-[11px] text-gray-500">
                         <span class="font-bold"
@@ -785,6 +790,35 @@
                 </div>
             </div>
 
+            <!-- Middle: Rows Per Page & Pagination (Individual Tab Only) -->
+            <div *ngIf="productTab === 'individual' && !isLoading" class="flex items-center gap-6">
+                <!-- Rows per page -->
+                <div class="flex items-center gap-2">
+                    <span class="text-xs text-gray-500 font-medium whitespace-nowrap">Rows per page:</span>
+                    <div class="relative group">
+                        <select [ngModel]="individualPageSize" (ngModelChange)="handlePageSizeChange($event)"
+                            class="appearance-none bg-transparent pr-5 text-gray-700 text-xs font-bold outline-none cursor-pointer hover:text-blue-600 transition-colors">
+                            <option *ngFor="let size of individualPageOptions" [value]="size">{{ size }}</option>
+                        </select>
+                        <span
+                            class="material-icons-outlined absolute right-0 top-1/2 -translate-y-1/2 text-gray-400 text-[16px] pointer-events-none group-hover:text-blue-600 transition-colors">expand_more</span>
+                    </div>
+                </div>
+
+                <!-- Arrows -->
+                <div class="flex items-center gap-1">
+                    <button (click)="prevPage()" [disabled]="individualCurrentOffset === 0"
+                        class="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-20 disabled:cursor-not-allowed transition-all text-gray-600 hover:text-blue-600">
+                        <span class="material-icons-outlined text-[20px]">chevron_left</span>
+                    </button>
+                    <button (click)="nextPage()"
+                        class="p-1.5 rounded-lg hover:bg-gray-100 transition-all text-gray-600 hover:text-blue-600">
+                        <span class="material-icons-outlined text-[20px]">chevron_right</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Right: Actions -->
             <div class="flex items-center gap-3">
                 <button (click)="closeProductSelector()"
                     class="px-6 py-2 rounded-full text-sm font-bold border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors">
