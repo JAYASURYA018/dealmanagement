@@ -51,11 +51,9 @@
                     </button>
 
 
-                    <!-- Create contract button - always visible, but no action for subscription flow -->
-                    <button (click)="!isLookerSubscription ? onSave() : null" [disabled]="isSaving"
-                        [class.opacity-50]="isSaving"
-                        class="px-5 py-2 bg-blue-50 text-slate-700 rounded-full text-sm font-semibold shadow-sm flex items-center transition-colors border border-blue-100"
-                        [class.hover:bg-blue-100]="!isLookerSubscription" [class.cursor-default]="isLookerSubscription">
+                    <!-- Create contract button - now unified for both flows -->
+                    <button (click)="onSave()" [disabled]="isSaving" [class.opacity-50]="isSaving"
+                        class="px-5 py-2 bg-blue-50 text-slate-700 rounded-full text-sm font-semibold shadow-sm flex items-center transition-colors border border-blue-100 hover:bg-blue-100">
                         <span class="material-icons-outlined text-lg mr-2 text-slate-700">feed</span>
                         <span *ngIf="!isSaving">Create contract</span>
                         <span *ngIf="isSaving">Creating...</span>
@@ -201,8 +199,9 @@
                                 <app-subscription-period-item
                                     *ngFor="let period of subscriptionPeriods; let i = index; let first = first; let last = last"
                                     [period]="period" [products]="productOptions" [regionOptions]="lookerRegionOptions"
-                                    [isFirst]="first" [isLast]="last" [subscriptionStartDate]="termStartDate"
-                                    [subscriptionEndDate]="termEndDate"
+                                    [frequency]="currentFrequency" [isFirst]="first" [isLast]="last"
+                                    [subscriptionStartDate]="termStartDate" [subscriptionEndDate]="termEndDate"
+                                    [previousPeriodEndDate]="i > 0 ? subscriptionPeriods[i-1].endDate : ''"
                                     (productChanged)="onSubscriptionProductChanged()"
                                     (remove)="removeSubscriptionPeriod(i)">
                                 </app-subscription-period-item>
@@ -943,271 +942,267 @@
                         </div>
                     </div>
 
-                    <!-- Discount Product Groups -->
-                    <div class="space-y-6">
-                        <h3 class="text-lg font-bold text-gray-900">Discount Product Groups</h3>
-                        <div *ngFor="let range of groupedDiscountGroups; let idx = index" class="space-y-2">
-                            <div
-                                class="flex justify-between items-center bg-gray-50 px-3 py-1 rounded border border-gray-200">
-                                <span class="text-sm font-bold text-blue-700">Period {{ getPeriodNumber(range.startDate,
-                                    range.endDate) }}</span>
-                                <span class="text-xs text-gray-500">{{ formatDateForDisplay(range.startDate) }} to {{
-                                    formatDateForDisplay(range.endDate) }}</span>
-                            </div>
-                            <div class="overflow-x-auto">
-                                <table class="w-full border-collapse">
-                                    <thead>
-                                        <tr class="bg-[#1a73e8] text-white">
-                                            <th class="border border-gray-300 px-3 py-2 text-left text-sm font-bold">
-                                                Product ID</th>
-                                            <th class="border border-gray-300 px-3 py-2 text-left text-sm font-bold">
-                                                Product name</th>
-                                            <th class="border border-gray-300 px-3 py-2 text-right text-sm font-bold">
-                                                List unit price</th>
-                                            <th class="border border-gray-300 px-3 py-2 text-center text-sm font-bold">
-                                                Unit</th>
-                                            <th class="border border-gray-300 px-3 py-2 text-right text-sm font-bold">
-                                                Additional discount</th>
-                                            <th class="border border-gray-300 px-3 py-2 text-right text-sm font-bold">
-                                                Discounted Price</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <tr *ngFor="let item of range.items; let i = index" class="hover:bg-gray-50">
-                                            <td class="border border-gray-300 px-3 py-2 text-sm text-center">{{ i + 1 }}
-                                            </td>
-                                            <td class="border border-gray-300 px-3 py-2 text-sm font-medium">{{
-                                                item.Product2?.Name }}</td>
-                                            <td class="border border-gray-300 px-3 py-2 text-sm text-right">{{
-                                                formatCurrency(item.ListPrice) }}</td>
-                                            <td class="border border-gray-300 px-3 py-2 text-sm text-center">1</td>
-                                            <td
-                                                class="border border-gray-300 px-3 py-2 text-sm text-right text-gray-900 font-bold">
-                                                {{ item.Discount }}%</td>
-                                            <td class="border border-gray-300 px-3 py-2 text-sm text-right font-bold">{{
-                                                formatCurrency(item.NetUnitPrice || item.UnitPrice) }}</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                        <div *ngIf="groupedDiscountGroups.length === 0"
-                            class="border border-gray-300 px-3 py-4 text-center text-sm text-gray-500 italic rounded">
-                            No discount product groups applied
-                        </div>
-                    </div>
-
-                    <!-- Discount Individual Products -->
-                    <div class="space-y-6">
-                        <h3 class="text-lg font-bold text-gray-900">Discount Individual Products</h3>
-                        <div *ngFor="let range of groupedDiscountIndividuals; let idx = index" class="space-y-2">
-                            <div
-                                class="flex justify-between items-center bg-gray-50 px-3 py-1 rounded border border-gray-200">
-                                <span class="text-sm font-bold text-slate-700">Period {{
-                                    getPeriodNumber(range.startDate,
-                                    range.endDate) }}</span>
-                                <span class="text-xs text-gray-500">{{ formatDateForDisplay(range.startDate) }} to {{
-                                    formatDateForDisplay(range.endDate) }}</span>
-                            </div>
-                            <div class="overflow-x-auto">
-                                <table class="w-full border-collapse">
-                                    <thead>
-                                        <tr class="bg-[#1a73e8] text-white">
-                                            <th class="border border-gray-300 px-3 py-2 text-left text-sm font-bold">No
-                                            </th>
-                                            <th class="border border-gray-300 px-3 py-2 text-left text-sm font-bold">
-                                                Product name</th>
-                                            <th class="border border-gray-300 px-3 py-2 text-right text-sm font-bold">
-                                                List unit price</th>
-                                            <th class="border border-gray-300 px-3 py-2 text-center text-sm font-bold">
-                                                Quantity</th>
-                                            <th class="border border-gray-300 px-3 py-2 text-right text-sm font-bold">
-                                                Discount</th>
-                                            <th class="border border-gray-300 px-3 py-2 text-right text-sm font-bold">
-                                                Discounted Price</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <tr *ngFor="let item of range.items; let i = index" class="hover:bg-gray-50">
-                                            <td class="border border-gray-300 px-3 py-2 text-sm text-center">{{ i + 1 }}
-                                            </td>
-                                            <td class="border border-gray-300 px-3 py-2 text-sm font-medium">{{
-                                                item.Product2?.Name }}</td>
-                                            <td class="border border-gray-300 px-3 py-2 text-sm text-right">{{
-                                                formatCurrency(item.ListPrice) }}</td>
-                                            <td class="border border-gray-300 px-3 py-2 text-sm text-center">{{
-                                                item.Quantity }}</td>
-                                            <td
-                                                class="border border-gray-300 px-3 py-2 text-sm text-right text-gray-900 font-bold">
-                                                {{ item.Discount }}%</td>
-                                            <td class="border border-gray-300 px-3 py-2 text-sm text-right font-bold">{{
-                                                formatCurrency(item.NetUnitPrice || item.UnitPrice) }}</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                        <div *ngIf="groupedDiscountIndividuals.length === 0"
-                            class="border border-gray-300 px-3 py-4 text-center text-sm text-gray-500 italic rounded">
-                            No individual product discounts applied
-                        </div>
-                    </div>
-                </ng-container>
-
-                <!-- 2. LOOKER SPECIALIZED VIEW (Subscription Flow) -->
-                <ng-container *ngIf="isLookerSubscription">
-                    <div class="space-y-8">
-                        <!-- Bundle Product Top Table -->
+                    <!-- Quote Line Items Table -->
+                    <div class="mb-6">
+                        <h3 class="text-xl font-bold text-gray-900 mb-4">Products ({{
+                            previewData.QuoteLineItems?.records?.length || 0 }})</h3>
                         <div class="overflow-x-auto">
-                            <table class="w-full border-collapse border border-gray-100">
+                            <table class="w-full border-collapse border border-gray-300">
                                 <thead>
-                                    <tr class="bg-[#1a73e8] text-white">
+                                    <tr class="bg-blue-500 text-white">
                                         <th
-                                            class="px-4 py-2 text-center text-[11px] font-bold uppercase w-12 border border-gray-300">
-                                            #</th>
+                                            class="border border-gray-300 px-3 py-2 text-center text-xs font-bold uppercase">
+                                            #
+                                        </th>
                                         <th
-                                            class="px-4 py-2 text-left text-[11px] font-bold uppercase border border-gray-300">
-                                            PRODUCT NAME</th>
+                                            class="border border-gray-300 px-3 py-2 text-left text-xs font-bold uppercase">
+                                            Product Name</th>
                                         <th
-                                            class="px-4 py-2 text-left text-[11px] font-bold uppercase border border-gray-300">
-                                            START DATE</th>
+                                            class="border border-gray-300 px-3 py-2 text-left text-xs font-bold uppercase">
+                                            Start date</th>
                                         <th
-                                            class="px-4 py-2 text-left text-[11px] font-bold uppercase border border-gray-300">
-                                            END DATE</th>
+                                            class="border border-gray-300 px-3 py-2 text-left text-xs font-bold uppercase">
+                                            End
+                                            date</th>
                                         <th
-                                            class="px-4 py-2 text-right text-[11px] font-bold uppercase border border-gray-300">
-                                            LIST PRICE</th>
+                                            class="border border-gray-300 px-3 py-2 text-right text-xs font-bold uppercase">
+                                            List price</th>
                                         <th
-                                            class="px-4 py-2 text-right text-[11px] font-bold uppercase border border-gray-300">
-                                            QUANTITY</th>
+                                            class="border border-gray-300 px-3 py-2 text-center text-xs font-bold uppercase">
+                                            Quantity</th>
+                                        <th *ngIf="!isLookerSubscription"
+                                            class="border border-gray-300 px-3 py-2 text-right text-xs font-bold uppercase">
+                                            Additional discount</th>
+                                        <th *ngIf="!isLookerSubscription"
+                                            class="border border-gray-300 px-3 py-2 text-right text-xs font-bold uppercase">
+                                            Incentive</th>
+                                        <th *ngIf="!isLookerSubscription"
+                                            class="border border-gray-300 px-3 py-2 text-right text-xs font-bold uppercase">
+                                            Discounted Price</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr class="text-sm font-medium">
-                                        <td class="px-4 py-3 text-center border border-gray-300 text-gray-500">1</td>
-                                        <td class="px-4 py-3 border border-gray-300 text-gray-900">{{
-                                            bundleLineItem?.Product2?.Name || productName }}</td>
-                                        <td class="px-4 py-3 border border-gray-300 text-gray-700">{{
-                                            (bundleLineItem?.StartDate || startDate) | date:'M/d/yyyy' }}</td>
-                                        <td class="px-4 py-3 border border-gray-300 text-gray-700">{{
-                                            (bundleLineItem?.EndDate || expirationDate) | date:'M/d/yyyy' }}</td>
-                                        <td class="px-4 py-3 border border-gray-300 text-gray-900 text-right">{{
-                                            formatCurrency(bundleLineItem?.ListPrice || 0) }}</td>
-                                        <td class="px-4 py-3 border border-gray-300 text-gray-900 text-right">1.00</td>
+                                    <tr *ngFor="let item of previewData.QuoteLineItems?.records; let i = index"
+                                        class="hover:bg-gray-50 text-gray-700">
+                                        <td class="border border-gray-300 px-3 py-2 text-center text-sm">{{ i + 1 }}
+                                        </td>
+                                        <td class="border border-gray-300 px-3 py-2 text-sm font-medium">
+                                            {{ item.Product2?.Name || productName || 'Product' }}
+                                        </td>
+                                        <td class="border border-gray-300 px-3 py-2 text-sm">
+                                            {{ formatDateForDisplay(item.StartDate) }}
+                                        </td>
+                                        <td class="border border-gray-300 px-3 py-2 text-sm">
+                                            {{ formatDateForDisplay(item.EndDate) }}
+                                        </td>
+                                        <td class="border border-gray-300 px-3 py-2 text-sm text-right">
+                                            {{ item.ListPrice != null ? formatCurrency(item.ListPrice) : '-' }}
+                                        </td>
+                                        <td class="border border-gray-300 px-3 py-2 text-sm text-center">
+                                            {{ item.Quantity | number:'1.2-2' }}
+                                        </td>
+                                        <td *ngIf="!isLookerSubscription"
+                                            class="border border-gray-300 px-3 py-2 text-sm text-right">
+                                            {{ item.Discount != null ? item.Discount + '%' : '-' }}
+                                        </td>
+                                        <td *ngIf="!isLookerSubscription"
+                                            class="border border-gray-300 px-3 py-2 text-sm text-right">
+                                            {{ item.Incentive__c != null ? item.Incentive__c : '-' }}
+                                        </td>
+                                        <td *ngIf="!isLookerSubscription"
+                                            class="border border-gray-300 px-3 py-2 text-sm text-right font-medium">
+                                            {{ item.NetUnitPrice != null ? formatCurrency(item.NetUnitPrice) :
+                                            (item.UnitPrice != null ? formatCurrency(item.UnitPrice) : '-') }}
+                                        </td>
+                                    </tr>
+                                    <tr *ngIf="!previewData.QuoteLineItems?.records?.length">
+                                        <td [attr.colspan]="isLookerSubscription ? 6 : 9"
+                                            class="border border-gray-300 px-3 py-4 text-center text-sm text-gray-500">
+                                            No products added to this quote
+                                        </td>
                                     </tr>
                                 </tbody>
                             </table>
                         </div>
+                    </div>
 
-                        <!-- Subscription Years Section -->
-                        <div class="space-y-6">
-                            <h3 class="text-lg font-bold text-gray-900">Subscription Years ({{
-                                previewCommitments.length }})</h3>
+                    <!-- Subscription Periods Section (for Looker Subscription Flow) -->
+                    <div class="mb-6" *ngIf="isLookerSubscription && previewCommitments.length > 0">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-xl font-bold text-gray-900">Subscription Years ({{ previewCommitments.length
+                                }})
+                            </h3>
+                        </div>
 
-                            <div *ngFor="let year of previewCommitments; let idx = index"
-                                class="space-y-0 rounded-lg overflow-hidden border border-gray-200">
-                                <!-- Year Stripe -->
-                                <div class="bg-gray-50 border-b border-gray-200 px-4 py-2.5 flex items-center">
-                                    <span class="text-sm font-bold text-gray-900">Year {{ idx + 1 }}</span>
-                                    <span class="text-xs text-gray-500 ml-2">({{ year.startDate }} - {{ year.endDate
-                                        }})</span>
-                                </div>
+                        <!-- New Table Structure -->
+                        <div *ngFor="let period of previewCommitments; let i = index" class="mb-8">
+                            <h4
+                                class="text-lg font-bold text-gray-800 mb-4 bg-gray-50 p-2 rounded-lg border border-gray-200">
+                                {{ period.name }}
+                                <span class="text-sm font-normal text-gray-600 ml-2">({{ period.startDate }} - {{
+                                    period.endDate }})</span>
+                            </h4>
 
-                                <!-- Year Items Table -->
-                                <div class="overflow-x-auto">
-                                    <table class="w-full border-collapse">
-                                        <thead>
-                                            <tr class="bg-[#1a73e8] text-white">
-                                                <th
-                                                    class="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wider border-r border-white/20">
-                                                    PRODUCT NAME</th>
-                                                <th
-                                                    class="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wider border-r border-white/20">
-                                                    OPERATION TYPE</th>
-                                                <th
-                                                    class="px-3 py-2 text-center text-[10px] font-bold uppercase tracking-wider border-r border-white/20">
-                                                    QUANTITY</th>
-                                                <th
-                                                    class="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wider border-r border-white/20 whitespace-nowrap">
-                                                    SERVICE START DATE</th>
-                                                <th
-                                                    class="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wider border-r border-white/20 whitespace-nowrap">
-                                                    ORDER TERM (MONTHS)</th>
-                                                <th
-                                                    class="px-3 py-2 text-right text-[10px] font-bold uppercase tracking-wider border-r border-white/20">
-                                                    LIST PRICE (USD)</th>
-                                                <th
-                                                    class="px-3 py-2 text-right text-[10px] font-bold uppercase tracking-wider border-r border-white/20">
-                                                    DISCOUNT (%)</th>
-                                                <th
-                                                    class="px-3 py-2 text-right text-[10px] font-bold uppercase tracking-wider">
-                                                    TOTAL SUBSCRIPTION FEES (USD)</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody class="divide-y divide-gray-100">
-                                            <tr *ngFor="let item of year.items"
-                                                class="hover:bg-gray-50 transition-colors">
-                                                <td class="px-3 py-2.5 text-xs text-gray-700 font-medium">{{ item.name
-                                                    }}
-                                                </td>
-                                                <td class="px-3 py-2.5 text-xs text-gray-600">{{ item.operationType }}
-                                                </td>
-                                                <td class="px-3 py-2.5 text-xs text-gray-600 text-center">{{
-                                                    item.quantity }}</td>
-                                                <td class="px-3 py-2.5 text-xs text-gray-600 whitespace-nowrap">{{
-                                                    item.startDate }}</td>
-                                                <td class="px-3 py-2.5 text-xs text-gray-600">{{ item.orderTerm }}</td>
-                                                <td class="px-3 py-2.5 text-xs text-gray-600 text-right">{{
-                                                    formatCurrency(item.listPrice) }}</td>
-                                                <td class="px-3 py-2.5 text-xs text-gray-600 text-right">{{
-                                                    item.discount
-                                                    }}%</td>
-                                                <td class="px-3 py-2.5 text-xs text-gray-900 font-bold text-right">{{
-                                                    formatCurrency(item.total) }}</td>
-                                            </tr>
-                                        </tbody>
-                                        <tfoot>
-                                            <tr class="bg-gray-50/80 border-t border-gray-200">
-                                                <td colspan="7"
-                                                    class="px-3 py-3 text-[11px] font-bold text-right uppercase text-gray-600">
-                                                    Period Total (USD):</td>
-                                                <td class="px-3 py-3 text-sm font-bold text-right text-gray-900">{{
-                                                    formatCurrency(year.amount) }}</td>
-                                            </tr>
-                                        </tfoot>
-                                    </table>
-                                </div>
+                            <div class="overflow-x-auto">
+                                <table class="w-full border-collapse border border-gray-100">
+                                    <thead>
+                                        <tr class="bg-[#1a73e8] text-white">
+                                            <th
+                                                class="px-4 py-2 text-center text-[11px] font-bold uppercase w-12 border border-gray-300">
+                                                #</th>
+                                            <th
+                                                class="px-4 py-2 text-left text-[11px] font-bold uppercase border border-gray-300">
+                                                PRODUCT NAME</th>
+                                            <th
+                                                class="px-4 py-2 text-left text-[11px] font-bold uppercase border border-gray-300">
+                                                START DATE</th>
+                                            <th
+                                                class="px-4 py-2 text-left text-[11px] font-bold uppercase border border-gray-300">
+                                                END DATE</th>
+                                            <th
+                                                class="px-4 py-2 text-right text-[11px] font-bold uppercase border border-gray-300">
+                                                LIST PRICE</th>
+                                            <th
+                                                class="px-4 py-2 text-right text-[11px] font-bold uppercase border border-gray-300">
+                                                QUANTITY</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr class="text-sm font-medium">
+                                            <td class="px-4 py-3 text-center border border-gray-300 text-gray-500">1
+                                            </td>
+                                            <td class="px-4 py-3 border border-gray-300 text-gray-900">{{
+                                                bundleLineItem?.Product2?.Name || productName }}</td>
+                                            <td class="px-4 py-3 border border-gray-300 text-gray-700">{{
+                                                (bundleLineItem?.StartDate || startDate) | date:'M/d/yyyy' }}</td>
+                                            <td class="px-4 py-3 border border-gray-300 text-gray-700">{{
+                                                (bundleLineItem?.EndDate || expirationDate) | date:'M/d/yyyy' }}</td>
+                                            <td class="px-4 py-3 border border-gray-300 text-gray-900 text-right">{{
+                                                formatCurrency(bundleLineItem?.ListPrice || 0) }}</td>
+                                            <td class="px-4 py-3 border border-gray-300 text-gray-900 text-right">1.00
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
 
-                        <!-- Grand Total at bottom right -->
-                        <div class="flex flex-col items-end pt-4 space-y-2">
-                            <div class="flex items-center gap-6">
-                                <span class="text-sm font-bold text-gray-600 uppercase">Grand Total (USD):</span>
-                                <span class="text-xl font-black text-gray-900">{{ formatCurrency(totalContractValue)
-                                    }}</span>
+                        <!-- Grand Total for All Periods -->
+                        <div class="mt-4 flex justify-end">
+                            <div class="text-right py-2">
+                                <span class="text-base font-bold text-gray-900">Grand Total (USD): </span>
+                                <span class="text-base font-bold ml-4">{{ formatCurrency(totalContractValue) }}</span>
                             </div>
                         </div>
                     </div>
-                </ng-container>
 
-                <!-- Footer Note -->
-                <div class="text-xs text-gray-500 mt-12 pt-6 border-t border-gray-200 bg-gray-50 p-4 rounded-lg">
-                    <p class="font-bold mb-2">Notice:</p>
-                    <p>This is a quote preview document generated for {{ previewData.Account?.Name || accountName }}.
-                        Please review the commitment and incentive details carefully. All values are in USD unless
-                        otherwise specified.</p>
-                </div>
+                    <!-- Subscription Years Section -->
+                    <div class="space-y-6">
+                        <h3 class="text-lg font-bold text-gray-900">Subscription Years ({{
+                            previewCommitments.length }})</h3>
+
+                        <div *ngFor="let year of previewCommitments; let idx = index"
+                            class="space-y-0 rounded-lg overflow-hidden border border-gray-200">
+                            <!-- Year Stripe -->
+                            <div class="bg-gray-50 border-b border-gray-200 px-4 py-2.5 flex items-center">
+                                <span class="text-sm font-bold text-gray-900">Year {{ idx + 1 }}</span>
+                                <span class="text-xs text-gray-500 ml-2">({{ year.startDate }} - {{ year.endDate
+                                    }})</span>
+                            </div>
+
+                            <!-- Year Items Table -->
+                            <div class="overflow-x-auto">
+                                <table class="w-full border-collapse">
+                                    <thead>
+                                        <tr class="bg-[#1a73e8] text-white">
+                                            <th
+                                                class="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wider border-r border-white/20">
+                                                PRODUCT NAME</th>
+                                            <th
+                                                class="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wider border-r border-white/20">
+                                                OPERATION TYPE</th>
+                                            <th
+                                                class="px-3 py-2 text-center text-[10px] font-bold uppercase tracking-wider border-r border-white/20">
+                                                QUANTITY</th>
+                                            <th
+                                                class="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wider border-r border-white/20 whitespace-nowrap">
+                                                SERVICE START DATE</th>
+                                            <th
+                                                class="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wider border-r border-white/20 whitespace-nowrap">
+                                                ORDER TERM (MONTHS)</th>
+                                            <th
+                                                class="px-3 py-2 text-right text-[10px] font-bold uppercase tracking-wider border-r border-white/20">
+                                                LIST PRICE (USD)</th>
+                                            <th
+                                                class="px-3 py-2 text-right text-[10px] font-bold uppercase tracking-wider border-r border-white/20">
+                                                DISCOUNT (%)</th>
+                                            <th
+                                                class="px-3 py-2 text-right text-[10px] font-bold uppercase tracking-wider">
+                                                TOTAL SUBSCRIPTION FEES (USD)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-gray-100">
+                                        <tr *ngFor="let item of year.items" class="hover:bg-gray-50 transition-colors">
+                                            <td class="px-3 py-2.5 text-xs text-gray-700 font-medium">{{ item.name
+                                                }}
+                                            </td>
+                                            <td class="px-3 py-2.5 text-xs text-gray-600">{{ item.operationType }}
+                                            </td>
+                                            <td class="px-3 py-2.5 text-xs text-gray-600 text-center">{{
+                                                item.quantity }}</td>
+                                            <td class="px-3 py-2.5 text-xs text-gray-600 whitespace-nowrap">{{
+                                                item.startDate }}</td>
+                                            <td class="px-3 py-2.5 text-xs text-gray-600">{{ item.orderTerm }}</td>
+                                            <td class="px-3 py-2.5 text-xs text-gray-600 text-right">{{
+                                                formatCurrency(item.listPrice) }}</td>
+                                            <td class="px-3 py-2.5 text-xs text-gray-600 text-right">{{
+                                                item.discount
+                                                }}%</td>
+                                            <td class="px-3 py-2.5 text-xs text-gray-900 font-bold text-right">{{
+                                                formatCurrency(item.total) }}</td>
+                                        </tr>
+                                    </tbody>
+                                    <tfoot>
+                                        <tr class="bg-gray-50/80 border-t border-gray-200">
+                                            <td colspan="7"
+                                                class="px-3 py-3 text-[11px] font-bold text-right uppercase text-gray-600">
+                                                Period Total (USD):</td>
+                                            <td class="px-3 py-3 text-sm font-bold text-right text-gray-900">{{
+                                                formatCurrency(year.amount) }}</td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Grand Total at bottom right -->
+                    <div class="flex flex-col items-end pt-4 space-y-2">
+                        <div class="flex items-center gap-6">
+                            <span class="text-sm font-bold text-gray-600 uppercase">Grand Total (USD):</span>
+                            <span class="text-xl font-black text-gray-900">{{ formatCurrency(totalContractValue)
+                                }}</span>
+                        </div>
+                    </div>
             </div>
+            </ng-container>
 
-            <!-- Footer -->
-            <div
-                class="sticky bottom-0 bg-white border-t border-gray-200 px-8 py-4 rounded-b-2xl flex justify-end gap-3">
-                <button (click)="closePreview()"
-                    class="px-6 py-2 rounded-full text-sm font-bold bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-sm">
-                    Close
-                </button>
+            <!-- Footer Note -->
+            <div class="text-xs text-gray-500 mt-12 pt-6 border-t border-gray-200 bg-gray-50 p-4 rounded-lg">
+                <p class="font-bold mb-2">Notice:</p>
+                <p>This is a quote preview document generated for {{ previewData.Account?.Name || accountName }}.
+                    Please review the commitment and incentive details carefully. All values are in USD unless
+                    otherwise specified.</p>
             </div>
         </div>
+
+        <!-- Footer -->
+        <div class="sticky bottom-0 bg-white border-t border-gray-200 px-8 py-4 rounded-b-2xl flex justify-end gap-3">
+            <button (click)="closePreview()"
+                class="px-6 py-2 rounded-full text-sm font-bold bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-sm">
+                Close
+            </button>
+        </div>
     </div>
+</div>
 </div>
