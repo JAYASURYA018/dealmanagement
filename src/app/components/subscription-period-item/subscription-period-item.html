@@ -92,17 +92,17 @@
                         {{ period.name }} Start Date
                     </label>
                     <div class="relative w-full flex items-center">
-                        <input *ngIf="frequency?.toLowerCase() === 'custom' && period.isManual" type="date"
+                        <input *ngIf="frequency.toLowerCase() === 'custom' && period.isManual" type="date"
                             [(ngModel)]="period.startDate" (ngModelChange)="onStartDateChange()"
                             class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" placeholder="Select">
                         <div class="text-sm font-semibold"
-                            [class.text-gray-400]="frequency?.toLowerCase() !== 'custom' || !period.isManual"
-                            [class.text-gray-800]="frequency?.toLowerCase() === 'custom' && period.isManual">
+                            [class.text-gray-400]="frequency.toLowerCase() !== 'custom' || !period.isManual"
+                            [class.text-gray-800]="frequency.toLowerCase() === 'custom' && period.isManual">
                             {{ formatDate(period.startDate) || 'Select' }}
                         </div>
-                        <span *ngIf="frequency?.toLowerCase() !== 'custom' || !period.isManual"
+                        <span *ngIf="frequency.toLowerCase() !== 'custom' || !period.isManual"
                             class="material-icons text-gray-400 text-lg ml-auto pointer-events-none">lock</span>
-                        <span *ngIf="frequency?.toLowerCase() === 'custom' && period.isManual"
+                        <span *ngIf="frequency.toLowerCase() === 'custom' && period.isManual"
                             class="material-icons-outlined text-gray-600 text-lg ml-auto pointer-events-none">calendar_today</span>
                     </div>
                 </div>
@@ -115,18 +115,18 @@
                             {{ period.name }} End Date
                         </label>
                         <div class="relative w-full flex items-center">
-                            <input *ngIf="frequency?.toLowerCase() === 'custom' && period.isManual" type="date"
+                            <input *ngIf="frequency.toLowerCase() === 'custom' && period.isManual" type="date"
                                 [(ngModel)]="period.endDate" (ngModelChange)="onEndDateChange()"
                                 class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                                 placeholder="Select">
                             <div class="text-sm font-semibold"
-                                [class.text-gray-400]="frequency?.toLowerCase() !== 'custom' || !period.isManual"
-                                [class.text-gray-800]="frequency?.toLowerCase() === 'custom' && period.isManual">
+                                [class.text-gray-400]="frequency.toLowerCase() !== 'custom' || !period.isManual"
+                                [class.text-gray-800]="frequency.toLowerCase() === 'custom' && period.isManual">
                                 {{ formatDate(period.endDate) || 'Select' }}
                             </div>
-                            <span *ngIf="frequency?.toLowerCase() !== 'custom' || !period.isManual"
+                            <span *ngIf="frequency.toLowerCase() !== 'custom' || !period.isManual"
                                 class="material-icons text-gray-400 text-lg ml-auto pointer-events-none">lock</span>
-                            <span *ngIf="frequency?.toLowerCase() === 'custom' && period.isManual"
+                            <span *ngIf="frequency.toLowerCase() === 'custom' && period.isManual"
                                 class="material-icons-outlined text-gray-600 text-lg ml-auto pointer-events-none">calendar_today</span>
                         </div>
                     </div>

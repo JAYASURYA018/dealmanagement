@@ -1,4 +1,4 @@
-import { Component, HostListener, OnInit, inject } from '@angular/core';
+﻿import { Component, HostListener, OnInit, inject } from '@angular/core';
 import { DiscountsIncentivesComponent } from '../../components/discounts-incentives/discounts-incentives.component';
 import { CommonModule } from '@angular/common';
 import { QuoteRefreshService } from '../../services/quote-refresh.service';
@@ -1105,7 +1105,35 @@ export class QuoteDetailsComponent implements OnInit {
 
         this.fetchQuotePreview(fullQuoteId);
 
-        this.previewCommitments = this.buildPreviewCommitments();
+        // Populate local periods from preview data if they are empty
+        setTimeout(() => {
+            if (this.isLookerSubscription && this.subscriptionPeriods.length === 0 && this.previewData) {
+                this.loadSubscriptionPeriodsFromPreview();
+            }
+            this.previewCommitments = this.buildPreviewCommitments();
+        }, 500); // Wait for preview data to be available
+    }
+
+    loadSubscriptionPeriodsFromPreview() {
+        if (!this.previewData?.QuoteLineItems?.records) return;
+
+        console.log('🔄 Loading periods from preview data...');
+        const lines = this.previewData.QuoteLineItems.records;
+
+        // Find the Looker Platform line to extract dates if possible
+        let startDate = this.termStartInput || this.startDate;
+        let endDate = this.termEndDate || this.expirationDate;
+
+        const mainLine = lines.find((l: any) => l.Product2?.Name?.includes('Looker') && l.StartDate);
+        if (mainLine) {
+            startDate = mainLine.StartDate;
+            endDate = mainLine.EndDate;
+        }
+
+        if (this.subscriptionPeriods.length === 0 && startDate && endDate) {
+            this.addOnePeriod(startDate, endDate);
+            this.onSubscriptionProductChanged();
+        }
     }
 
     buildPreviewCommitments(): any[] {
@@ -1223,6 +1251,22 @@ export class QuoteDetailsComponent implements OnInit {
                 });
             }
         });
+
+        if (previews.length === 0 && this.isLookerSubscription) {
+            const start = this.termStartInput || this.startDate;
+            const end = this.termEndDate || this.expirationDate;
+            if (start) {
+                const term = this.calculateSubscriptionTerm(start, end);
+                previews.push({
+                    name: 'Subscription Period',
+                    startDate: this.formatDateForDisplay(new Date(start)),
+                    endDate: end ? this.formatDateForDisplay(new Date(end)) : '-',
+                    months: term,
+                    amount: 0,
+                    items: []
+                });
+            }
+        }
 
         return previews;
     }
