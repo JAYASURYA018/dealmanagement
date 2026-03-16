@@ -22,7 +22,7 @@ export function getApiDetails(url: string, method: string, body?: any): ApiDetai
     const isGraphApi = url.includes('/sales-transaction/actions/place');
     const isCompositeTree = url.includes('/composite/tree/');
     const isUiApi = url.includes('/ui-api/');
-    const isPcmProducts = url.includes('/connect/pcm/products');
+    const isProductsApi = url.includes('/connect/pcm/products') || url.includes('/connect/cpq/products');
     const isSObject = url.includes('/sobjects/');
 
     // --- 1. SOQL Queries ---
@@ -110,16 +110,19 @@ export function getApiDetails(url: string, method: string, body?: any): ApiDetai
         }
     }
 
-    // --- 5. PCM Products API (RCA) ---
-    else if (isPcmProducts) {
+    // --- 5. Products API ---
+    else if (isProductsApi) {
         if (method === 'GET') {
             if (url.includes('productClassificationId=')) {
                 name = 'Get Products by Category';
                 description = 'Fetches products for a specific classification';
             } else {
                 // Check if it's a specific product ID
-                const parts = url.split('/connect/pcm/products/');
-                if (parts.length > 1 && parts[1].length > 5) { // Assuming ID length
+                const isPcm = url.includes('/connect/pcm/products/');
+                const isCpq = url.includes('/connect/cpq/products/');
+                const parts = url.split(isPcm ? '/connect/pcm/products/' : '/connect/cpq/products/');
+
+                if (parts.length > 1 && parts[1].length > 5) {
                     name = 'Get Product Details';
                     description = 'Fetches details for a specific product';
                 } else {
@@ -128,8 +131,8 @@ export function getApiDetails(url: string, method: string, body?: any): ApiDetai
                 }
             }
         } else if (method === 'POST') {
-            name = 'Filter Products';
-            description = 'Fetches products based on filter criteria';
+            name = 'Filter/List Products';
+            description = 'Fetches products based on criteria/classification';
         }
     }
 
@@ -153,12 +156,6 @@ export function getApiDetails(url: string, method: string, body?: any): ApiDetai
             name = 'Get Relationship Types';
             description = 'Fetches product relationship type metadata';
         }
-    }
-
-    // --- 7. Bundle Details ---
-    else if (url.includes('/connect/cpq/products/') && method === 'POST') {
-        name = 'Get Bundle Structure';
-        description = 'Fetches component structure for a bundle';
     }
 
     return { name, description };

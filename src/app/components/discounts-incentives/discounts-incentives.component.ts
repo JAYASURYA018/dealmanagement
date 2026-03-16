@@ -189,6 +189,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
     persistentSelectedIndividuals = new Map<string, any>();
     // Flag to avoid refetching data on navigation back
     private dataFetched = false;
+    private allClassifications: any[] = [];
     // Dropdown Data
     dropdownOptions: any[] = [];
     selectedDropdownOption: any = null;
@@ -247,7 +248,18 @@ export class DiscountsIncentivesComponent implements OnChanges {
         private toastService: ToastService,
         private loadingService: LoadingService,
         private quoteRefreshService: QuoteRefreshService
-    ) { }
+    ) {
+        // As requested: dynamically take categoryIds from RcaApiService.getProducts response
+        this.rcaApiService.products$.subscribe(products => {
+            if (products && products.length > 0) {
+                const firstProduct = products[0];
+                if (firstProduct.categories && firstProduct.categories.length > 0) {
+                    this.bundleCategoryId = firstProduct.categories[0].id;
+                    console.log('✅ [Discounts Incentives] Captured category ID from getProducts:', this.bundleCategoryId);
+                }
+            }
+        });
+    }
 
     ngOnInit() {
         // Deprecated: API calls are now deferred until modal opens
@@ -274,19 +286,25 @@ export class DiscountsIncentivesComponent implements OnChanges {
 
     fetchDropdownOptions() {
         if (!this.productId) return;
-        if (this.dataFetched) return; // Prevent duplicate calls
+        if (this.dataFetched) return;
 
-        this.rcaApiService.getDropdownOptions(this.productId).subscribe({
+        this.rcaApiService.getDropdownOptions(this.rootClassificationId).subscribe({
             next: (res: any) => {
-                const records = res.records || [];
-                // Filter only those with It_has_Bundle_Products__c = false (Individual Products)
-                this.dropdownOptions = records.filter((r: any) => r.It_has_Bundle_Products__c === false);
+                const results = res.result || [];
+                // Map CPQ results to the expected UI model
+                this.dropdownOptions = results.map((p: any) => ({
+                    Id: p.id,
+                    Name: p.name,
+                    pricebookEntryId: p.prices?.[0]?.priceBookEntryId || '',
+                    price: p.prices?.[0]?.price || 0,
+                    sortOrder: p.additionalFields?.RCA_Sort_order__c
+                }));
 
                 // Select the first option by default if available
                 if (this.dropdownOptions.length > 0) {
                     this.selectDropdownOption(this.dropdownOptions[0]);
                 }
-                this.dataFetched = true; // Mark as fetched
+                this.dataFetched = true;
             },
             error: (err) => {
                 console.error('Error fetching dropdown options', err);
@@ -458,7 +476,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
             if (!this.dataFetched || this.productGroups.length === 0) {
                 this.dataFetched = false;
                 this.fetchProductDetails();
-                this.fetchDropdownOptions();
+                // getDropdownOptions is now called inside fetchProductDetails, so no second call needed
             }
         } else {
             this.productGroups = [];
@@ -482,77 +500,138 @@ export class DiscountsIncentivesComponent implements OnChanges {
         if (!this.productId) return;
 
         this.isLoading = true;
-        this.debugData = null; // Clear previous
+        this.debugData = null;
 
-        // 1. Fetch Bundle PCM Details to get the Category ID (0ZG...)
-        // This is used for global search as per user requirement.
-        this.rcaApiService.getProductDetails(this.productId).subscribe({
-            next: (data) => {
-                const categories = data.categories || [];
-                if (categories.length > 0) {
-                    this.bundleCategoryId = categories[0].id;
-                    console.log('✅ Found Bundle Category ID:', this.bundleCategoryId);
-                }
-            },
-            error: (err) => console.error('❌ Error fetching Bundle PCM details:', err)
-        });
-
-        // 2. Get Classifications for the current Bundle ID (for faceted search / structure)
-        this.rcaApiService.getProductClassifications(this.productId).pipe(
-            finalize(() => this.isLoading = false)
-        ).subscribe({
+        // 1. Get Classifications for the bundle
+        console.log('📊 [fetchProductDetails] Call 1: Fetching classifications for productId:', this.productId);
+        this.rcaApiService.getProductClassifications(this.productId).subscribe({
             next: (res: any) => {
                 const records = res.records || [];
-                this.debugData = res;
-                this.mapNewProductData(records);
+                console.log('✅ [fetchProductDetails] Classifications response:', records);
+
+                // 1. Get Classifications for the bundle (Groups Tab)
+                const classifications = records.filter((r: any) => r.It_has_Bundle_Products__c === false);
+                this.allClassifications = classifications;
+                this.mapNewProductData(classifications);
+
+                // Find root classification ID where It_has_Bundle_Products__c is true
+                const rootClass = records.find((r: any) => r.It_has_Bundle_Products__c === true);
+                if (rootClass) {
+                    this.rootClassificationId = rootClass.Id;
+                    console.log('✅ [fetchProductDetails] Root Classification ID found:', this.rootClassificationId);
+
+                    // 2. Get the "Computed" bundles (sidebar categories) using CPQ Products API
+                    console.log('📊 [fetchProductDetails] Call 2: Fetching categories using rootClassificationId:', this.rootClassificationId);
+                    this.rcaApiService.getDropdownOptions(this.rootClassificationId).pipe(
+                        finalize(() => {
+                            this.isLoading = false;
+                            this.dataFetched = true;
+                        })
+                    ).subscribe({
+                        next: (cpqRes: any) => {
+                            const results = cpqRes.result || [];
+                            console.log('✅ [fetchProductDetails] Categories response:', results);
+
+                            this.dropdownOptions = results.map((p: any) => {
+                                // Find matching classification from Call 1 to get the correct ID as requested
+                                const match = this.allClassifications.find(c => c.Name === p.name);
+
+                                // Enrich the matching product group in Tab 1 with price data
+                                if (match) {
+                                    const groupInTab = this.productGroups.find(g => g.id === match.Id);
+                                    if (groupInTab) {
+                                        groupInTab.productId = p.id;
+                                        groupInTab.pricebookEntryId = p.prices?.[0]?.priceBookEntryId || '';
+                                        groupInTab.price = p.prices?.[0]?.price || 0;
+                                        groupInTab.sortOrder = p.additionalFields?.RCA_Sort_order__c;
+                                    }
+                                }
+
+                                return {
+                                    Id: p.id,
+                                    Name: p.name,
+                                    pricebookEntryId: p.prices?.[0]?.priceBookEntryId || '',
+                                    price: p.prices?.[0]?.price || 0,
+                                    sortOrder: p.additionalFields?.RCA_Sort_order__c,
+                                    classificationId: match ? match.Id : (p.productClassification?.id || p.id)
+                                };
+                            });
+
+                            // Select the first category by default
+                            if (this.dropdownOptions.length > 0) {
+                                this.selectDropdownOption(this.dropdownOptions[0]);
+                            }
+                        },
+                        error: (err) => {
+                            console.error('❌ Error in CPQ categories fetch', err);
+                            this.toastService.show('Failed to load categories', 'error');
+                        }
+                    });
+                } else {
+                    console.warn('⚠️ No root classification (It_has_Bundle_Products__c = true) found.');
+                    this.isLoading = false;
+                    this.dataFetched = true;
+                }
             },
             error: (err) => {
-                console.error('Error in product fetch flow', err);
-                this.toastService.show('Failed to load products', 'error');
-                this.debugData = { error: err.message || err };
+                console.error('❌ Error fetching classifications', err);
+                this.isLoading = false;
+                this.toastService.show('Failed to load product classifications', 'error');
             }
         });
     }
 
     loadIndividualProducts() {
-        if (!this.selectedDropdownOption) {
-            return;
-        }
+        if (!this.selectedDropdownOption) return;
 
-        const currentClassId = this.selectedDropdownOption.Id;
-        const currentClassName = this.selectedDropdownOption.Name;
+        // 3. Get actual individual products for the selected category
+        const targetClassId = this.selectedDropdownOption.classificationId || this.selectedDropdownOption.Id;
+
+        // Construct the body exactly as requested by the user for Call 3
+        const body = {
+            "limit": this.individualPageSize,
+            "productClassificationId": targetClassId,
+            "priceBookId": this.contextService.currentContext?.pricebookId || '01sf4000003ZgtzAAC',
+            "offset": this.individualCurrentOffset,
+            "additionalFields": {
+                "Product2": {
+                    "fields": ["RCA_Sort_order__c"]
+                }
+            }
+        };
+
+        console.log('📊 [loadIndividualProducts] Call 3: Fetching individual products with CPQ API:', body);
 
         if (this.currentProductReq) {
             this.currentProductReq.unsubscribe();
         }
 
         this.isIndividualLoading = true;
-
-        this.currentProductReq = this.rcaApiService.getProductsByClassification(
-            currentClassId,
-            this.individualPageSize,
-            this.individualCurrentOffset
-        ).pipe(
+        this.currentProductReq = this.rcaApiService.getCpqProducts(body).pipe(
             finalize(() => this.isIndividualLoading = false)
         ).subscribe({
             next: (data) => {
-                const newProducts = data.products || [];
+                const newProducts = data.result || [];
 
                 // Map to UI model
                 const mappedProducts = newProducts.map((p: any) => {
-                    // Use productId from selling model options if available, fallback to p.id (which might be the classification-product link ID)
+                    // Use productId from selling model options if available
                     const resolvedId = p.productSellingModelOptions?.[0]?.productId || p.id;
+
+                    // Find default price or fallback
+                    const defaultPrice = p.prices?.find((pr: any) => pr.isDefault) || p.prices?.[0];
 
                     return {
                         id: resolvedId,
                         name: p.name,
-                        family: currentClassName, // Use classification name as family
+                        family: this.selectedDropdownOption.Name, // Use classification name as family
                         selected: false,
                         discount: 0,
                         quantity: 1,
-                        price: p.unitPrice || 0,
-                        pricebookEntryId: p.pricebookEntryId || '',
-                        isBundleChild: false
+                        price: defaultPrice?.price || p.unitPrice || 0,
+                        pricebookEntryId: defaultPrice?.priceBookEntryId || p.pricebookEntryId || '',
+                        isBundleChild: false,
+                        sortOrder: p.additionalFields?.RCA_Sort_order__c
                     };
                 });
 
@@ -560,22 +639,21 @@ export class DiscountsIncentivesComponent implements OnChanges {
                 mappedProducts.forEach((p: any) => {
                     if (this.persistentSelectedIndividuals.has(p.id)) {
                         p.selected = true;
-                        // Sync back any local changes if needed (e.g. quantity/discount if they were edited)
                         const saved = this.persistentSelectedIndividuals.get(p.id);
                         p.discount = saved.discount;
                         p.quantity = saved.quantity;
-                        // Update map with fresh reference from current load
                         this.persistentSelectedIndividuals.set(p.id, p);
                     }
                 });
 
-                this.individualProducts = mappedProducts; // Replace current view with page results
+                // Sort by RCA_Sort_order__c if available
+                mappedProducts.sort((a: any, b: any) => {
+                    const sortA = Number(a.sortOrder) || 0;
+                    const sortB = Number(b.sortOrder) || 0;
+                    return sortA - sortB;
+                });
 
-                // If fewer products returned than page size, we might be at end of this classification.
-                // But for now, user just wants simple next/prev.
-                // Logic for "Cross-Classification" Next:
-                // If user clicks Next and we get 0 results, OR we decided we are at end, we move index.
-                // For this implementation, I will handle "Next" logic in the Next button handler.
+                this.individualProducts = mappedProducts;
             },
             error: (err) => {
                 console.error('Error loading individual products', err);
@@ -624,7 +702,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
         const criteria = this.getFacetedCriteria();
 
         // If search term is empty AND no faceted filters, reload default category products
-        if (!this.productSearchTerm && criteria.length === 0) {
+        if (!this.productSearchTerm && criteria.length <= 2) {
             console.log('[onProductSearch] No search term or filters, reloading default products');
             this.loadIndividualProducts();
             return;
@@ -632,7 +710,9 @@ export class DiscountsIncentivesComponent implements OnChanges {
 
         this.individualCurrentOffset = 0; // Reset offset on new search
 
-        if (!this.selectedDropdownOption || !this.selectedDropdownOption.Id) {
+        // Check for classification or category ID
+        const classId = this.selectedDropdownOption?.Id || this.categoryId || this.bundleCategoryId;
+        if (!classId && !this.productSearchTerm) {
             console.warn('[onProductSearch] No category/dropdown option selected for search.');
             this.toastService.show('Please select a product category first.', 'warning');
             return;
@@ -690,50 +770,38 @@ export class DiscountsIncentivesComponent implements OnChanges {
         }
 
         this.isIndividualLoading = true;
-        let searchRequest$: Observable<any>;
 
-        if (this.selectedRegion || this.selectedBillingFreq) {
-            // Faceted search: Use classification-based URL with filtering criteria
-            // Use selected option ID, or fallback to category/bundle ID as requested by user
-            const classId = this.selectedDropdownOption?.Id || this.categoryId || this.bundleCategoryId || this.rootClassificationId;
+        // As requested by user in Step 10: use PCM v65.0 API for search/filter
+        // Use the category ID captured from RcaApiService.getProducts or from Input
+        const searchCategoryId = this.categoryId || this.bundleCategoryId || this.selectedDropdownOption?.Id;
 
-            searchRequest$ = this.rcaApiService.facetedProductSearch(
-                classId,
-                criteria,
-                this.individualPageSize,
-                this.individualCurrentOffset
-            );
-        } else {
-            // Global text-based search: Use global URL with categoryIds in body
-            const searchCategoryId = this.categoryId || this.bundleCategoryId;
-
-            searchRequest$ = this.rcaApiService.searchProducts(
-                this.productSearchTerm,
-                searchCategoryId ? [searchCategoryId] : [],
-                this.individualPageSize,
-                this.individualCurrentOffset
-            );
-        }
-
-        this.currentProductReq = searchRequest$.pipe(
+        this.currentProductReq = this.rcaApiService.searchProducts(
+            this.productSearchTerm,
+            searchCategoryId ? [searchCategoryId] : [],
+            criteria,
+            this.individualPageSize,
+            this.individualCurrentOffset
+        ).pipe(
             finalize(() => this.isIndividualLoading = false)
         ).subscribe({
             next: (data) => {
-                const newProducts = data.products || [];
+                const newProducts = data.result || data.products || [];
                 // Map to UI model
                 this.individualProducts = newProducts.map((p: any) => {
                     const resolvedId = p.productSellingModelOptions?.[0]?.productId || p.id;
+                    const defaultPrice = p.prices?.find((pr: any) => pr.isDefault) || p.prices?.[0];
 
                     return {
                         id: resolvedId,
-                        name: p.name,
-                        family: p.additionalFields?.Family || 'Search Result',
+                        name: p.name || p.fields?.Name || 'Unknown Product',
+                        family: p.additionalFields?.Family || p.fields?.Family || 'Other',
                         selected: false,
                         discount: 0,
                         quantity: 1,
-                        price: p.unitPrice || 0,
-                        pricebookEntryId: p.pricebookEntryId || '',
-                        isBundleChild: false
+                        price: defaultPrice?.price || p.unitPrice || 0,
+                        pricebookEntryId: defaultPrice?.priceBookEntryId || p.pricebookEntryId || '',
+                        isBundleChild: false,
+                        sortOrder: p.additionalFields?.RCA_Sort_order__c || p.fields?.RCA_Sort_order__c
                     };
                 });
 
@@ -741,7 +809,6 @@ export class DiscountsIncentivesComponent implements OnChanges {
                 this.individualProducts.forEach((p: any) => {
                     if (this.persistentSelectedIndividuals.has(p.id)) {
                         p.selected = true;
-                        // Update map with fresh reference from search results
                         this.persistentSelectedIndividuals.set(p.id, p);
                     }
                 });
@@ -760,16 +827,17 @@ export class DiscountsIncentivesComponent implements OnChanges {
         }
     }
 
-    mapNewProductData(classifications: any[]) {
-        this.productGroups = classifications.map(cls => ({
-            id: cls.Id,
-            name: cls.Name,
-            No_Of_Child_Products__c: cls.No_Of_Child_Products__c || 0,
+    mapNewProductData(items: any[]) {
+        this.productGroups = items.map(item => ({
+            id: item.id || item.Id,
+            name: item.name || item.Name,
+            No_Of_Child_Products__c: item.No_Of_Child_Products__c || 0,
             selected: false,
             discount: 0,
-            price: 0,
-            pricebookEntryId: '',
+            price: item.prices?.[0]?.price || 0,
+            pricebookEntryId: item.prices?.[0]?.priceBookEntryId || '',
             isBundleChild: false,
+            sortOrder: item.additionalFields?.RCA_Sort_order__c,
             components: []
         }));
 
@@ -809,6 +877,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
                     group.components.forEach((comp: any) => {
                         // Only add actual components, ignore selling model options if they appear here (unlikely but safe)
                         const resolvedId = comp.productSellingModelOptions?.[0]?.productId || comp.id;
+                        const defaultPrice = comp.prices?.find((pr: any) => pr.isDefault) || comp.prices?.[0];
 
                         allComponents.push({
                             id: resolvedId,
@@ -817,9 +886,10 @@ export class DiscountsIncentivesComponent implements OnChanges {
                             selected: false,
                             discount: 0,
                             quantity: 1,
-                            price: comp.unitPrice || 0,
-                            pricebookEntryId: comp.pricebookEntryId || '',
-                            isBundleChild: true // Components in groups are usually children
+                            price: defaultPrice?.price || comp.unitPrice || 0,
+                            pricebookEntryId: defaultPrice?.priceBookEntryId || comp.pricebookEntryId || '',
+                            isBundleChild: true, // Components in groups are usually children
+                            sortOrder: comp.additionalFields?.RCA_Sort_order__c
                         });
                     });
                 }
@@ -1173,55 +1243,33 @@ export class DiscountsIncentivesComponent implements OnChanges {
         let selectedItemsMap = new Map<string, any>();
 
         try {
-            // 0. Resolve Root Classification ID (Sibling Bundles)
-            // Use resolved rootClassificationId or the user-provided NvMAI fallback
-            const rootClassId = this.rootClassificationId || '11BDz00000000NvMAI';
-            console.log(`[Discounts] Fetching sibling bundles from root classification: ${rootClassId}`);
-
-            const rootResponse = await lastValueFrom(this.rcaApiService.getProductsByClassification(rootClassId, 100));
-            const availableBundles = rootResponse?.products || [];
-            console.log(`[Discounts] Found ${availableBundles.length} products in root list.`);
-
-            // 1. Process Groups using Root List matching
+            // 1. Process Groups using pre-fetched dropdownOptions (Call 2 results)
             for (const group of selectedGroups) {
-                console.log(`[Discounts] Resolving group: "${group.name}" (ID: ${group.id})`);
-                const targetName = group.name?.toLowerCase().trim();
 
-                // Multi-stage name matching in the root list
-                let matchingProduct = availableBundles.find((p: any) => p.name?.toLowerCase().trim() === targetName);
-                if (!matchingProduct) {
-                    matchingProduct = availableBundles.find((p: any) => p.name?.toLowerCase().trim().startsWith(targetName));
-                }
-                if (!matchingProduct) {
-                    matchingProduct = availableBundles.find((p: any) => p.name?.toLowerCase().trim().includes(targetName));
-                }
+                // Find matching option in dropdownOptions which already has pricebookEntryId and sortOrder
+                const match = this.dropdownOptions.find(opt => opt.Name === group.name || opt.Id === group.productId);
 
-                if (matchingProduct) {
-                    // RESOLUTION SUCCESS: Use the bundle's Product2Id
-                    const actualProductId = matchingProduct?.productSellingModelOptions?.[0]?.productId ||
-                        matchingProduct?.productId ||
-                        matchingProduct?.id;
-
-                    console.log(`[Discounts] Resolved group "${group.name}" to Product2Id: ${actualProductId}`);
-
+                if (match) {
                     selectedItemsMap.set(group.id, {
-                        id: actualProductId,
+                        id: match.Id, // Product2Id
                         name: group.name,
                         discount: group.discount || 0,
                         quantity: 1,
-                        price: group.price || 0,
-                        pricebookEntryId: group.pricebookEntryId || '',
+                        price: match.price || 0,
+                        pricebookEntryId: match.pricebookEntryId || '',
+                        sortOrder: match.sortOrder,
                         isBundleChild: false
                     });
                 } else {
-                    console.warn(`[Discounts] No match for group: ${group.name} in root list`);
+                    // Fallback to what we have in the group object
                     selectedItemsMap.set(group.id, {
-                        id: group.id,
+                        id: group.productId || group.id,
                         name: group.name,
                         discount: group.discount || 0,
                         quantity: 1,
                         price: group.price || 0,
                         pricebookEntryId: group.pricebookEntryId || '',
+                        sortOrder: group.sortOrder,
                         isBundleChild: false
                     });
                 }
@@ -1236,6 +1284,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
                     quantity: p.quantity || 1,
                     price: p.price || 0,
                     pricebookEntryId: p.pricebookEntryId || '',
+                    sortOrder: p.sortOrder,
                     isBundleChild: p.isBundleChild
                 });
             });
@@ -1270,7 +1319,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
 
     handleGranularDiscount(selectedItems: any[]) {
         const quoteId = this.contextService.currentContext?.quoteId;
-        const pricebookId = this.contextService.currentContext?.pricebookId;
+        const DEFAULT_PBE_ID = '01uDz00000dqLY8IAM';
 
         if (!quoteId) {
             this.toastService.show('No active quote found in context', 'error');
@@ -1279,22 +1328,12 @@ export class DiscountsIncentivesComponent implements OnChanges {
 
         this.isLoading = true;
         this.loadingService.show();
+        const startTime = performance.now();
 
-        // 1. Resolve PricebookEntries for all items
-        const pbeRequests = selectedItems.map(item =>
-            this.salesforceApiService.getPricebookEntries([item.id]).pipe(
-                map(res => ({
-                    itemId: item.id,
-                    pbeId: (res as any).records?.[0]?.Id
-                })),
-                catchError(() => of({ itemId: item.id, pbeId: null }))
-            )
-        );
-
-        forkJoin(pbeRequests).pipe(
-            switchMap(results => {
+        // No more API calls (getCpqProducts) here as requested. Use passed data directly.
+        of(null).pipe(
+            switchMap(() => {
                 const records: any[] = [];
-                const oppId = this.contextService.currentContext?.opportunityId || '006Dz00000Q7DCGIA3';
 
                 // A. Add Quote PATCH record
                 records.push({
@@ -1310,26 +1349,29 @@ export class DiscountsIncentivesComponent implements OnChanges {
 
                 // B. Build QuoteLineItems
                 selectedItems.forEach((item, index) => {
-                    const pbeResult: any = results.find(r => r.itemId === item.id);
+                    let pbeId = item.pricebookEntryId || DEFAULT_PBE_ID;
+                    let productId = item.id;
+                    let sortOrder = item.sortOrder;
 
-                    // Use resolved PBE, or item's PBE, or fallback for groups
-                    const pbeId = pbeResult?.pbeId || item.pricebookEntryId || '01uDz00000dqLY8IAM';
+                    // Fallback PBE if still missing
+                    pbeId = pbeId || '01uDz00000dqLY8IAM';
 
                     const lineRefId = `refLine_${index}`;
+                    const lineRecord: any = {
+                        "attributes": { "type": "QuoteLineItem", "method": "POST" },
+                        "QuoteId": quoteId,
+                        "Product2Id": productId,
+                        "PricebookEntryId": pbeId,
+                        "StartDate": this.activeDiscountPeriod?.startDate,
+                        "EndDate": this.activeDiscountPeriod?.endDate,
+                        "PeriodBoundary": "Anniversary",
+                        "Quantity": Number(item.quantity) || 1,
+                        "Discount": Number(item.discount) || 0
+                    };
 
                     records.push({
                         "referenceId": lineRefId,
-                        "record": {
-                            "attributes": { "type": "QuoteLineItem", "method": "POST" },
-                            "QuoteId": quoteId, // Direct ID as per sample
-                            "Product2Id": item.id,
-                            "PricebookEntryId": pbeId,
-                            "StartDate": this.activeDiscountPeriod?.startDate,
-                            "EndDate": this.activeDiscountPeriod?.endDate,
-                            "PeriodBoundary": "Anniversary",
-                            "Quantity": Number(item.quantity) || 1,
-                            "Discount": Number(item.discount) || 0
-                        }
+                        "record": lineRecord
                     });
                 });
 
@@ -1337,7 +1379,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
                     return of({ status: 'skip', message: 'No valid products to add' });
                 }
 
-                const payload = {
+                const transactionPayload = {
                     "pricingPref": "System",
                     "catalogRatesPref": "Skip",
                     "configurationPref": {
@@ -1357,7 +1399,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
                     }
                 };
 
-                return this.salesforceApiService.placeSalesTransaction(payload).pipe(
+                return this.salesforceApiService.placeSalesTransaction(transactionPayload).pipe(
                     map(res => ({ status: 'success', res, count: selectedItems.length }))
                 );
             }),
@@ -1365,43 +1407,47 @@ export class DiscountsIncentivesComponent implements OnChanges {
                 this.isLoading = false;
                 this.loadingService.hide();
             })
-        ).subscribe({
-            next: (result: any) => {
-                if (result.status === 'skip') {
-                    this.toastService.show(result.message, 'warning');
-                    return;
+        )
+            .subscribe({
+                next: (result: any) => {
+                    if (result.status === 'skip') {
+                        this.toastService.show(result.message, 'warning');
+                        return;
+                    }
+                    const endTime = performance.now();
+                    const responseTimeSecs = ((endTime - startTime) / 1000).toFixed(2);
+                    this.toastService.show(`Quote updated successfully with discounts (${responseTimeSecs}s)`, 'success');
+                    const selectedGroupCount = this.persistentSelectedGroups.size;
+                    const selectedIndividualCount = this.persistentSelectedIndividuals.size;
+                    const discValue = this.discountForm.value ? this.discountForm.value + '%' : 'Updated';
+
+                    // Count committed items = selected groups + selected individuals (line items added)
+                    const committedCount = this.persistentSelectedGroups.size + selectedIndividualCount;
+
+                    this.addDiscountToUI(this.discountForm.granularity, selectedGroupCount, selectedIndividualCount, discValue, committedCount, responseTimeSecs);
+                    this.resetSelections();
+                    // Reset dataFetched so that next time the component is opened it can refresh data if needed
+                    this.dataFetched = false;
+                    // Signal that quote line items need refresh due to discount changes
+                    this.quoteRefreshService.setRefreshNeeded(true);
+                },
+                error: (err: any) => {
+                    console.error('Failed to update quote', err);
                 }
-                this.toastService.show('Quote updated successfully with discounts', 'success');
-                const selectedGroupCount = this.persistentSelectedGroups.size;
-                const selectedIndividualCount = this.persistentSelectedIndividuals.size;
-                const discValue = this.discountForm.value ? this.discountForm.value + '%' : 'Updated';
-
-                // Count committed items = selected groups + selected individuals (line items added)
-                const committedCount = this.persistentSelectedGroups.size + selectedIndividualCount;
-
-                this.addDiscountToUI(this.discountForm.granularity, selectedGroupCount, selectedIndividualCount, discValue, committedCount);
-                this.resetSelections();
-                // Reset dataFetched so that next time the component is opened it can refresh data if needed
-                this.dataFetched = false;
-                // Signal that quote line items need refresh due to discount changes
-                this.quoteRefreshService.setRefreshNeeded(true);
-            },
-            error: (err: any) => {
-                console.error('Failed to update quote', err);
-            }
-        });
+            });
     }
 
-    private addDiscountToUI(granularity: string, groupCount: number, individualCount: number, value: string, committedProductCount: number = 0) {
+    private addDiscountToUI(granularity: string, groupCount: number, individualCount: number, value: string, committedProductCount: number = 0, responseTimeSecs?: string) {
         // Update the running quota
         this.usedQuotaCount += committedProductCount;
         const newDiscount = {
             id: 'd' + Date.now(),
             title: `${granularity} Discount - Flat Rate (%)`,
-            subtext: `${groupCount} Product Groups, ${individualCount} Products`,
+            subtext: `${groupCount} Product Groups, ${individualCount} Products ${responseTimeSecs ? '(' + responseTimeSecs + 's)' : ''}`,
             value: value,
             type: 'discount',
-            granularity: granularity
+            granularity: granularity,
+            responseTime: responseTimeSecs
         };
         if (!this.activeDiscountPeriod) return;
         this.activeDiscountPeriod.activeDiscounts.unshift(newDiscount); // Add to top
@@ -1439,123 +1485,108 @@ export class DiscountsIncentivesComponent implements OnChanges {
 
         this.isLoading = true;
         this.loadingService.show();
+        const startTime = performance.now();
 
-        // Resolve root classification products then match groups
-        const rootClassId = this.rootClassificationId || '11BDz00000000NvMAI';
-        lastValueFrom(this.rcaApiService.getProductsByClassification(rootClassId, 100))
-            .then(rootResponse => {
-                const availableBundles = rootResponse?.products || [];
+        const contextPricebookId = this.contextService.currentContext?.pricebookId || '01sf4000003ZgtzAAC';
+        const resolvedItems: any[] = [];
+        for (const group of selectedGroups) {
+            // Find match in dropdownOptions for the group (Call 2 results)
+            const match = this.dropdownOptions.find(opt => opt.Name === group.name);
 
-                const resolvedItems: any[] = [];
-                for (const group of selectedGroups) {
-                    const targetName = group.name?.toLowerCase().trim();
-                    let match = availableBundles.find((p: any) => p.name?.toLowerCase().trim() === targetName)
-                        || availableBundles.find((p: any) => p.name?.toLowerCase().trim().includes(targetName));
-
-                    const productId = match?.productSellingModelOptions?.[0]?.productId || match?.id || group.id;
-                    const pbeId = group.pricebookEntryId || '';
-                    resolvedItems.push({ id: productId, name: group.name, pbeId, incentiveAmount: group.incentiveAmount });
-                }
-
-                // Build pbe requests
-                const pbeRequests = resolvedItems.map(item =>
-                    this.salesforceApiService.getPricebookEntries([item.id]).pipe(
-                        map((res: any) => ({ itemId: item.id, pbeId: res.records?.[0]?.Id || item.pbeId })),
-                        catchError(() => of({ itemId: item.id, pbeId: item.pbeId }))
-                    )
-                );
-
-                const pbeResults$ = pbeRequests.length > 0 ? forkJoin(pbeRequests) : of([]);
-
-                pbeResults$.pipe(
-                    switchMap((pbeResults: any) => {
-                        const records: any[] = [
-                            {
-                                "referenceId": "refQuote",
-                                "record": {
-                                    "attributes": { "method": "PATCH", "type": "Quote", "id": quoteId }
-                                }
-                            }
-                        ];
-
-                        resolvedItems.forEach((item, index) => {
-                            const pbeResult: any = Array.isArray(pbeResults) ? pbeResults.find((r: any) => r.itemId === item.id) : null;
-                            const finalPbeId = pbeResult?.pbeId || item.pbeId || '01uDz00000dqLY8IAM';
-
-                            // Use raw USD value directly
-                            const itemAmount = (parseFloat(item.incentiveAmount) || 0);
-
-                            records.push({
-                                "referenceId": `refIncentive_${index}`,
-                                "record": {
-                                    "attributes": { "type": "QuoteLineItem", "method": "POST" },
-                                    "QuoteId": quoteId,
-                                    "Product2Id": item.id,
-                                    "PricebookEntryId": finalPbeId,
-                                    "StartDate": this.activeIncentivePeriod.startDate,
-                                    "EndDate": this.activeIncentivePeriod.endDate,
-                                    "Incentive__c": itemAmount,
-                                    "PeriodBoundary": "Anniversary",
-                                    "Quantity": 1
-                                }
-                            });
-                        });
-
-                        const payload = {
-                            "pricingPref": "Skip",
-                            "catalogRatesPref": "Skip",
-                            "configurationPref": {
-                                "configurationMethod": "Skip",
-                                "configurationOptions": {
-                                    "validateProductCatalog": true,
-                                    "validateAmendRenewCancel": true,
-                                    "executeConfigurationRules": true,
-                                    "addDefaultConfiguration": false
-                                }
-                            },
-                            "taxPref": "Skip",
-                            "contextDetails": {},
-                            "graph": {
-                                "graphId": "insert_incentive",
-                                "records": records
-                            }
-                        };
-
-                        return this.salesforceApiService.placeSalesTransaction(payload);
-                    }),
-                    finalize(() => {
-                        this.isLoading = false;
-                        this.loadingService.hide();
-                    })
-                ).subscribe({
-                    next: () => {
-                        this.toastService.show('Incentive added successfully', 'success');
-                        const groupCount = selectedGroups.length;
-                        this.usedQuotaCount += groupCount;
-                        const displayValue = `${groupCount} group${groupCount !== 1 ? 's' : ''} with custom amounts`;
-                        this.activeIncentivePeriod.activeIncentives.unshift({
-                            id: 'i' + Date.now(),
-                            title: this.incentiveForm.type,
-                            subtext: `${groupCount} Product Group${groupCount !== 1 ? 's' : ''}`,
-                            value: displayValue,
-                            type: 'incentive'
-                        });
-                        this.incentiveForm.amount = '';
-                        this.persistentIncentiveGroups.clear();
-                        this.productGroups.forEach(g => { g.selected = false; });
-                        this.quoteRefreshService.setRefreshNeeded(true);
-                    },
-                    error: (err: any) => {
-                        console.error('[Incentives] Error adding incentive:', err);
-                    }
-                });
-            })
-            .catch((err: any) => {
-                console.error('[Incentives] Error resolving bundles:', err);
-                this.toastService.show('Error resolving product groups', 'error');
-                this.loadingService.hide();
-                this.isLoading = false;
+            resolvedItems.push({
+                id: match ? match.Id : group.id, // Use Product2Id if found
+                name: group.name,
+                pbeId: match ? match.pricebookEntryId : (group.pricebookEntryId || ''),
+                sortOrder: match ? match.sortOrder : group.sortOrder,
+                incentiveAmount: group.incentiveAmount
             });
+        }
+
+        // No more API calls (getCpqProducts) here as requested. Use passed data directly.
+        of(null).pipe(
+            switchMap(() => {
+                const records: any[] = [
+                    {
+                        "referenceId": "refQuote",
+                        "record": {
+                            "attributes": { "method": "PATCH", "type": "Quote", "id": quoteId }
+                        }
+                    }
+                ];
+
+                // Building records
+                resolvedItems.forEach((item, index) => {
+                    const lineRecord: any = {
+                        "attributes": { "type": "QuoteLineItem", "method": "POST" },
+                        "QuoteId": quoteId,
+                        "Product2Id": item.id,
+                        "PricebookEntryId": item.pbeId || '01uDz00000dqLY8IAM',
+                        "StartDate": this.activeIncentivePeriod.startDate,
+                        "EndDate": this.activeIncentivePeriod.endDate,
+                        "PeriodBoundary": "Anniversary",
+                        "Quantity": 1,
+                        "Discount": 100, // Incentives are 100% discount
+                        "Incentive__c": parseFloat(item.incentiveAmount) || 0
+                    };
+
+                    records.push({
+                        "referenceId": `refIncentive_${index}`,
+                        "record": lineRecord
+                    });
+                });
+
+                const payload = {
+                    "pricingPref": "Skip",
+                    "catalogRatesPref": "Skip",
+                    "configurationPref": {
+                        "configurationMethod": "Skip",
+                        "configurationOptions": {
+                            "validateProductCatalog": true,
+                            "validateAmendRenewCancel": true,
+                            "executeConfigurationRules": true,
+                            "addDefaultConfiguration": false
+                        }
+                    },
+                    "taxPref": "Skip",
+                    "contextDetails": {},
+                    "graph": {
+                        "graphId": "insert_incentive",
+                        "records": records
+                    }
+                };
+                return this.salesforceApiService.placeSalesTransaction(payload);
+            }),
+            finalize(() => {
+                this.isLoading = false;
+                this.loadingService.hide();
+            })
+        ).subscribe({
+            next: () => {
+                const endTime = performance.now();
+                const responseTimeSecs = ((endTime - startTime) / 1000).toFixed(2);
+                this.toastService.show(`Incentive added successfully (${responseTimeSecs}s)`, 'success');
+                const groupCount = selectedGroups.length;
+                this.usedQuotaCount += groupCount;
+                const displayValue = `${groupCount} group${groupCount !== 1 ? 's' : ''} with custom amounts`;
+                this.activeIncentivePeriod.activeIncentives.unshift({
+                    id: 'i' + Date.now(),
+                    title: this.incentiveForm.type,
+                    subtext: `${groupCount} Product Group${groupCount !== 1 ? 's' : ''} (${responseTimeSecs}s)`,
+                    value: displayValue,
+                    type: 'incentive',
+                    responseTime: responseTimeSecs
+                });
+                this.incentiveForm.amount = '';
+                this.persistentIncentiveGroups.clear();
+                this.productGroups.forEach(g => { g.selected = false; });
+                this.dataFetched = false;
+                this.quoteRefreshService.setRefreshNeeded(true);
+            },
+            error: (err: any) => {
+                console.error('[Incentives] Error adding incentive:', err);
+                this.toastService.show('Error adding incentive', 'error');
+            }
+        });
     }
 
     get totalProductsCount(): number {

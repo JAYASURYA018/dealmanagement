@@ -79,8 +79,8 @@ export class RcaApiService {
                     throw new Error('No access token available');
                 }
 
-                // Query: SELECT Id,Name,Code,it_has_Bundle_Products__c ,No_Of_Child_Products__c,Status FROM ProductClassification WHERE Parent_Bundle_Product_ID__c ='...'
-                const query = `SELECT Id, Name, Code, It_has_Bundle_Products__c, No_Of_Child_Products__c, Status FROM ProductClassification WHERE Parent_Bundle_Product_ID__c = '${parentBundleId}' AND It_has_Bundle_Products__c = false`;
+                // Query: SELECT Id,Name,Code,it_has_Bundle_Products__c,No_Of_Child_Products__c,Status FROM ProductClassification WHERE Parent_Bundle_Product_ID__c ='...'
+                const query = `SELECT Id, Name, Code, It_has_Bundle_Products__c, No_Of_Child_Products__c, Status FROM ProductClassification WHERE Parent_Bundle_Product_ID__c = '${parentBundleId}'`;
                 const encodedQuery = encodeURIComponent(query);
                 const url = `${baseUrl}/services/data/v66.0/query?q=${encodedQuery}`;
 
@@ -108,21 +108,26 @@ export class RcaApiService {
         return this.contextService.context$.pipe(
             take(1),
             switchMap(context => {
-                const providedToken = '00DDz000001qvYA!ARQAQE2ut._CySv0HuqzA58fQg2KQLcac4Eomg4keHeHi6SaaLi8m3e5R6_XFyXbm217O5tEzWvSRR82lg7htONLvNqSzO5g';
-                const token = context?.accessToken || providedToken;
+                const token = context?.accessToken;
                 const baseUrl = context?.apiBaseUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com';
+                const pricebookId = context?.pricebookId || '01sf4000003ZgtzAAC';
 
                 if (!token) {
                     throw new Error('No access token available');
                 }
 
-                // URL: .../connect/pcm/products?productClassificationId=...&include=/products
-                const url = `${baseUrl}/services/data/v66.0/connect/pcm/products?productClassificationId=${classificationId}&include=/products`;
+                const url = `${baseUrl}/services/data/v61.0/connect/cpq/products`;
 
-                // Body for POST request with pagination
                 const body = {
-                    offset: offset,
-                    pageSize: pageSize
+                    "limit": pageSize,
+                    "offset": offset,
+                    "productClassificationId": classificationId,
+                    "priceBookId": pricebookId,
+                    "additionalFields": {
+                        "Product2": {
+                            "fields": ["RCA_Sort_order__c"]
+                        }
+                    }
                 };
 
                 console.log(`[API Request] ${method}`, { url, body });
@@ -137,7 +142,45 @@ export class RcaApiService {
             tap(response => console.log(`[API Response] ${method}`, response)),
             catchError(err => {
                 console.error(`[API Error] ${method}`, err);
-                return of({ products: [] }); // Return empty on error
+                return of({ result: [] });
+            })
+        );
+    }
+
+    /**
+     * New method to fetch CPQ products with specific classification and pricebook.
+     * Used for fetching Pricebook Entry IDs and Sort Order.
+     */
+    getCpqProducts(payload: any): Observable<any> {
+        const method = 'RcaApiService.getCpqProducts';
+
+        return this.contextService.context$.pipe(
+            take(1),
+            switchMap(context => {
+                const providedToken = '00DDz000001qvYA!ARQAQE2ut._CySv0HuqzA58fQg2KQLcac4Eomg4keHeHi6SaaLi8m3e5R6_XFyXbm217O5tEzWvSRR82lg7htONLvNqSzO5g';
+                const token = context?.accessToken || providedToken;
+                const baseUrl = context?.apiBaseUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com';
+
+                if (!token) {
+                    throw new Error('No access token available');
+                }
+
+                // Following the user specified version v61.0 and endpoint
+                const url = `${baseUrl}/services/data/v61.0/connect/cpq/products`;
+
+                console.log(`[API Request] ${method}`, { url, payload });
+
+                const headers = new HttpHeaders({
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                });
+
+                return this.http.post<any>(url, payload, { headers });
+            }),
+            tap(response => console.log(`[API Response] ${method}`, response)),
+            catchError(err => {
+                console.error(`[API Error] ${method}`, err);
+                return of({ result: [] }); // Return empty result on error
             })
         );
     }
@@ -148,23 +191,29 @@ export class RcaApiService {
         return this.contextService.context$.pipe(
             take(1),
             switchMap(context => {
-                const providedToken = '00DDz000001qvYA!ARQAQE2ut._CySv0HuqzA58fQg2KQLcac4Eomg4keHeHi6SaaLi8m3e5R6_XFyXbm217O5tEzWvSRR82lg7htONLvNqSzO5g';
-                const token = context?.accessToken || providedToken;
+                const token = context?.accessToken;
                 const baseUrl = context?.apiBaseUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com';
+                const pricebookId = context?.pricebookId || '01sf4000003ZgtzAAC';
 
                 if (!token) {
                     throw new Error('No access token available');
                 }
 
-                const url = `${baseUrl}/services/data/v65.0/connect/pcm/products?productClassificationId=${classificationId}&include=/products`;
+                const url = `${baseUrl}/services/data/v61.0/connect/cpq/products`;
 
                 const body = {
-                    language: 'en_US',
-                    filter: {
-                        criteria: criteria
+                    "limit": pageSize,
+                    "offset": offset,
+                    "productClassificationId": classificationId,
+                    "priceBookId": pricebookId,
+                    "filter": {
+                        "criteria": criteria
                     },
-                    offset: offset,
-                    pageSize: pageSize
+                    "additionalFields": {
+                        "Product2": {
+                            "fields": ["RCA_Sort_order__c"]
+                        }
+                    }
                 };
 
                 console.log(`[API Request] ${method}`, { url, body });
@@ -179,39 +228,51 @@ export class RcaApiService {
             tap(response => console.log(`[API Response] ${method}`, response)),
             catchError(err => {
                 console.error(`[API Error] ${method}`, err);
-                return of({ products: [] });
+                return of({ result: [] });
             })
         );
     }
 
-    getDropdownOptions(parentBundleId: string): Observable<any> {
+    getDropdownOptions(classificationId: string = '11BDz00000000NvMAI'): Observable<any> {
         const method = 'RcaApiService.getDropdownOptions';
-        const query = `SELECT Id, Name, Code, It_has_Bundle_Products__c, No_Of_Child_Products__c, Status FROM ProductClassification WHERE Parent_Bundle_Product_ID__c = '${parentBundleId}' AND It_has_Bundle_Products__c = false`;
 
         return this.contextService.context$.pipe(
             take(1),
             switchMap(context => {
-                const providedToken = '00DDz000001qvYA!ARQAQE2ut._CySv0HuqzA58fQg2KQLcac4Eomg4keHeHi6SaaLi8m3e5R6_XFyXbm217O5tEzWvSRR82lg7htONLvNqSzO5g';
-                const token = context?.accessToken || providedToken;
+                const token = context?.accessToken;
                 const baseUrl = context?.apiBaseUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com';
+                const pricebookId = context?.pricebookId || '01sf4000003ZgtzAAC';
 
                 if (!token) {
                     throw new Error('No access token available for dropdown options');
                 }
 
-                const url = `${baseUrl}/services/data/v66.0/query?q=${encodeURIComponent(query)}`;
-                console.log(`[API Request] ${method}`, { url });
+                const url = `${baseUrl}/services/data/v61.0/connect/cpq/products`;
+
+                const body = {
+                    "limit": 999,
+                    "productClassificationId": classificationId,
+                    "priceBookId": pricebookId,
+                    "additionalFields": {
+                        "Product2": {
+                            "fields": ["RCA_Sort_order__c"]
+                        }
+                    }
+                };
+
+                console.log(`[API Request] ${method}`, { url, body });
 
                 const headers = new HttpHeaders({
-                    'Authorization': `Bearer ${token}`
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
                 });
 
-                return this.http.get<any>(url, { headers });
+                return this.http.post<any>(url, body, { headers });
             }),
             tap(response => console.log(`[API Response] ${method}`, response)),
             catchError(err => {
                 console.error(`[API Error] ${method}`, err);
-                return of({ records: [] });
+                return of({ result: [] });
             })
         );
     }
@@ -238,7 +299,8 @@ export class RcaApiService {
             }
 
             const headers = new HttpHeaders({
-                'Authorization': `Bearer ${token}`
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
             });
 
             const body = {
@@ -276,7 +338,7 @@ export class RcaApiService {
             ).subscribe({
                 next: (result) => {
                     console.log(`[API Response] ${method}`, result);
-                    const rawProducts = result.products || result.items || [];
+                    const rawProducts = result.result || result.products || result.items || [];
                     const products = rawProducts.map((p: any) => {
                         let family = p.Family || p.fields?.Family || p.additionalFields?.Family || p.additionalFields?.Product2?.fields?.Family;
                         if (!p.additionalFields) p.additionalFields = {};
@@ -302,17 +364,17 @@ export class RcaApiService {
         });
     }
 
-    searchProducts(searchTerm: string, categoryIds: string[], pageSize?: number, offset?: number): Observable<any> {
+    searchProducts(searchTerm: string, categoryIds: string[], criteria: any[], pageSize?: number, offset?: number): Observable<any> {
         const method = 'RcaApiService.searchProducts';
 
         return this.contextService.context$.pipe(
             take(1),
             switchMap(context => {
-                const providedToken = '00DDz000001qvYA!ARQAQE2ut._CySv0HuqzA58fQg2KQLcac4Eomg4keHeHi6SaaLi8m3e5R6_XFyXbm217O5tEzWvSRR82lg7htONLvNqSzO5g';
+                const providedToken = '00DDz000001qvYA!ARQAQE2ut._CySv0HuqzA58fQg2KQLcac4Eomg4keHeHeHi6SaaLi8m3e5R6_XFyXbm217O5tEzWvSRR82lg7htONLvNqSzO5g';
                 const token = context?.accessToken || providedToken;
                 const baseUrl = context?.apiBaseUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com';
 
-                // URL based on context or fallback
+                // User requested PCM endpoint for global search
                 const url = `${baseUrl}/services/data/v65.0/connect/pcm/products?include=/products`;
 
                 if (!token) {
@@ -320,9 +382,8 @@ export class RcaApiService {
                 }
 
                 const body: any = {
-                    language: 'en_US',
-                    filter: {
-                        criteria: [
+                    "filter": {
+                        "criteria": criteria && criteria.length > 0 ? criteria : [
                             {
                                 "property": "isActive",
                                 "operator": "eq",
@@ -335,16 +396,11 @@ export class RcaApiService {
                             }
                         ]
                     },
-                    categoryIds: categoryIds,
-                    searchTerm: searchTerm
+                    "categoryIds": categoryIds,
+                    "searchTerm": searchTerm,
+                    "pageSize": pageSize || 100,
+                    "offset": offset || 0
                 };
-
-                if (pageSize !== undefined) {
-                    body.pageSize = pageSize;
-                }
-                if (offset !== undefined) {
-                    body.offset = offset;
-                }
 
                 console.log(`[API Request] ${method}`, { url, body });
 
@@ -358,7 +414,7 @@ export class RcaApiService {
             tap(response => console.log(`[API Response] ${method}`, response)),
             catchError(err => {
                 console.error(`[API Error] ${method}`, err);
-                return of({ products: [] });
+                return of({ products: [], result: [] });
             })
         );
     }
