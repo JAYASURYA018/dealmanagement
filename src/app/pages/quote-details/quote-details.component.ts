@@ -1,4 +1,4 @@
-﻿import { Component, HostListener, OnInit, inject, ViewChild } from '@angular/core';
+import { Component, HostListener, OnInit, inject, ViewChild } from '@angular/core';
 import { DiscountsIncentivesComponent } from '../../components/discounts-incentives/discounts-incentives.component';
 import { CommonModule } from '@angular/common';
 import { QuoteRefreshService } from '../../services/quote-refresh.service';
@@ -84,6 +84,7 @@ export class QuoteDetailsComponent implements OnInit {
     startDate: string = new Date().toISOString().split('T')[0]; // Default to current date
     expirationDate: string = ''; // Initially empty
     previewCommitments: any[] = [];
+    previewProductsWithoutDiscounts: any[] = []; // Products without discounts or incentives
     todayDate: Date = new Date(); // Keep for explicit today reference if needed
     minDate: string = new Date().toISOString().split('T')[0];
 
@@ -1137,11 +1138,11 @@ export class QuoteDetailsComponent implements OnInit {
         const quoteStartDate = this.startDate ? new Date(this.startDate) : new Date();
         const matchedItemIds = new Set<string>();
 
-        // 1. TRY TO USE DISCOUNT PERIODS FROM THE DISCOUNTS TAB
+        // 1. PRIORITIZE DISCOUNT PERIODS IF THEY EXIST (from Discounts Tab)
         if (this.discountsIncentives && this.discountsIncentives.discountPeriods && this.discountsIncentives.discountPeriods.length > 0) {
             console.log('📦 Building preview using discount periods:', this.discountsIncentives.discountPeriods);
 
-            this.discountsIncentives.discountPeriods.forEach((period, index) => {
+            this.discountsIncentives.discountPeriods.forEach((period: any, index: number) => {
                 // Parse dates robustly
                 const startDateStr = period.startDate || this.startDate;
                 const endDateStr = period.endDate;
@@ -1169,6 +1170,11 @@ export class QuoteDetailsComponent implements OnInit {
                             if (item.Id && matchedItemIds.has(item.Id)) return;
                             const itemStartStr = item.StartDate;
                             const itemDiscount = item.Discount ? parseFloat(item.Discount) : 0;
+                            const itemIncentive = item.Incentive__c ? parseFloat(item.Incentive__c) : 0;
+
+                            // Only include items that have a discount or incentive or if it's a "standard" period 
+                            // But usually discount periods are specifically for discounted items
+                            if (itemDiscount === 0 && itemIncentive === 0) return;
 
                             if (itemStartStr) {
                                 const itemStart = new Date(itemStartStr).getTime();
@@ -1176,8 +1182,8 @@ export class QuoteDetailsComponent implements OnInit {
 
                                 // Overlapping periods fix: check if the item's discount matches this period's configuration
                                 if (matches) {
-                                    const periodPercentages = period.activeDiscounts.map(d => parseFloat(d.value)).filter(v => !isNaN(v));
-                                    const hasGranularInThisPeriod = period.activeDiscounts.some(d => d.title.includes('Granular'));
+                                    const periodPercentages = period.activeDiscounts.map((d: any) => parseFloat(d.value)).filter((v: any) => !isNaN(v));
+                                    const hasGranularInThisPeriod = period.activeDiscounts.some((d: any) => d.title.includes('Granular'));
 
                                     const isSpecificMatch = periodPercentages.includes(itemDiscount);
                                     const isGranularCatch = hasGranularInThisPeriod && itemDiscount > 0 && !allOverallDiscounts.includes(itemDiscount);
@@ -1190,10 +1196,9 @@ export class QuoteDetailsComponent implements OnInit {
 
                                 if (matches) {
                                     if (item.Id) matchedItemIds.add(item.Id);
-                                    // Robust group detection: check family and classification name matches
                                     const productName = item.Product2?.Name;
                                     const isGroup = this.isGroupProduct(item) ||
-                                        (productName && this.discountsIncentives?.dropdownOptions?.some(opt => opt.Name === productName));
+                                        (productName && this.discountsIncentives?.dropdownOptions?.some((opt: any) => opt.Name === productName));
 
                                     if (isGroup) {
                                         groupItems.push(item);
@@ -1205,17 +1210,14 @@ export class QuoteDetailsComponent implements OnInit {
                         });
                     }
 
-                    let periodName = period.name || `Discount Period ${index + 1}`;
-                    if (periodName.startsWith('DiscountPeriod')) {
-                        periodName = periodName.replace('DiscountPeriod', 'Discount Period ');
-                    }
+                    let periodName = `period ${index + 1}`;
 
                     previews.push({
                         name: periodName,
                         startDate: this.formatDateForDisplay(startDateStr),
                         endDate: endDateStr ? this.formatDateForDisplay(endDateStr) : 'End of Term',
-                        months: this.commitmentPeriods[index]?.months,
-                        amount: this.commitmentPeriods[index]?.amount,
+                        months: period.months || this.commitmentPeriods[index]?.months,
+                        amount: period.amount || this.commitmentPeriods[index]?.amount,
                         individualItems: individualItems,
                         groupItems: groupItems
                     });
@@ -1226,7 +1228,7 @@ export class QuoteDetailsComponent implements OnInit {
         }
 
         // 2. FALLBACK TO COMMITMENT PERIODS (Timeline from Details Tab)
-        console.log('📦 Falling back to commitment periods for preview...');
+        console.log('📦 Building preview using commitment periods:', this.commitmentPeriods);
         let currentStartDate = new Date(quoteStartDate);
 
         this.commitmentPeriods.forEach((period, index) => {
@@ -1265,7 +1267,7 @@ export class QuoteDetailsComponent implements OnInit {
                 }
 
                 previews.push({
-                    name: `Commit Period ${index + 1}`,
+                    name: `period ${index + 1}`,
                     startDate: this.formatDateForDisplay(currentStartDate),
                     endDate: this.formatDateForDisplay(endDate),
                     months: months,
@@ -1280,6 +1282,25 @@ export class QuoteDetailsComponent implements OnInit {
         });
 
         return previews;
+    }
+
+    // Build list of products without discounts or incentives
+    buildProductsWithoutDiscounts(): any[] {
+        const productsWithoutDiscounts: any[] = [];
+        
+        if (this.previewData?.QuoteLineItems?.records) {
+            this.previewData.QuoteLineItems.records.forEach((item: any) => {
+                const itemDiscount = (item.Discount != null) ? parseFloat(item.Discount) : 0;
+                const itemIncentive = (item.Incentive__c != null) ? parseFloat(item.Incentive__c) : 0;
+                
+                // Only include items that have NO discount AND NO incentive
+                if (itemDiscount === 0 && itemIncentive === 0) {
+                    productsWithoutDiscounts.push(item);
+                }
+            });
+        }
+        
+        return productsWithoutDiscounts;
     }
 
     buildSubscriptionPreview(): any[] {
@@ -1410,6 +1431,7 @@ export class QuoteDetailsComponent implements OnInit {
                         this.loadSubscriptionPeriodsFromPreview();
                     }
                     this.previewCommitments = this.buildPreviewCommitments();
+                    this.previewProductsWithoutDiscounts = this.buildProductsWithoutDiscounts();
 
                     this.showPreviewPopup = true;
                 }
@@ -1449,12 +1471,13 @@ export class QuoteDetailsComponent implements OnInit {
             return;
         }
 
-        this.previewCommitments = this.buildPreviewCommitments();
         this.loadingService.show();
         this.sfApi.getQuotePreview(fullQuoteId).subscribe({
             next: (response) => {
                 if (response.records && response.records.length > 0) {
                     this.previewData = response.records[0];
+                    this.previewCommitments = this.buildPreviewCommitments();
+                    this.previewProductsWithoutDiscounts = this.buildProductsWithoutDiscounts();
 
                     this.isCapturingScreenshot = true;
                     this.showPreviewPopup = true;

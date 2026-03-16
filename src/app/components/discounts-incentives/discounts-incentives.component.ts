@@ -63,7 +63,15 @@ export class DiscountsIncentivesComponent implements OnChanges {
     discountPeriods = [
         {
             id: '1',
-            name: 'DiscountPeriod 1',
+            name: 'discount period 1',
+            timePeriod: 'Date range',
+            startDate: '',
+            endDate: '',
+            activeDiscounts: [] as any[]
+        },
+        {
+            id: '2',
+            name: 'discount period 2',
             timePeriod: 'Date range',
             startDate: '',
             endDate: '',
@@ -72,14 +80,24 @@ export class DiscountsIncentivesComponent implements OnChanges {
     ];
     activeDiscountPeriodId = '1';
 
-    incentivePeriods = [{
-        id: '1',
-        name: 'Incentives period 1',
-        timePeriod: 'Date range',
-        startDate: '',
-        endDate: '',
-        activeIncentives: [] as any[]
-    }];
+    incentivePeriods = [
+        {
+            id: '1',
+            name: 'incentive period 1',
+            timePeriod: 'Date range',
+            startDate: '',
+            endDate: '',
+            activeIncentives: [] as any[]
+        },
+        {
+            id: '2',
+            name: 'incentive period 2',
+            timePeriod: 'Date range',
+            startDate: '',
+            endDate: '',
+            activeIncentives: [] as any[]
+        }
+    ];
     activeIncentivePeriodId = '1';
 
     get activeDiscountPeriod() {
@@ -96,7 +114,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
         const id = Date.now().toString();
         this.discountPeriods.push({
             id: id,
-            name: `DiscountPeriod ${this.discountPeriods.length + 1}`,
+            name: `discount period ${this.discountPeriods.length + 1}`,
             timePeriod: 'Date range',
             startDate: '',
             endDate: '',
@@ -111,7 +129,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
             if (this.activeDiscountPeriodId === id) {
                 this.activeDiscountPeriodId = '';
             }
-            this.discountPeriods.forEach((p, index) => p.name = `DiscountPeriod ${index + 1}`);
+            this.discountPeriods.forEach((p, index) => p.name = `discount period ${index + 1}`);
         }
     }
 
@@ -119,7 +137,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
         const id = Date.now().toString();
         this.incentivePeriods.push({
             id: id,
-            name: `Incentives period ${this.incentivePeriods.length + 1}`,
+            name: `incentive period ${this.incentivePeriods.length + 1}`,
             timePeriod: 'Date range',
             startDate: '',
             endDate: '',
@@ -134,7 +152,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
             if (this.activeIncentivePeriodId === id) {
                 this.activeIncentivePeriodId = this.incentivePeriods[0].id;
             }
-            this.incentivePeriods.forEach((p, index) => p.name = `Incentives period ${index + 1}`);
+            this.incentivePeriods.forEach((p, index) => p.name = `incentive period ${index + 1}`);
         }
     }
 
@@ -274,11 +292,11 @@ export class DiscountsIncentivesComponent implements OnChanges {
 
     resetAllState() {
         this.discountPeriods = [
-            { id: '1', name: 'DiscountPeriod 1', timePeriod: 'Date range', startDate: '', endDate: '', activeDiscounts: [] }
+            { id: '1', name: 'discount period 1', timePeriod: 'Date range', startDate: '', endDate: '', activeDiscounts: [] }
         ];
         this.activeDiscountPeriodId = '1';
         this.incentivePeriods = [{
-            id: '1', name: 'Incentives period 1', timePeriod: 'Date range', startDate: '', endDate: '', activeIncentives: []
+            id: '1', name: 'incentive period 1', timePeriod: 'Date range', startDate: '', endDate: '', activeIncentives: []
         }];
         this.activeIncentivePeriodId = '1';
         this.activeTab = 'discounts';
@@ -377,6 +395,19 @@ export class DiscountsIncentivesComponent implements OnChanges {
 
         this.individualCurrentOffset = 0; // Reset pagination
         this.loadIndividualProducts();
+    }
+
+    // When Region or Billing Frequency filters are applied, trigger search instead of load
+    applyFilters() {
+        this.individualCurrentOffset = 0;
+        const criteria = this.getFacetedCriteria();
+        
+        // If we have active filters beyond the default ones, use search API
+        if (criteria.length > 2 || this.productSearchTerm) {
+            this.executeSearch();
+        } else {
+            this.loadIndividualProducts();
+        }
     }
 
     setActiveTab(tab: 'discounts' | 'incentives') {
@@ -772,9 +803,13 @@ export class DiscountsIncentivesComponent implements OnChanges {
 
         this.isIndividualLoading = true;
 
-        // As requested by user in Step 10: use PCM v65.0 API for search/filter
-        // Use the category ID captured from RcaApiService.getProducts or from Input
-        const searchCategoryId = this.categoryId || this.bundleCategoryId || this.selectedDropdownOption?.Id;
+        // Use the selected dropdown option's classification ID (the facet button like "Compute")
+        const searchCategoryId = this.selectedDropdownOption?.classificationId 
+            || this.selectedDropdownOption?.Id
+            || this.categoryId 
+            || this.bundleCategoryId;
+
+        console.log('[executeSearch] Using classification ID:', searchCategoryId, 'with criteria:', criteria);
 
         this.currentProductReq = this.rcaApiService.searchProducts(
             this.productSearchTerm || '',
@@ -795,7 +830,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
                     return {
                         id: resolvedId,
                         name: p.name || p.fields?.Name || 'Unknown Product',
-                        family: p.additionalFields?.Family || p.fields?.Family || 'Other',
+                        family: p.additionalFields?.Family || p.fields?.Family || this.selectedDropdownOption?.Name || 'Other',
                         selected: false,
                         discount: 0,
                         quantity: 1,
@@ -991,7 +1026,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
         this.regionSearchText = '';
         // As requested: remove existing search values when selecting a filter
         this.productSearchTerm = '';
-        if (this.productTab === 'individual') this.onProductSearch();
+        if (this.productTab === 'individual') this.applyFilters();
     }
 
     selectBillingFreq(opt: { label: string; value: string } | null) {
@@ -1000,7 +1035,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
         this.billingSearchText = '';
         // As requested: remove existing search values when selecting a filter
         this.productSearchTerm = '';
-        if (this.productTab === 'individual') this.onProductSearch();
+        if (this.productTab === 'individual') this.applyFilters();
     }
 
     closeAllPicklistDropdowns() {
@@ -1367,7 +1402,8 @@ export class DiscountsIncentivesComponent implements OnChanges {
                         "EndDate": this.activeDiscountPeriod?.endDate,
                         "PeriodBoundary": "Anniversary",
                         "Quantity": Number(item.quantity) || 1,
-                        "Discount": Number(item.discount) || 0
+                        "Discount": Number(item.discount) || 0,
+                        "SortOrder": Number(sortOrder) || 0
                     };
 
                     records.push({
@@ -1527,7 +1563,8 @@ export class DiscountsIncentivesComponent implements OnChanges {
                         "PeriodBoundary": "Anniversary",
                         "Quantity": 1,
                         "Discount": 100, // Incentives are 100% discount
-                        "Incentive__c": parseFloat(item.incentiveAmount) || 0
+                        "Incentive__c": parseFloat(item.incentiveAmount) || 0,
+                        "SortOrder": Number(item.sortOrder) || 0
                     };
 
                     records.push({

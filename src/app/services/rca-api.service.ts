@@ -185,6 +185,43 @@ export class RcaApiService {
         );
     }
 
+    /**
+     * Fetch products from PCM for a specific classification to get Region and Billing options
+     */
+    getPcmProductsFilters(classificationId: string): Observable<any> {
+        const method = 'RcaApiService.getPcmProductsFilters';
+
+        return this.contextService.context$.pipe(
+            take(1),
+            switchMap(context => {
+                const providedToken = '00DDz000001qvYA!ARQAQE2ut._CySv0HuqzA58fQg2KQLcac4Eomg4keHeHi6SaaLi8m3e5R6_XFyXbm217O5tEzWvSRR82lg7htONLvNqSzO5g';
+                const token = context?.accessToken || providedToken;
+                const baseUrl = context?.apiBaseUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com';
+
+                if (!token) {
+                    throw new Error('No access token available');
+                }
+
+                // Use the exact URL requested by the user
+                const url = `${baseUrl}/services/data/v65.0/connect/pcm/products?productClassificationId=${classificationId}&include=/products`;
+
+                console.log(`[API Request] ${method}`, { url });
+
+                const headers = new HttpHeaders({
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                });
+
+                return this.http.get<any>(url, { headers });
+            }),
+            tap(response => console.log(`[API Response] ${method}`, response)),
+            catchError(err => {
+                console.error(`[API Error] ${method}`, err);
+                return of(null);
+            })
+        );
+    }
+
     facetedProductSearch(classificationId: string, criteria: any[], pageSize: number = 20, offset: number = 0): Observable<any> {
         const method = 'RcaApiService.facetedProductSearch';
 
@@ -374,14 +411,20 @@ export class RcaApiService {
                 const token = context?.accessToken || providedToken;
                 const baseUrl = context?.apiBaseUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com';
 
-                // User requested PCM endpoint for global search
-                const url = `${baseUrl}/services/data/v65.0/connect/pcm/products?include=/products`;
+                // Use the first categoryId as productClassificationId query param if available
+                const classificationId = categoryIds && categoryIds.length > 0 ? categoryIds[0] : null;
+                let url = `${baseUrl}/services/data/v65.0/connect/pcm/products?include=/products`;
+                if (classificationId) {
+                    url += `&productClassificationId=${classificationId}`;
+                }
 
                 if (!token) {
                     throw new Error('No access token available');
                 }
 
+                // Construct body following the user's requested structure
                 const body: any = {
+                    "language": "en_US",
                     "filter": {
                         "criteria": criteria && criteria.length > 0 ? criteria : [
                             {
@@ -396,11 +439,21 @@ export class RcaApiService {
                             }
                         ]
                     },
-                    "categoryIds": categoryIds,
-                    "searchTerm": searchTerm,
-                    "pageSize": pageSize,
-                    "offset": offset
+                    "offset": offset,
+                    "pageSize": pageSize
                 };
+
+                // Add searchTerm if it's provided
+                if (searchTerm) {
+                    body.searchTerm = searchTerm;
+                }
+
+                // If not using classificationId in URL, we would use categoryIds in body
+                // but the user explicitly requested productClassificationId in the URL.
+                // We'll keep categoryIds in body only if classificationId wasn't used.
+                if (!classificationId && categoryIds && categoryIds.length > 0) {
+                    body.categoryIds = categoryIds;
+                }
 
                 console.log(`[API Request] ${method}`, { url, body });
 
