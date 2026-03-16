@@ -364,7 +364,7 @@ export class RcaApiService {
         });
     }
 
-    searchProducts(searchTerm: string, categoryIds: string[], criteria: any[], pageSize?: number, offset?: number): Observable<any> {
+    searchProducts(searchTerm: string, categoryIds: string[], criteria: any[], pageSize: number = 20, offset: number = 0): Observable<any> {
         const method = 'RcaApiService.searchProducts';
 
         return this.contextService.context$.pipe(
@@ -398,8 +398,8 @@ export class RcaApiService {
                     },
                     "categoryIds": categoryIds,
                     "searchTerm": searchTerm,
-                    "pageSize": pageSize || 100,
-                    "offset": offset || 0
+                    "pageSize": pageSize,
+                    "offset": offset
                 };
 
                 console.log(`[API Request] ${method}`, { url, body });

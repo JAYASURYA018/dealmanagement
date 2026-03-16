@@ -700,19 +700,20 @@ export class DiscountsIncentivesComponent implements OnChanges {
         console.log('[onProductSearch] Triggered with term:', this.productSearchTerm);
 
         const criteria = this.getFacetedCriteria();
+        const hasFacetedFilters = criteria.length > 2;
 
-        // If search term is empty AND no faceted filters, reload default category products
-        if (!this.productSearchTerm && criteria.length <= 2) {
-            console.log('[onProductSearch] No search term or filters, reloading default products');
+        // If search term is empty AND no faceted filters, reload default products for current category
+        if (!this.productSearchTerm && !hasFacetedFilters) {
+            console.log('[onProductSearch] No search term or active filters, reloading default products');
             this.loadIndividualProducts();
             return;
         }
 
-        this.individualCurrentOffset = 0; // Reset offset on new search
+        this.individualCurrentOffset = 0; // Reset pagination offset on new search
 
-        // Check for classification or category ID
+        // Allow search if we have a category OR a search term OR active faceted filters
         const classId = this.selectedDropdownOption?.Id || this.categoryId || this.bundleCategoryId;
-        if (!classId && !this.productSearchTerm) {
+        if (!classId && !this.productSearchTerm && !hasFacetedFilters) {
             console.warn('[onProductSearch] No category/dropdown option selected for search.');
             this.toastService.show('Please select a product category first.', 'warning');
             return;
@@ -776,11 +777,11 @@ export class DiscountsIncentivesComponent implements OnChanges {
         const searchCategoryId = this.categoryId || this.bundleCategoryId || this.selectedDropdownOption?.Id;
 
         this.currentProductReq = this.rcaApiService.searchProducts(
-            this.productSearchTerm,
+            this.productSearchTerm || '',
             searchCategoryId ? [searchCategoryId] : [],
-            criteria,
-            this.individualPageSize,
-            this.individualCurrentOffset
+            criteria as any[],
+            Number(this.individualPageSize) || 100,
+            Number(this.individualCurrentOffset) || 0
         ).pipe(
             finalize(() => this.isIndividualLoading = false)
         ).subscribe({
@@ -963,8 +964,8 @@ export class DiscountsIncentivesComponent implements OnChanges {
                 const fields = res?.picklistFieldValues || res || {};
 
                 // Extract values with extra safety checks
-                const bfData = fields.RCA_Billing_Frequency__c || fields.billing_frequency;
-                const regData = fields.RCA_Region__c || fields.region;
+                const bfData = fields?.RCA_Billing_Frequency__c || fields?.billing_frequency;
+                const regData = fields?.RCA_Region__c || fields?.region;
 
                 this.billingFreqOptions = (bfData?.values || []).map((v: any) => ({ label: v.label, value: v.value }));
                 this.regionOptions = (regData?.values || []).map((v: any) => ({ label: v.label, value: v.value }));
