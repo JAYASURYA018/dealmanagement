@@ -1,4 +1,4 @@
-﻿import { Component, HostListener, OnInit, inject } from '@angular/core';
+import { Component, HostListener, OnInit, inject } from '@angular/core';
 import { DiscountsIncentivesComponent } from '../../components/discounts-incentives/discounts-incentives.component';
 import { CommonModule } from '@angular/common';
 import { QuoteRefreshService } from '../../services/quote-refresh.service';
@@ -115,6 +115,17 @@ export class QuoteDetailsComponent implements OnInit {
     developerUserPrice: number = 100;
     standardUserPrice: number = 200;
     viewerUserPrice: number = 50;
+
+    // User Product IDs and Metadata
+    private developerUserProductId: string = '';
+    private developerUserPBEId: string = '';
+    private developerUserName: string = '';
+    private standardUserProductId: string = '';
+    private standardUserPBEId: string = '';
+    private standardUserName: string = '';
+    private viewerUserProductId: string = '';
+    private viewerUserPBEId: string = '';
+    private viewerUserName: string = '';
 
     // UI State for Subscription Dropdowns
     operationTypeOpen = false;
@@ -268,31 +279,30 @@ export class QuoteDetailsComponent implements OnInit {
                         userGroup.components.forEach((c: any) => {
                             const priceObj = c.prices ? c.prices.find((p: any) => p.pricingModel?.frequency === 'Months') : null;
                             const price = priceObj ? priceObj.price : 0;
-                            const frequency = priceObj && priceObj.pricingModel ? priceObj.pricingModel.frequency : 'Months';
                             const productId = c.productId || c.product2Id || c.id;
                             const pricebookEntryId = priceObj ? priceObj.priceBookEntryId : null;
 
+                            // Update class metadata for future periods
                             if (c.name.includes('Developer')) {
                                 this.developerUserPrice = price;
+                                this.developerUserProductId = productId;
+                                this.developerUserPBEId = pricebookEntryId;
+                                this.developerUserName = c.name;
                             } else if (c.name.includes('Standard')) {
                                 this.standardUserPrice = price;
+                                this.standardUserProductId = productId;
+                                this.standardUserPBEId = pricebookEntryId;
+                                this.standardUserName = c.name;
                             } else if (c.name.includes('Viewer')) {
                                 this.viewerUserPrice = price;
+                                this.viewerUserProductId = productId;
+                                this.viewerUserPBEId = pricebookEntryId;
+                                this.viewerUserName = c.name;
                             }
-
-                            // Update existing periods with IDs and Prices
-                            this.subscriptionPeriods.forEach(p => {
-                                p.userRows.forEach(r => {
-                                    if (c.name.includes(r.type)) {
-                                        r.price = price;
-                                        r.frequency = frequency;
-                                        r.productId = productId;
-                                        r.pricebookEntryId = pricebookEntryId;
-                                        r.name = c.name;
-                                    }
-                                });
-                            });
                         });
+
+                        // Sync any existing periods (including the one just created)
+                        this.syncAllPeriodUserProducts();
                     }
 
 
@@ -550,9 +560,9 @@ export class QuoteDetailsComponent implements OnInit {
 
     private getDefaultUserRows() {
         return [
-            { type: 'Viewer', price: this.viewerUserPrice, frequency: 'Months', quantity: null, region: '', gcpProjectId: '', lookerInstanceId: '', discount: null },
-            { type: 'Standard', price: this.standardUserPrice, frequency: 'Months', quantity: null, region: '', gcpProjectId: '', lookerInstanceId: '', discount: null },
-            { type: 'Developer', price: this.developerUserPrice, frequency: 'Months', quantity: null, region: '', gcpProjectId: '', lookerInstanceId: '', discount: null },
+            { type: 'Viewer', price: this.viewerUserPrice, frequency: 'Months', quantity: null, region: '', gcpProjectId: '', lookerInstanceId: '', discount: null, productId: this.viewerUserProductId, pricebookEntryId: this.viewerUserPBEId, name: this.viewerUserName },
+            { type: 'Standard', price: this.standardUserPrice, frequency: 'Months', quantity: null, region: '', gcpProjectId: '', lookerInstanceId: '', discount: null, productId: this.standardUserProductId, pricebookEntryId: this.standardUserPBEId, name: this.standardUserName },
+            { type: 'Developer', price: this.developerUserPrice, frequency: 'Months', quantity: null, region: '', gcpProjectId: '', lookerInstanceId: '', discount: null, productId: this.developerUserProductId, pricebookEntryId: this.developerUserPBEId, name: this.developerUserName },
             { type: 'Non-prod', price: 0, frequency: 'Months', quantity: null, region: '', gcpProjectId: '', lookerInstanceId: '', discount: null }
         ];
     }
@@ -748,13 +758,7 @@ export class QuoteDetailsComponent implements OnInit {
                     standardEnd.setFullYear(standardEnd.getFullYear() + 1);
                     standardEnd.setDate(standardEnd.getDate() - 1);
 
-                    let targetEnd = standardEnd;
-                    const isTotalLast = i === this.subscriptionPeriods.length - 1;
-                    if (isTotalLast && totalEnd && totalEnd < standardEnd) {
-                        targetEnd = totalEnd;
-                    }
-
-                    const targetEndIso = this.toIsoDateString(targetEnd);
+                    const targetEndIso = this.toIsoDateString(standardEnd);
                     if (current.endDate !== targetEndIso) {
                         current.endDate = targetEndIso;
                     }
@@ -782,12 +786,19 @@ export class QuoteDetailsComponent implements OnInit {
         const headerStartChangedByUser = (this.termStartInput !== this.lastValidTermStart);
         const headerEndChangedByUser = (this.termEndDate !== this.lastValidTermEnd);
 
-        // 3. Update Global Subscription End Date only if the header wasn't the one just changed by the user
+        // 3. Update Global Subscription End Date
         const lastPeriod = this.subscriptionPeriods[this.subscriptionPeriods.length - 1];
         if (lastPeriod && lastPeriod.endDate) {
-            // If the header wasn't manually changed, or if it was changed but now matches the period, 
-            // ensure any internal period shifts (like dayOffset) reflect in the header.
-            if (!headerEndChangedByUser && !headerStartChangedByUser && this.termEndDate !== lastPeriod.endDate) {
+            let shouldSyncEnd = false;
+            if (this.currentFrequency === 'Yearly') {
+                // Auto-slide header end date if it wasn't manually touched
+                shouldSyncEnd = !headerEndChangedByUser && this.termEndDate !== lastPeriod.endDate;
+            } else {
+                // Keep previous stricter logic for Custom
+                shouldSyncEnd = !headerEndChangedByUser && !headerStartChangedByUser && this.termEndDate !== lastPeriod.endDate;
+            }
+
+            if (shouldSyncEnd) {
                 this.termEndDate = lastPeriod.endDate;
             }
         }
@@ -1652,12 +1663,6 @@ export class QuoteDetailsComponent implements OnInit {
         }
 
         if (this.isLookerSubscription && this.subscriptionPeriods.length > 0) {
-            const hasMissingProduct = this.subscriptionPeriods.some(p => !p.productName);
-            if (hasMissingProduct) {
-                this.toastService.show('you should select a platform product for all periods', 'error');
-                return;
-            }
-
             const currentLookerState = JSON.stringify({
                 periods: this.subscriptionPeriods,
                 startDate: this.startDate,
@@ -2075,8 +2080,9 @@ export class QuoteDetailsComponent implements OnInit {
         console.log('🚀 Initiating Consolidated Quote Update (Full Graph API)...');
         if (this.isSaving) return;
 
-        // Validation for Looker Subscriptions
+        // Validation and Sync for Looker Subscriptions
         if (this.isLookerSubscription) {
+            this.syncAllPeriodUserProducts();
             if (!this.validateLookerDates()) return;
         }
 
@@ -2448,6 +2454,23 @@ export class QuoteDetailsComponent implements OnInit {
             return false;
         }
 
+        // 1. Duration exactly in years (for Yearly)
+        if (this.currentFrequency === 'Yearly' && this.termStartInput && this.termEndDate) {
+            const startObj = this.parseDate(this.termStartInput);
+            let years = Math.round(this.calculateSubscriptionTerm(this.termStartInput, this.termEndDate) / 12);
+            if (years < 1) years = 1;
+            
+            const expectedEnd = new Date(startObj);
+            expectedEnd.setFullYear(expectedEnd.getFullYear() + years);
+            expectedEnd.setDate(expectedEnd.getDate() - 1);
+            
+            if (this.toIsoDateString(expectedEnd) !== this.termEndDate) {
+                this.toastService.show('Error: For Yearly periods, the total duration must be exactly in full years.', 'error');
+                return false;
+            }
+        }
+
+        // 2. Deletion check (Extra period found) - checked before generic mismatch to allow specific message
         if (lastPeriod && this.termEndDate) {
             const subEnd = this.parseDate(this.termEndDate);
             const lastStart = this.parseDate(lastPeriod.startDate);
@@ -2458,11 +2481,48 @@ export class QuoteDetailsComponent implements OnInit {
             }
         }
 
+        // 3. Generic end date matching
         if (!lastPeriod.endDate || lastPeriod.endDate !== this.termEndDate) {
             this.toastService.show('Error: The end date of the last period must match the Subscription End Date.', 'error');
             return false;
         }
 
+        // 4. Platform product 
+        const hasMissingProduct = this.subscriptionPeriods.some(p => !p.productName);
+        if (hasMissingProduct) {
+            this.toastService.show('you should select a platform product for all periods', 'error');
+            return false;
+        }
+
         return true;
+    }
+
+    /** Ensures all Viewer, Standard, and Developer rows in all periods have their correct product IDs and PBEs. */
+    private syncAllPeriodUserProducts() {
+        if (!this.subscriptionPeriods || this.subscriptionPeriods.length === 0) return;
+
+        this.subscriptionPeriods.forEach(p => {
+            p.userRows.forEach(r => {
+                // Skip non-prod as it's handled differently based on the selected platform product
+                if (r.type === 'Non-prod') return;
+
+                if (r.type === 'Viewer') {
+                    r.productId = this.viewerUserProductId;
+                    r.pricebookEntryId = this.viewerUserPBEId;
+                    r.name = this.viewerUserName;
+                    r.price = this.viewerUserPrice;
+                } else if (r.type === 'Standard') {
+                    r.productId = this.standardUserProductId;
+                    r.pricebookEntryId = this.standardUserPBEId;
+                    r.name = this.standardUserName;
+                    r.price = this.standardUserPrice;
+                } else if (r.type === 'Developer') {
+                    r.productId = this.developerUserProductId;
+                    r.pricebookEntryId = this.developerUserPBEId;
+                    r.name = this.developerUserName;
+                    r.price = this.developerUserPrice;
+                }
+            });
+        });
     }
 }
