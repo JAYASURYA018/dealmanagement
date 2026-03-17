@@ -1545,8 +1545,8 @@ export class DiscountsIncentivesComponent implements OnChanges {
                 this.quoteRefreshService.setRefreshNeeded(true);
                 this.dataFetched = false;
                 this.showProductSelector = false; 
-                this.router.navigate(['/']); // Redirect to first opportunity page
-                console.log('✅ Bulk Upload complete. Redirecting to Opportunities.');
+                this.router.navigate(['/configure-quote']); 
+                console.log('✅ Bulk Upload complete. Redirecting to Configure Quote.');
             },
             error: (err) => {
                 console.error('Bulk upload failed', err);
@@ -1671,7 +1671,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
                     this.quoteRefreshService.setRefreshNeeded(true);
                     
                     this.showProductSelector = false;
-                    this.router.navigate(['/']); // Redirect to first opportunity page
+                    this.router.navigate(['/configure-quote']); 
                 },
                 error: (err: any) => {
                     console.error('Failed to update quote', err);
