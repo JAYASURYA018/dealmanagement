@@ -1066,14 +1066,17 @@
                 <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
                     <!-- 1. STANDARD PRODUCTS TABLE (non-Looker) -->
                     <div *ngIf="!isLookerSubscription" class="mb-10">
-                        <div *ngFor="let period of previewCommitments" class="mb-16 last:mb-0">
+                        <div *ngFor="let period of previewCommitments.slice(0, 2)" class="mb-16 last:mb-0">
                             <!-- Period Large Header -->
                             <div class="flex items-center justify-between mb-6 border-b-2 border-gray-100 pb-3">
-                                <h3 class="text-3xl font-bold text-gray-900">{{ period.name }}</h3>
-                                <div
-                                    class="flex items-center gap-3 px-4 py-1.5 bg-blue-50 border border-blue-100 rounded-full text-sm font-bold text-blue-700">
-                                    <span class="material-icons-outlined text-lg">calendar_today</span>
-                                    {{ period.startDate }} - {{ period.endDate }}
+                                <h3 class="text-3xl font-bold text-gray-900">{{ period.displayName || period.name }}</h3>
+                                <div class="flex items-center gap-3">
+                                    <!-- Date Badge -->
+                                    <div
+                                        class="flex items-center gap-3 px-4 py-1.5 bg-blue-50 border border-blue-100 rounded-full text-sm font-bold text-blue-700">
+                                        <span class="material-icons-outlined text-lg">calendar_today</span>
+                                        {{ period.startDate }} - {{ period.endDate }}
+                                    </div>
                                 </div>
                             </div>
 
@@ -1110,13 +1113,7 @@
                                 </div>
                             </div>
 
-                            <!-- Product Groups Empty State -->
-                            <div *ngIf="period.groupItems.length === 0" class="mb-10 space-y-4">
-                                <h4 class="text-lg font-semibold text-gray-800">Product Groups</h4>
-                                <div class="text-center py-8 text-gray-500 bg-gray-50 rounded-lg">
-                                    <span class="text-sm">No product groups applied</span>
-                                </div>
-                            </div>
+
 
                             <!-- Individual Products Section -->
                             <div *ngIf="period.individualItems.length > 0" class="mb-10 space-y-4">
@@ -1185,18 +1182,10 @@
                                 </div>
                             </div>
 
-                            <!-- Individual Products Empty State -->
-                            <div *ngIf="period.individualItems.length === 0" class="mb-10 space-y-4">
-                                <h4 class="text-lg font-semibold text-gray-800">Individual Products</h4>
-                                <div class="text-center py-8 text-gray-500 bg-gray-50 rounded-lg">
-                                    <span class="text-sm">No individual products applied</span>
-                                </div>
-                            </div>
-
+                            <!-- No Discount Applied Message -->
                             <div *ngIf="period.individualItems.length === 0 && period.groupItems.length === 0"
-                                class="text-center py-8 bg-gray-50 border border-dashed border-gray-300 rounded-xl text-gray-400 italic text-sm">
-                                <span class="material-icons-outlined block text-3xl mb-1">sentiment_dissatisfied</span>
-                                No products matched the date range for this period.
+                                class="text-center py-4 text-gray-400 italic text-sm">
+                                No discount applied
                             </div>
                         </div>
 

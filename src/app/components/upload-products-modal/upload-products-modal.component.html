@@ -1,78 +1,253 @@
-<div *ngIf="isOpen" class="fixed inset-0 z-[110] flex justify-end bg-transparent">
+<div *ngIf="isOpen" class="fixed inset-0 z-[110] flex justify-end bg-black/40 backdrop-blur-sm">
     <div
-        class="bg-white rounded-l-2xl shadow-2xl w-full max-w-4xl h-full flex flex-col overflow-hidden relative animate-slide-in-right">
+        class="bg-white rounded-l-2xl shadow-2xl w-full max-w-5xl h-full flex flex-col overflow-hidden relative animate-slide-in-right">
         <!-- Header -->
-        <div class="px-6 py-2 flex justify-between items-center bg-white border-b border-gray-100">
-            <h2 class="text-xl font-bold text-gray-900">Upload Products</h2>
+        <div class="px-6 py-4 flex justify-between items-center bg-white border-b border-gray-100 shrink-0">
+            <div class="flex items-center gap-4">
+                <h2 class="text-2xl font-extrabold text-[#111827]">Upload Products</h2>
+                <div *ngIf="selectedPeriodName"
+                    class="flex items-center gap-2 px-3 py-1 bg-blue-50 border border-blue-100 rounded-full">
+                    <span class="material-icons text-[14px] text-blue-500">event_note</span>
+                    <span class="text-[11px] font-black text-blue-600 uppercase tracking-wider">
+                        {{ selectedPeriodName }} 
+                        <span *ngIf="selectedStartDate || selectedEndDate" class="ml-1 opacity-50 px-2 py-0.5 bg-white rounded-md font-bold text-[#1e293b]">
+                            {{ formatDate(selectedStartDate) }} - {{ formatDate(selectedEndDate) }}
+                        </span>
+                    </span>
+                </div>
+            </div>
             <button (click)="onClose()"
-                class="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100 transition-colors">
-                <span class="material-icons-outlined">close</span>
+                class="text-gray-400 hover:text-gray-600 p-1.5 rounded-full hover:bg-gray-100 transition-colors">
+                <span class="material-icons opacity-70">close</span>
             </button>
         </div>
 
-        <div class="px-4 pt-4 pb-8 space-y-6">
-            <!-- Hidden File Input -->
-            <input type="file" #fileInput (change)="onFileSelected($event)" accept=".csv" class="hidden">
+        <!-- Main Content Area - Scroll Removed to fix double scroll -->
+        <div class="px-6 py-4 space-y-4 flex-1 flex flex-col min-h-0 bg-[#f8fafc] overflow-hidden">
 
-            <!-- Main Card -->
-            <div class="bg-blue-50/30 border border-gray-200 rounded-2xl p-6 shadow-sm">
-                <!-- Template Section -->
-                <div class="flex justify-between items-start mb-8">
-                    <div class="flex-1 pr-12">
-                        <h3 class="text-sm font-bold text-gray-900 mb-2">Download Standard Template</h3>
-                        <p class="text-xs text-gray-500 leading-relaxed font-medium">
-                            To ensure your data is imported correctly, please use our standard CSV template. Fill in
-                            your data without modifying the header row.
-                        </p>
-                    </div>
-                    <button
-                        class="flex items-center gap-2 px-5 py-2.5 bg-blue-200 text-slate-700 rounded-full text-xs font-bold text-blue-600 hover:bg-blue-300 transition-all shadow-sm whitespace-nowrap active:scale-95">
-                        <span class="material-icons-outlined text-sm">download</span>
-                        Download CSV
-                    </button>
-                </div>
+            <!-- STEP 1: UPLOAD -->
+            <ng-container *ngIf="currentStep === 'upload'">
+                <div class="flex-1 overflow-y-auto pr-2 custom-scrollbar">
+                    <!-- Hidden File Input -->
+                    <input type="file" #fileInput (change)="onFileSelected($event)" accept=".csv" class="hidden">
 
-                <!-- White background container for the dropzone -->
-                <div class="bg-white rounded-2xl p-4 shadow-sm">
-                    <!-- Dotted Dropzone Container -->
-                    <div class="border-2 border-gray-200 border-dashed rounded-xl p-12 flex flex-col items-center justify-center cursor-pointer hover:border-gray-400 transition-all group bg-transparent"
-                        [ngClass]="{
-                            'border-blue-400 bg-blue-50/50': isDragging && !selectedFile,
-                            'border-gray-200': !isDragging || selectedFile
-                        }" (click)="!selectedFile ? fileInput.click() : null"
-                        (dragover)="!selectedFile ? onDragOver($event) : $event.preventDefault()"
-                        (dragleave)="!selectedFile ? onDragLeave($event) : null"
-                        (drop)="!selectedFile ? onDrop($event) : $event.preventDefault()">
+                    <!-- Main Card -->
+                    <div class="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
+                        <!-- Template Section -->
+                        <div class="flex justify-between items-start mb-10">
+                            <div class="flex-1 pr-12">
+                                <h3 class="text-base font-bold text-gray-900 mb-2">Download Standard Template</h3>
+                                <p class="text-sm text-gray-500 leading-relaxed font-medium">
+                                    To ensure your data is imported correctly, please use our standard CSV template.
+                                    Fill in
+                                    your data without modifying the header row.
+                                </p>
+                            </div>
+                            <button (click)="downloadTemplate()"
+                                class="flex items-center gap-2 px-6 py-3 bg-blue-50 text-blue-600 rounded-full text-xs font-bold hover:bg-blue-100 transition-all shadow-sm whitespace-nowrap border border-blue-100">
+                                <span class="material-icons-outlined text-base">download</span>
+                                Download CSV Template
+                            </button>
+                        </div>
 
-                        <!-- State 1: Dropzone Prompt -->
-                        <ng-container *ngIf="!selectedFile">
-                            <p class="text-sm font-medium text-gray-600">
-                                click to upload or drag and drop files
-                            </p>
-                        </ng-container>
+                        <!-- Dropzone -->
+                        <div class="bg-[#f8fafc] rounded-2xl p-5 border border-gray-100">
+                            <div class="border-2 border-gray-300 border-dashed rounded-xl p-16 flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 transition-all group bg-white"
+                                [ngClass]="{'border-blue-400 bg-blue-50/50': isDragging && !selectedFile}"
+                                (click)="!selectedFile ? fileInput.click() : null"
+                                (dragover)="!selectedFile ? onDragOver($event) : $event.preventDefault()"
+                                (dragleave)="!selectedFile ? onDragLeave($event) : null"
+                                (drop)="!selectedFile ? onDrop($event) : $event.preventDefault()">
 
-                        <!-- State 2: Uploading Process -->
-                        <div *ngIf="selectedFile" class="w-full max-w-md flex items-center gap-4"
-                            (click)="$event.stopPropagation()">
-                            <!-- Left: Stacked Name and Bar -->
-                            <div class="flex-1 flex flex-col gap-2">
-                                <span class="text-xs font-bold text-gray-700 truncate">{{ selectedFile.name }}</span>
-                                <!-- Progress Bar Shell -->
-                                <div class="w-full h-1 bg-gray-100 rounded-full overflow-hidden">
-                                    <div class="h-full bg-blue-600 transition-all duration-300 ease-out"
-                                        [style.width.%]="uploadProgress">
+                                <ng-container *ngIf="!selectedFile">
+                                    <div
+                                        class="bg-blue-50 p-4 rounded-full mb-4 group-hover:bg-blue-100 transition-colors">
+                                        <span class="material-icons text-blue-500 text-3xl">cloud_upload</span>
+                                    </div>
+                                    <p class="text-sm font-bold text-gray-600">Click to upload or drag and drop files
+                                    </p>
+                                    <p class="text-xs text-gray-400 mt-1 font-medium italic">Supports CSV format only
+                                    </p>
+                                </ng-container>
+
+                                <div *ngIf="selectedFile" class="w-full max-w-md flex flex-col gap-6"
+                                    (click)="$event.stopPropagation()">
+                                    <div class="flex items-center gap-4">
+                                        <div class="flex-1 flex flex-col gap-3">
+                                            <div class="flex justify-between items-center">
+                                                <span class="text-sm font-bold text-[#1e293b] truncate">{{
+                                                    selectedFile.name }}</span>
+                                                <span class="text-xs font-bold text-blue-600">{{ uploadProgress
+                                                    }}%</span>
+                                            </div>
+                                            <div class="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                                                <div class="h-full bg-blue-600 transition-all duration-300 shadow-[0_0_10px_rgba(37,99,235,0.4)]"
+                                                    [style.width.%]="uploadProgress"></div>
+                                            </div>
+                                        </div>
+                                        <button (click)="cancelUpload(); $event.stopPropagation()"
+                                            class="w-6 h-6 rounded-full border-2 border-gray-200 flex items-center justify-center hover:bg-red-50 hover:text-red-500 transition-all">
+                                            <span class="material-icons text-[14px] font-bold">close</span>
+                                        </button>
+                                    </div>
+                                    <div *ngIf="uploadProgress === 100"
+                                        class="flex justify-center mt-2 animate-fade-in">
+                                        <button (click)="nextStep()"
+                                            class="px-10 py-3 bg-blue-600 text-white rounded-full text-sm font-bold hover:bg-blue-700 shadow-lg transition-all active:scale-95 flex items-center gap-2">
+                                            Continue to Preview
+                                            <span class="material-icons text-sm">arrow_forward</span>
+                                        </button>
                                     </div>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            </ng-container>
 
-                            <!-- Right: Close Button with Black Border -->
-                            <button (click)="cancelUpload(); $event.stopPropagation()"
-                                class="w-4 h-4 rounded-full border border-black flex items-center justify-center hover:bg-gray-50 transition-all shrink-0">
-                                <span class="material-icons text-[14px] text-black font-bold">close</span>
+            <!-- STEP 2: PREVIEW -->
+            <ng-container *ngIf="currentStep === 'preview'">
+                <!-- Fixed Preview Container with inner scroll only -->
+                <div class="bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col flex-1 overflow-hidden">
+
+                    <!-- Inner Header -->
+                    <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-white shrink-0">
+                        <div>
+                            <h3 class="text-lg font-bold text-[#111827]">Preview Filtered Products</h3>
+
+                        </div>
+                    </div>
+
+                    <!-- Scrollable Table Body -->
+                    <div
+                        class="flex-1 overflow-y-auto overflow-x-hidden bg-white custom-scrollbar border-b border-gray-50">
+                        <table class="w-full text-left border-collapse table-fixed font-sans">
+                            <thead class="sticky top-0 bg-[#f9fafb] z-10 shadow-sm">
+                                <tr>
+                                    <th
+                                        class="w-[75%] px-8 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-gray-200">
+                                        PRODUCT NAME</th>
+                                    <th
+                                        class="w-[25%] px-8 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-widest border-b border-gray-200 text-right">
+                                        DISCOUNT %</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr *ngFor="let row of paginatedData"
+                                    class="hover:bg-blue-50/20 transition-colors border-b border-gray-50">
+                                    <td class="px-8 py-1.5 text-xs font-normal text-slate-600 leading-relaxed truncate">
+                                        {{ row['ProductName'] }}</td>
+                                    <td class="px-8 py-1.5 text-xs font-bold text-slate-700 text-right">{{ row['Discount
+                                        %'] }}</td>
+                                </tr>
+                                <tr *ngIf="filteredCsvData.length === 0">
+                                    <td colspan="2" class="px-6 py-24 text-center">
+                                        <div class="flex flex-col items-center gap-2">
+                                            <span class="material-icons text-gray-200 text-6xl">file_present</span>
+                                            <p class="text-sm font-bold text-gray-400">No products with discounts found.
+                                            </p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Improved Pagination Footer with Page Size -->
+                    <div class="px-6 py-3 flex justify-between items-center bg-white shrink-0">
+                        <div class="flex items-center gap-6">
+                            <span class="text-sm font-bold text-gray-500">
+                                Total: <span class="text-blue-600">{{ filteredCsvData.length }}</span> products
+                            </span>
+
+                            <!-- Page Size Selection moved here -->
+                            <div class="flex items-center gap-2 py-1 px-3 bg-gray-50 rounded-lg border border-gray-100">
+                                <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">SHOW</span>
+                                <select (change)="onPageSizeChange($event)"
+                                    class="bg-transparent text-xs font-bold text-gray-700 outline-none cursor-pointer">
+                                    <option *ngFor="let opt of pageSizeOptions" [value]="opt"
+                                        [selected]="opt === pageSize">{{ opt }}</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-3">
+                            <button (click)="onPageChange(currentPage - 1)" [disabled]="currentPage === 1"
+                                class="w-9 h-9 flex items-center justify-center rounded-xl border border-gray-200 hover:bg-gray-50 disabled:opacity-20 transition-all text-gray-600 shadow-sm">
+                                <span class="material-icons text-xl">chevron_left</span>
+                            </button>
+
+                            <div class="flex items-center gap-2">
+                                <span
+                                    class="text-sm font-bold text-blue-600 bg-blue-50 px-3.5 py-1.5 rounded-lg border border-blue-100">{{
+                                    currentPage }}</span>
+                                <span class="text-xs font-bold text-gray-400 italic">of</span>
+                                <span class="text-sm font-bold text-gray-700">{{ totalPages || 1 }}</span>
+                            </div>
+
+                            <button (click)="onPageChange(currentPage + 1)"
+                                [disabled]="currentPage === totalPages || totalPages === 0"
+                                class="w-9 h-9 flex items-center justify-center rounded-xl border border-gray-200 hover:bg-gray-50 disabled:opacity-20 transition-all text-gray-600 shadow-sm">
+                                <span class="material-icons text-xl">chevron_right</span>
                             </button>
                         </div>
                     </div>
                 </div>
+
+                <!-- Global Navigation Footer -->
+                <div class="flex justify-between items-center mt-auto pt-6 shrink-0">
+                    <button (click)="prevStep()"
+                        class="px-8 py-3.5 bg-gray-100 text-gray-600 rounded-full text-xs font-bold hover:bg-gray-200 transition-all">
+                        Back to Upload
+                    </button>
+                    <div class="flex gap-4">
+                        <button (click)="onClose()"
+                            class="px-10 py-3.5 bg-white text-gray-500 rounded-full text-xs font-bold hover:text-gray-700 transition-all border border-gray-200">
+                            Cancel
+                        </button>
+                        <button (click)="onFinish()"
+                            class="px-14 py-3.5 bg-blue-600 text-white rounded-full text-xs font-bold hover:bg-blue-700 shadow-lg shadow-blue-100 transition-all active:scale-95">
+                            Finish
+                        </button>
+                    </div>
+                </div>
+            </ng-container>
+
+        </div>
+    </div>
+
+    <!-- DOWNLOAD CONFIRMATION POPUP -->
+    <div *ngIf="showDownloadPopup"
+        class="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-[2px] p-4">
+        <div
+            class="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 animate-scale-in text-center border border-gray-100 flex flex-col items-center">
+            <!-- Icon -->
+            <div class="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mb-6 text-blue-600">
+                <span class="material-icons text-4xl">info_outline</span>
+            </div>
+
+            <!-- Title -->
+            <h3 class="text-xl font-bold text-slate-800 mb-3">Template Guidelines</h3>
+
+            <!-- Message -->
+            <p class="text-sm text-slate-500 leading-relaxed font-medium mb-6">
+                Please <span class="text-red-500 font-bold italic">do not edit</span> or modify any columns in the CSV
+                template except the
+                <span
+                    class="bg-yellow-100 px-2 py-0.5 rounded text-slate-800 font-black border border-yellow-200">Discount
+                    %</span> field.
+            </p>
+
+            <!-- Actions -->
+            <div class="flex gap-3 w-full">
+                <button (click)="cancelDownloadPopup()"
+                    class="flex-1 py-3 px-6 bg-slate-50 text-slate-500 rounded-2xl text-xs font-bold hover:bg-slate-100 transition-all border border-slate-100">
+                    Cancel
+                </button>
+                <button (click)="confirmDownload()"
+                    class="flex-1 py-3 px-6 bg-blue-600 text-white rounded-2xl text-xs font-bold hover:bg-blue-700 shadow-lg shadow-blue-100 transition-all active:scale-95">
+                    Continue
+                </button>
             </div>
         </div>
     </div>

@@ -81,12 +81,12 @@ export class QuoteDetailsComponent implements OnInit {
     isGCP: boolean = false;
 
     // Dates
-    startDate: string = new Date().toISOString().split('T')[0]; // Default to current date
+    startDate: string = new Date().toLocaleDateString('en-CA'); // en-CA gives YYYY-MM-DD format logically
     expirationDate: string = ''; // Initially empty
     previewCommitments: any[] = [];
     previewProductsWithoutDiscounts: any[] = []; // Products without discounts or incentives
     todayDate: Date = new Date(); // Keep for explicit today reference if needed
-    minDate: string = new Date().toISOString().split('T')[0];
+    minDate: string = new Date().toLocaleDateString('en-CA');
 
     // Term Start Date (Separate from Quote Start Date)
     termStartInput: string = '';
@@ -927,6 +927,11 @@ export class QuoteDetailsComponent implements OnInit {
                             this.productName = 'No Products';
                             this.productId = null;
                             this.bundleQuoteLineId = null;
+                            
+                            // Redirect to opportunities page if no products found
+                            this.toastService.show('No products found in this quote. Redirecting to opportunities...', 'info');
+                            this.router.navigate(['/']);
+                            return;
                         }
 
                         if (quote.Pricebook2Id) {
@@ -959,6 +964,8 @@ export class QuoteDetailsComponent implements OnInit {
             });
         } else {
             this.updateBaselineStates();
+            this.toastService.show('Invalid or missing quote ID. Redirecting...', 'error');
+            this.router.navigate(['/']);
             this.isLoading = false; // No valid quote ID, stop loading
         }
 
@@ -1141,6 +1148,7 @@ export class QuoteDetailsComponent implements OnInit {
         // 1. PRIORITIZE DISCOUNT PERIODS IF THEY EXIST (from Discounts Tab)
         if (this.discountsIncentives && this.discountsIncentives.discountPeriods && this.discountsIncentives.discountPeriods.length > 0) {
             console.log('📦 Building preview using discount periods:', this.discountsIncentives.discountPeriods);
+            const discountPreviews: any[] = [];
 
             this.discountsIncentives.discountPeriods.forEach((period: any, index: number) => {
                 // Parse dates robustly
@@ -1168,6 +1176,11 @@ export class QuoteDetailsComponent implements OnInit {
 
                         this.previewData.QuoteLineItems.records.forEach((item: any) => {
                             if (item.Id && matchedItemIds.has(item.Id)) return;
+                            
+                            // Exclude bundle product from preview tables
+                            const isBundle = item.Product2Id === this.productId || (item.Product2?.Id === this.productId);
+                            if (isBundle) return;
+
                             const itemStartStr = item.StartDate;
                             const itemDiscount = item.Discount ? parseFloat(item.Discount) : 0;
                             const itemIncentive = item.Incentive__c ? parseFloat(item.Incentive__c) : 0;
@@ -1210,10 +1223,12 @@ export class QuoteDetailsComponent implements OnInit {
                         });
                     }
 
-                    let periodName = `period ${index + 1}`;
+                    let periodName = `Period ${index + 1}`;
+                    let displayName = `Discount Period ${index + 1}`;
 
-                    previews.push({
+                    discountPreviews.push({
                         name: periodName,
+                        displayName: displayName,
                         startDate: this.formatDateForDisplay(startDateStr),
                         endDate: endDateStr ? this.formatDateForDisplay(endDateStr) : 'End of Term',
                         months: period.months || this.commitmentPeriods[index]?.months,
@@ -1224,7 +1239,9 @@ export class QuoteDetailsComponent implements OnInit {
                 }
             });
 
-            if (previews.length > 0) return previews;
+            // Only return if we actually found items for these periods, otherwise fallback to commitment periods
+            const totalItems = discountPreviews.reduce((acc, p) => acc + p.individualItems.length + p.groupItems.length, 0);
+            if (totalItems > 0) return discountPreviews;
         }
 
         // 2. FALLBACK TO COMMITMENT PERIODS (Timeline from Details Tab)
@@ -1249,6 +1266,11 @@ export class QuoteDetailsComponent implements OnInit {
                 if (this.previewData?.QuoteLineItems?.records) {
                     this.previewData.QuoteLineItems.records.forEach((item: any) => {
                         if (item.Id && matchedItemIds.has(item.Id)) return;
+
+                        // Exclude bundle product from preview tables
+                        const isBundle = item.Product2Id === this.productId || (item.Product2?.Id === this.productId);
+                        if (isBundle) return;
+
                         const itemStartStr = item.StartDate;
                         if (itemStartStr) {
                             const itemStart = new Date(itemStartStr).getTime();
@@ -1267,7 +1289,8 @@ export class QuoteDetailsComponent implements OnInit {
                 }
 
                 previews.push({
-                    name: `period ${index + 1}`,
+                    name: `Period ${index + 1}`,
+                    displayName: index < 2 ? `Discount Period ${index + 1}` : `Period ${index + 1}`,
                     startDate: this.formatDateForDisplay(currentStartDate),
                     endDate: this.formatDateForDisplay(endDate),
                     months: months,
@@ -1585,11 +1608,20 @@ export class QuoteDetailsComponent implements OnInit {
     /** The real end of the contract: startDate + totalTerms months.
      *  Used to constrain discount/incentive date pickers. */
     get contractEndDate(): string {
-        if (!this.startDate || !this.totalTerms) return '';
-        const parts = this.startDate.split('-');
-        const end = new Date(Number(parts[0]), Number(parts[1]) - 1 + this.totalTerms, Number(parts[2]));
+        // For Looker/RCA, prefer the explicit term end date defined in the header
+        if (this.isLookerSubscription && this.termEndDate) {
+            return this.termEndDate;
+        }
+
+        const startToUse = (this.isLookerSubscription && this.termStartInput) ? this.termStartInput : this.startDate;
+        if (!startToUse || !this.totalTerms) return '';
+
+        const parts = startToUse.split('-');
+        // Use Math.round to handle potential floating point precision issues in totalTerms
+        const roundedTerms = Math.round(this.totalTerms);
+        const end = new Date(Number(parts[0]), Number(parts[1]) - 1 + roundedTerms, Number(parts[2]));
         end.setDate(end.getDate() - 1); // last day of the term
-        return end.toISOString().split('T')[0];
+        return this.toIsoDateString(end);
     }
 
 
@@ -1914,6 +1946,15 @@ export class QuoteDetailsComponent implements OnInit {
 
     addPeriod() {
         if (this.commitmentPeriods.length < 5) {
+            // Check if any existing period is missing months or amount
+            const lastPeriodIndex = this.commitmentPeriods.length - 1;
+            const lastPeriod = this.commitmentPeriods[lastPeriodIndex];
+
+            if (lastPeriod && (!lastPeriod.months || !lastPeriod.amount)) {
+                this.toastService.show(`Please fill the Commit Period ${this.commitmentPeriods.length} details first`, 'warning');
+                return;
+            }
+
             this.commitmentPeriods.push({ months: null, amount: null, isCollapsed: false });
             // Only update if we have a start date
             if (this.startDate) {
@@ -2255,7 +2296,7 @@ export class QuoteDetailsComponent implements OnInit {
                 const records: any[] = [];
 
                 // 1. Quote Update
-                const startToUse = (this.isLookerSubscription && this.termStartInput) ? this.termStartInput : (this.startDate || new Date().toISOString().split('T')[0]);
+                const startToUse = (this.isLookerSubscription && this.termStartInput) ? this.termStartInput : (this.startDate || this.toIsoDateString(new Date()));
                 const quoteRec: any = {
                     "attributes": { "type": "Quote", "method": "PATCH", "id": targetQuoteId },
                     "StartDate": startToUse

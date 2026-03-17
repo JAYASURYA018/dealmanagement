@@ -231,7 +231,7 @@
             <div *ngIf="activeTab === 'discounts'" class="space-y-5">
                 <!-- Period Selection -->
                 <div class="relative">
-                    <div (click)="periodDropdownOpen = !periodDropdownOpen"
+                    <div (click)="closeAllDropdowns(); periodDropdownOpen = !periodDropdownOpen; $event.stopPropagation()"
                         class="bg-white border border-gray-400 rounded-lg p-2 h-[52px] flex justify-between items-center cursor-pointer hover:border-gray-300 transition-colors">
                         <div class="flex flex-col justify-center">
                             <label class="text-[11px] text-gray-500 mb-0.5 leading-none">Discount period</label>
@@ -255,7 +255,7 @@
 
                 <!-- Granularity -->
                 <div class="relative">
-                    <div (click)="granularityOpen = !granularityOpen"
+                    <div (click)="closeAllDropdowns(); granularityOpen = !granularityOpen; $event.stopPropagation()"
                         class="bg-white border border-gray-400 rounded-lg p-2 h-[52px] flex justify-between items-center cursor-pointer hover:border-gray-300 transition-colors">
                         <div class="flex flex-col justify-center">
                             <label class="text-[11px] text-gray-500 mb-0.5 leading-none">Discount
@@ -280,7 +280,7 @@
                 <div class="grid grid-cols-2 gap-3">
                     <!-- Discount Type -->
                     <div class="relative">
-                        <div (click)="typeOpen = !typeOpen"
+                    <div (click)="closeAllDropdowns(); typeOpen = !typeOpen; $event.stopPropagation()"
                             class="bg-white border border-gray-400 rounded-lg p-2 h-[52px] flex justify-between items-center cursor-pointer hover:border-gray-300 transition-colors">
                             <div class="flex flex-col justify-center overflow-hidden">
                                 <label class="text-[11px] text-gray-500 mb-0.5 leading-none">Discount
@@ -303,7 +303,7 @@
 
                     <!-- Price Reference -->
                     <div class="relative">
-                        <div (click)="priceRefOpen = !priceRefOpen"
+                        <div (click)="closeAllDropdowns(); priceRefOpen = !priceRefOpen; $event.stopPropagation()"
                             class="bg-white border border-gray-400 rounded-lg p-2 h-[52px] flex justify-between items-center cursor-pointer hover:border-gray-300 transition-colors">
                             <div class="flex flex-col justify-center overflow-hidden">
                                 <label class="text-[11px] text-gray-500 mb-0.5 leading-none">Price
@@ -366,7 +366,7 @@
             <div *ngIf="activeTab === 'incentives'" class="space-y-4">
                 <!-- Period Selection -->
                 <div class="relative">
-                    <div (click)="periodDropdownOpen = !periodDropdownOpen"
+                    <div (click)="closeAllDropdowns(); periodDropdownOpen = !periodDropdownOpen; $event.stopPropagation()"
                         class="bg-white border border-gray-400 rounded-lg p-2 h-[52px] flex justify-between items-center cursor-pointer hover:border-gray-300 transition-colors">
                         <div class="flex flex-col justify-center">
                             <label class="text-[11px] text-gray-500 mb-0.5 leading-none">Incentive
@@ -390,7 +390,7 @@
 
                 <!-- Incentive Type -->
                 <div class="relative">
-                    <div (click)="incentiveTypeOpen = !incentiveTypeOpen"
+                    <div (click)="closeAllDropdowns(); incentiveTypeOpen = !incentiveTypeOpen; $event.stopPropagation()"
                         class="bg-white border border-gray-400 rounded-lg p-2 h-[52px] flex justify-between items-center cursor-pointer hover:border-gray-300 transition-colors">
                         <div class="flex flex-col justify-center">
                             <label class="text-[11px] text-gray-500 mb-0.5 leading-none">Incentives type</label>
@@ -528,7 +528,7 @@
 
                 <!-- Region Dropdown -->
                 <div class="relative">
-                    <button (click)="regionDropdownOpen = !regionDropdownOpen; billingDropdownOpen = false"
+                    <button (click)="closeAllDropdowns(); regionDropdownOpen = !regionDropdownOpen; $event.stopPropagation()"
                         class="flex items-center justify-between min-w-[140px] px-3 py-1.5 bg-white border rounded-md shadow-sm hover:bg-gray-50 min-h-[36px] text-xs font-bold transition-colors"
                         [ngClass]="selectedRegion ? 'border-blue-500 text-blue-700' : 'border-gray-300 text-gray-700'">
                         <span class="truncate">{{ selectedRegion ? selectedRegion.label : 'Region' }}</span>
@@ -537,7 +537,7 @@
                         <span *ngIf="!selectedRegion"
                             class="material-icons-outlined text-gray-400 text-[18px]">arrow_drop_down</span>
                     </button>
-                    <div *ngIf="regionDropdownOpen"
+                    <div *ngIf="regionDropdownOpen" (click)="$event.stopPropagation()"
                         class="absolute mt-1 w-52 bg-white border border-gray-300 rounded-md shadow-lg z-50">
                         <div class="p-2 border-b border-gray-100">
                             <div class="relative">
@@ -568,7 +568,7 @@
 
                 <!-- Billing Frequency Dropdown -->
                 <div class="relative">
-                    <button (click)="billingDropdownOpen = !billingDropdownOpen; regionDropdownOpen = false"
+                    <button (click)="closeAllDropdowns(); billingDropdownOpen = !billingDropdownOpen; $event.stopPropagation()"
                         class="flex items-center justify-between min-w-[160px] px-3 py-1.5 bg-white border rounded-md shadow-sm hover:bg-gray-50 min-h-[36px] text-xs font-bold transition-colors"
                         [ngClass]="selectedBillingFreq ? 'border-blue-500 text-blue-700' : 'border-gray-300 text-gray-700'">
                         <span class="truncate">{{ selectedBillingFreq ? selectedBillingFreq.label : 'Billing
@@ -579,7 +579,7 @@
                         <span *ngIf="!selectedBillingFreq"
                             class="material-icons-outlined text-gray-400 text-[18px]">arrow_drop_down</span>
                     </button>
-                    <div *ngIf="billingDropdownOpen"
+                    <div *ngIf="billingDropdownOpen" (click)="$event.stopPropagation()"
                         class="absolute mt-1 w-56 bg-white border border-gray-300 rounded-md shadow-lg z-50">
                         <div class="p-2 border-b border-gray-100">
                             <div class="relative">
@@ -835,5 +835,12 @@
 </div>
 
 <!-- Upload Products Modal at root level to avoid clipping -->
-<app-upload-products-modal [isOpen]="showUploadModal" (close)="closeUploadModal()">
+<app-upload-products-modal 
+    [isOpen]="showUploadModal" 
+    [selectedPeriodName]="activeDiscountPeriod?.name || ''"
+    [selectedStartDate]="activeDiscountPeriod?.startDate || ''"
+    [selectedEndDate]="activeDiscountPeriod?.endDate || ''"
+    [remainingQuota]="remainingProductsQuota"
+    (close)="closeUploadModal()"
+    (finish)="handleBulkUpload($event)">
 </app-upload-products-modal>

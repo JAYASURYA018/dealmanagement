@@ -151,7 +151,7 @@ export class RcaApiService {
      * New method to fetch CPQ products with specific classification and pricebook.
      * Used for fetching Pricebook Entry IDs and Sort Order.
      */
-    getCpqProducts(payload: any): Observable<any> {
+    getCpqProducts(payload: any, pageSize?: number, offset?: number): Observable<any> {
         const method = 'RcaApiService.getCpqProducts';
 
         return this.contextService.context$.pipe(
@@ -165,8 +165,12 @@ export class RcaApiService {
                     throw new Error('No access token available');
                 }
 
-                // Following the user specified version v61.0 and endpoint
-                const url = `${baseUrl}/services/data/v61.0/connect/cpq/products`;
+                // Reverting to v61.0 and 'limit' as requested by user
+                let url = `${baseUrl}/services/data/v61.0/connect/cpq/products`;
+
+                if (pageSize !== undefined && offset !== undefined) {
+                    url += `?limit=${pageSize}&offset=${offset}`;
+                }
 
                 console.log(`[API Request] ${method}`, { url, payload });
 
@@ -407,12 +411,13 @@ export class RcaApiService {
         return this.contextService.context$.pipe(
             take(1),
             switchMap(context => {
-                const providedToken = '00DDz000001qvYA!ARQAQE2ut._CySv0HuqzA58fQg2KQLcac4Eomg4keHeHeHi6SaaLi8m3e5R6_XFyXbm217O5tEzWvSRR82lg7htONLvNqSzO5g';
+                const providedToken = '00DDz000001qvYA!ARQAQE2ut._CySv0HuqzA58fQg2KQLcac4Eomg4keHeHi6SaaLi8m3e5R6_XFyXbm217O5tEzWvSRR82lg7htONLvNqSzO5g';
                 const token = context?.accessToken || providedToken;
                 const baseUrl = context?.apiBaseUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com';
 
-                // Use the first categoryId as productClassificationId query param if available
                 const classificationId = categoryIds && categoryIds.length > 0 ? categoryIds[0] : null;
+
+                // Adjust URL based on classificationId presence as requested
                 let url = `${baseUrl}/services/data/v65.0/connect/pcm/products?include=/products`;
                 if (classificationId) {
                     url += `&productClassificationId=${classificationId}`;
@@ -422,7 +427,7 @@ export class RcaApiService {
                     throw new Error('No access token available');
                 }
 
-                // Construct body following the user's requested structure
+                // Construct body following the user's requested structure exactly
                 const body: any = {
                     "language": "en_US",
                     "filter": {
@@ -448,9 +453,8 @@ export class RcaApiService {
                     body.searchTerm = searchTerm;
                 }
 
-                // If not using classificationId in URL, we would use categoryIds in body
-                // but the user explicitly requested productClassificationId in the URL.
-                // We'll keep categoryIds in body only if classificationId wasn't used.
+                // If NOT using classificationId in URL, include it in body as categoryIds
+                // But as per requested PCM structure, we usually prefer it in URL for faceted search
                 if (!classificationId && categoryIds && categoryIds.length > 0) {
                     body.categoryIds = categoryIds;
                 }
