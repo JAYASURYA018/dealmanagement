@@ -923,6 +923,7 @@ export class QuoteDetailsComponent implements OnInit {
                             this.productId = lineItem.Product2Id || lineItem.Product2?.Id;
                             this.bundleQuoteLineId = lineItem.Id;
                             this.bundlePricebookEntryId = lineItem.PricebookEntryId;
+                            this.existingQuoteLineItems = quote.QuoteLineItems.records;
                         } else {
                             this.productName = 'No Products';
                             this.productId = null;
@@ -1142,111 +1143,183 @@ export class QuoteDetailsComponent implements OnInit {
         }
 
         const previews: any[] = [];
-        const quoteStartDate = this.startDate ? new Date(this.startDate) : new Date();
         const matchedItemIds = new Set<string>();
 
-        // 1. PRIORITIZE DISCOUNT PERIODS IF THEY EXIST (from Discounts Tab)
-        if (this.discountsIncentives && this.discountsIncentives.discountPeriods && this.discountsIncentives.discountPeriods.length > 0) {
-            console.log('📦 Building preview using discount periods:', this.discountsIncentives.discountPeriods);
-            const discountPreviews: any[] = [];
+        // 1. PROCESS DISCOUNT PERIODS
+        const discountPeriods = this.discountsIncentives?.discountPeriods || [];
+        discountPeriods.forEach((period: any, index: number) => {
+            const startDateStr = period.startDate;
+            const endDateStr = period.endDate;
 
-            this.discountsIncentives.discountPeriods.forEach((period: any, index: number) => {
-                // Parse dates robustly
-                const startDateStr = period.startDate || this.startDate;
-                const endDateStr = period.endDate;
+            const individualItems: any[] = [];
+            const groupItems: any[] = [];
+            const uploadedItems: any[] = [];
 
-                if (startDateStr) {
-                    const pStart = new Date(startDateStr);
-                    pStart.setHours(0, 0, 0, 0);
+            // Only try to match products if we have dates set
+            if (startDateStr) {
+                const pStart = new Date(startDateStr);
+                pStart.setHours(0, 0, 0, 0);
+                const pEnd = endDateStr ? new Date(endDateStr).setHours(23, 59, 59, 999) : null;
 
-                    let pEnd: number | null = null;
-                    if (endDateStr) {
-                        const endD = new Date(endDateStr);
-                        endD.setHours(23, 59, 59, 999);
-                        pEnd = endD.getTime();
-                    }
+                if (this.previewData?.QuoteLineItems?.records) {
+                    // Build a set of dropdown option names for group identification
+                    const groupProductNames = new Set<string>(
+                        (this.discountsIncentives?.dropdownOptions || []).map((opt: any) => opt.Name?.toLowerCase()).filter(Boolean)
+                    );
 
-                    const individualItems: any[] = [];
-                    const groupItems: any[] = [];
+                    // First pass: collect all matching items for this period
+                    const periodItems: any[] = [];
+                    this.previewData.QuoteLineItems.records.forEach((item: any) => {
+                        if (item.Id && matchedItemIds.has(item.Id)) return;
+                        const isBundle = item.Product2Id === this.productId || (item.Product2?.Id === this.productId);
+                        if (isBundle) return;
 
-                    if (this.previewData?.QuoteLineItems?.records) {
-                        const allOverallDiscounts = (this.discountsIncentives?.discountPeriods || []).flatMap(p =>
-                            p.activeDiscounts.map(d => parseFloat(d.value)).filter(v => !isNaN(v))
-                        );
+                        const itemDiscount = parseFloat(item.Discount) || 0;
+                        const itemIncentive = parseFloat(item.Incentive__c) || 0;
 
-                        this.previewData.QuoteLineItems.records.forEach((item: any) => {
-                            if (item.Id && matchedItemIds.has(item.Id)) return;
-                            
-                            // Exclude bundle product from preview tables
-                            const isBundle = item.Product2Id === this.productId || (item.Product2?.Id === this.productId);
-                            if (isBundle) return;
+                        // Discount Period should only show items with Discount > 0 and Incentive == 0
+                        if (itemDiscount === 0 || itemIncentive > 0) return;
 
-                            const itemStartStr = item.StartDate;
-                            const itemDiscount = item.Discount ? parseFloat(item.Discount) : 0;
-                            const itemIncentive = item.Incentive__c ? parseFloat(item.Incentive__c) : 0;
+                        const itemStartStr = item.StartDate;
+                        const itemEndStr = item.EndDate;
+                        if (itemStartStr) {
+                            const itemStartNorm = itemStartStr.substring(0, 10);
+                            const periodStartNorm = (startDateStr || '').substring(0, 10);
+                            const itemEndNorm = itemEndStr ? itemEndStr.substring(0, 10) : '';
+                            const periodEndNorm = endDateStr ? endDateStr.substring(0, 10) : '';
 
-                            // Only include items that have a discount or incentive or if it's a "standard" period 
-                            // But usually discount periods are specifically for discounted items
-                            if (itemDiscount === 0 && itemIncentive === 0) return;
-
-                            if (itemStartStr) {
+                            let matches = false;
+                            if (periodEndNorm && itemEndNorm) {
+                                matches = (itemStartNorm === periodStartNorm && itemEndNorm === periodEndNorm);
+                            } else {
                                 const itemStart = new Date(itemStartStr).getTime();
-                                let matches = pEnd ? (itemStart >= pStart.getTime() && itemStart <= pEnd) : (itemStart >= pStart.getTime());
-
-                                // Overlapping periods fix: check if the item's discount matches this period's configuration
-                                if (matches) {
-                                    const periodPercentages = period.activeDiscounts.map((d: any) => parseFloat(d.value)).filter((v: any) => !isNaN(v));
-                                    const hasGranularInThisPeriod = period.activeDiscounts.some((d: any) => d.title.includes('Granular'));
-
-                                    const isSpecificMatch = periodPercentages.includes(itemDiscount);
-                                    const isGranularCatch = hasGranularInThisPeriod && itemDiscount > 0 && !allOverallDiscounts.includes(itemDiscount);
-
-                                    // If we have distinct discounts, use them to filter overlapping dates
-                                    if (itemDiscount > 0 && !isSpecificMatch && !isGranularCatch) {
-                                        matches = false;
-                                    }
-                                }
-
-                                if (matches) {
-                                    if (item.Id) matchedItemIds.add(item.Id);
-                                    const productName = item.Product2?.Name;
-                                    const isGroup = this.isGroupProduct(item) ||
-                                        (productName && this.discountsIncentives?.dropdownOptions?.some((opt: any) => opt.Name === productName));
-
-                                    if (isGroup) {
-                                        groupItems.push(item);
-                                    } else {
-                                        individualItems.push(item);
-                                    }
-                                }
+                                matches = pEnd ? (itemStart >= pStart.getTime() && itemStart <= pEnd) : (itemStart >= pStart.getTime());
                             }
-                        });
-                    }
 
-                    let periodName = `Period ${index + 1}`;
-                    let displayName = `Discount Period ${index + 1}`;
+                            if (matches) {
+                                periodItems.push(item);
+                            }
+                        }
+                    });
 
-                    discountPreviews.push({
-                        name: periodName,
-                        displayName: displayName,
-                        startDate: this.formatDateForDisplay(startDateStr),
-                        endDate: endDateStr ? this.formatDateForDisplay(endDateStr) : 'End of Term',
-                        months: period.months || this.commitmentPeriods[index]?.months,
-                        amount: period.amount || this.commitmentPeriods[index]?.amount,
-                        individualItems: individualItems,
-                        groupItems: groupItems
+                    // Second pass: classify each item
+                    const bulkIds = this.discountsIncentives?.bulkUploadedProductIds || new Set<string>();
+
+                    periodItems.forEach((item: any) => {
+                        if (item.Id) matchedItemIds.add(item.Id);
+                        const productName = (item.Product2?.Name || '').toLowerCase();
+                        const productId = item.Product2Id || item.Product2?.Id;
+
+                        const isBulkUploaded = productId && bulkIds.has(productId);
+
+                        if (isBulkUploaded) {
+                            uploadedItems.push(item);
+                        } else if (groupProductNames.has(productName)) {
+                            groupItems.push(item);
+                        } else {
+                            individualItems.push(item);
+                        }
                     });
                 }
-            });
+            }
 
-            // Only return if we actually found items for these periods, otherwise fallback to commitment periods
-            const totalItems = discountPreviews.reduce((acc, p) => acc + p.individualItems.length + p.groupItems.length, 0);
-            if (totalItems > 0) return discountPreviews;
+            previews.push({
+                type: 'discount',
+                name: `Discount Period ${index + 1}`,
+                displayName: `Discount period ${index + 1}`,
+                startDate: startDateStr ? this.formatDateForDisplay(startDateStr) : '',
+                endDate: endDateStr ? this.formatDateForDisplay(endDateStr) : '',
+                months: period.months || this.commitmentPeriods[index]?.months,
+                amount: period.amount,
+                individualItems,
+                groupItems,
+                uploadedItems
+            });
+        });
+
+        // 2. PROCESS INCENTIVE PERIODS
+        const incentivePeriods = this.discountsIncentives?.incentivePeriods || [];
+        incentivePeriods.forEach((period: any, index: number) => {
+            const startDateStr = period.startDate;
+            const endDateStr = period.endDate;
+
+            const individualItems: any[] = [];
+            const groupItems: any[] = [];
+            const uploadedItems: any[] = [];
+
+            // Only try to match products if we have dates set
+            if (startDateStr) {
+                const pStart = new Date(startDateStr);
+                pStart.setHours(0, 0, 0, 0);
+                const pEnd = endDateStr ? new Date(endDateStr).setHours(23, 59, 59, 999) : null;
+
+                if (this.previewData?.QuoteLineItems?.records) {
+                    // Build a set of dropdown option names for group identification
+                    const groupProductNames = new Set<string>(
+                        (this.discountsIncentives?.dropdownOptions || []).map((opt: any) => opt.Name?.toLowerCase()).filter(Boolean)
+                    );
+
+                    this.previewData.QuoteLineItems.records.forEach((item: any) => {
+                        if (item.Id && matchedItemIds.has(item.Id)) return;
+                        const isBundle = item.Product2Id === this.productId || (item.Product2?.Id === this.productId);
+                        if (isBundle) return;
+
+                        const itemIncentive = parseFloat(item.Incentive__c) || 0;
+                        if (itemIncentive === 0) return;
+
+                        const itemStartStr = item.StartDate;
+                        const itemEndStr = item.EndDate;
+                        if (itemStartStr) {
+                            // Match by comparing both StartDate AND EndDate to the period dates
+                            const itemStartNorm = itemStartStr.substring(0, 10);
+                            const periodStartNorm = (startDateStr || '').substring(0, 10);
+                            const itemEndNorm = itemEndStr ? itemEndStr.substring(0, 10) : '';
+                            const periodEndNorm = endDateStr ? endDateStr.substring(0, 10) : '';
+
+                            let matches = false;
+                            if (periodEndNorm && itemEndNorm) {
+                                matches = (itemStartNorm === periodStartNorm && itemEndNorm === periodEndNorm);
+                            } else {
+                                const itemStart = new Date(itemStartStr).getTime();
+                                matches = pEnd ? (itemStart >= pStart.getTime() && itemStart <= pEnd) : (itemStart >= pStart.getTime());
+                            }
+
+                            if (matches) {
+                                if (item.Id) matchedItemIds.add(item.Id);
+                                const productName = (item.Product2?.Name || '').toLowerCase();
+                                const isGroup = groupProductNames.has(productName);
+                                
+                                if (isGroup) groupItems.push(item);
+                                else individualItems.push(item);
+                            }
+                        }
+                    });
+                }
+            }
+
+            previews.push({
+                type: 'incentive',
+                name: 'Incentive',
+                displayName: 'Incentive',
+                startDate: startDateStr ? this.formatDateForDisplay(startDateStr) : '',
+                endDate: endDateStr ? this.formatDateForDisplay(endDateStr) : '',
+                months: period.months,
+                amount: period.amount,
+                individualItems,
+                groupItems,
+                uploadedItems
+            });
+        });
+
+        // If we have UI periods defined (discount or incentive), always return them
+        // even if they have no products - this prevents duplicate entries from the fallback
+        if (discountPeriods.length > 0 || incentivePeriods.length > 0) {
+            return previews;
         }
 
-        // 2. FALLBACK TO COMMITMENT PERIODS (Timeline from Details Tab)
+        // 3. FALLBACK TO COMMITMENT PERIODS (Timeline from Details Tab)
         console.log('📦 Building preview using commitment periods:', this.commitmentPeriods);
-        let currentStartDate = new Date(quoteStartDate);
+        let currentStartDate = new Date(this.startDate || new Date());
 
         this.commitmentPeriods.forEach((period, index) => {
             const months = parseInt(period.months) || 0;
@@ -1262,6 +1335,7 @@ export class QuoteDetailsComponent implements OnInit {
 
                 const individualItems: any[] = [];
                 const groupItems: any[] = [];
+                const uploadedItems: any[] = [];
 
                 if (this.previewData?.QuoteLineItems?.records) {
                     this.previewData.QuoteLineItems.records.forEach((item: any) => {
@@ -1272,16 +1346,27 @@ export class QuoteDetailsComponent implements OnInit {
                         if (isBundle) return;
 
                         const itemStartStr = item.StartDate;
+                        const itemDiscount = item.Discount ? parseFloat(item.Discount) : 0;
+                        const itemIncentive = item.Incentive__c ? parseFloat(item.Incentive__c) : 0;
+
+                        // Only include items with discount and no incentive in these periods
+                        if (itemDiscount === 0 || itemIncentive > 0) return;
+
                         if (itemStartStr) {
                             const itemStart = new Date(itemStartStr).getTime();
                             if (itemStart >= pStart && itemStart <= pEnd) {
                                 if (item.Id) matchedItemIds.add(item.Id);
                                 const isGroup = this.isGroupProduct(item);
 
+                                const productId = item.Product2Id || (item.Product2 && item.Product2.Id);
+                                const isSelectedInUI = this.discountsIncentives?.persistentSelectedIndividuals.has(productId);
+
                                 if (isGroup) {
                                     groupItems.push(item);
-                                } else {
+                                } else if (isSelectedInUI) {
                                     individualItems.push(item);
+                                } else {
+                                    uploadedItems.push(item);
                                 }
                             }
                         }
@@ -1290,13 +1375,14 @@ export class QuoteDetailsComponent implements OnInit {
 
                 previews.push({
                     name: `Period ${index + 1}`,
-                    displayName: index < 2 ? `Discount Period ${index + 1}` : `Period ${index + 1}`,
+                    displayName: `Discount period ${index + 1}`,
                     startDate: this.formatDateForDisplay(currentStartDate),
                     endDate: this.formatDateForDisplay(endDate),
                     months: months,
                     amount: amount,
                     individualItems: individualItems,
-                    groupItems: groupItems
+                    groupItems: groupItems,
+                    uploadedItems: uploadedItems
                 });
 
                 currentStartDate = new Date(endDate);
@@ -1632,6 +1718,45 @@ export class QuoteDetailsComponent implements OnInit {
         return this.commitmentPeriods.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
     }
 
+    get commitmentDetailsOnly(): any[] {
+        const details: any[] = [];
+        const quoteStartDate = this.startDate || new Date().toISOString().split('T')[0];
+
+        // Parse start date using UTC to avoid timezone-related off-by-one errors
+        const parts = quoteStartDate.split('-');
+        let currentStartDate = new Date(Date.UTC(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])));
+
+        this.commitmentPeriods.forEach((period, index) => {
+            const months = parseInt(period.months) || 0;
+            const amount = Number(period.amount) || 0;
+
+            if (months > 0) {
+                const endDate = new Date(currentStartDate);
+                endDate.setUTCMonth(endDate.getUTCMonth() + months);
+                endDate.setUTCDate(endDate.getUTCDate() - 1);
+
+                details.push({
+                    name: `Period ${index + 1}`,
+                    startDate: this.formatUTCDateForDisplay(currentStartDate),
+                    endDate: this.formatUTCDateForDisplay(endDate),
+                    months: months,
+                    amount: amount
+                });
+
+                // Prepare next start date (day after end date)
+                currentStartDate = new Date(endDate);
+                currentStartDate.setUTCDate(currentStartDate.getUTCDate() + 1);
+            }
+        });
+        return details;
+    }
+
+    /** Formats a UTC Date object as M/D/YYYY without timezone shifting */
+    formatUTCDateForDisplay(date: Date): string {
+        if (!date) return '-';
+        return `${date.getUTCMonth() + 1}/${date.getUTCDate()}/${date.getUTCFullYear()}`;
+    }
+
     get previewIncentives(): any[] {
         if (!this.previewData?.QuoteLineItems?.records) return [];
         return this.previewData.QuoteLineItems.records
@@ -1842,6 +1967,7 @@ export class QuoteDetailsComponent implements OnInit {
             });
 
             if (currentLookerState === this.lastSavedLookerState) {
+                // Don't clear values, just show success
                 this.showSuccessPopup = true;
                 return;
             }
@@ -1855,13 +1981,16 @@ export class QuoteDetailsComponent implements OnInit {
             });
 
             if (currentState === this.lastSavedCommitmentState) {
+                // Don't clear values, just show success
                 this.showSuccessPopup = true;
                 return;
             }
 
             this.executeCommitFlow();
         } else {
-            this.toastService.show('Please configure periods before saving', 'warning');
+            // Even if no periods are configured, preserve the current state
+            // and just show success popup without clearing values
+            this.showSuccessPopup = true;
         }
     }
 

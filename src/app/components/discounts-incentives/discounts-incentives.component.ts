@@ -1,4 +1,4 @@
-import { Component, Input, OnChanges, SimpleChanges, inject, ElementRef, HostListener } from '@angular/core';
+import { Component, Input, OnChanges, SimpleChanges, inject, ElementRef, HostListener, OnDestroy } from '@angular/core';
 import { Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { RcaApiService } from '../../services/rca-api.service';
@@ -7,6 +7,7 @@ import { SalesforceApiService } from '../../services/salesforce-api.service';
 import { ContextService } from '../../services/context.service';
 import { ToastService } from '../../services/toast.service';
 import { LoadingService } from '../../services/loading.service';
+import { DiscountIncentiveStateService } from '../../services/discount-incentive-state.service';
 import { finalize, forkJoin, map, catchError, of, switchMap, lastValueFrom, Subject, Observable } from 'rxjs';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { FormsModule } from '@angular/forms';
@@ -18,12 +19,17 @@ import { UploadProductsModalComponent } from '../upload-products-modal/upload-pr
     imports: [CommonModule, FormsModule, UploadProductsModalComponent],
     templateUrl: './discounts-incentives.component.html',
 })
-export class DiscountsIncentivesComponent implements OnChanges {
+export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
     @Input() productId: string | null = null;
     @Input() parentQuoteLineId: string | null = null; // Parent Bundle Line ID
     @Input() categoryId: string | null = null;
     @Input() quoteStartDate: string | null = null;
     @Input() quoteEndDate: string | null = null;
+    @Input() set existingLineItems(items: any[]) {
+        if (items && items.length > 0) {
+            this.loadFromExisting(items);
+        }
+    }
     isLoading = false;
 
     // Tabs for the Right Panel
@@ -76,7 +82,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
     incentivePeriods = [
         {
             id: '1',
-            name: 'Incentive Period 1',
+            name: 'Incentive',
             timePeriod: 'Date range',
             startDate: '',
             endDate: '',
@@ -106,6 +112,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
             activeDiscounts: []
         });
         this.activeDiscountPeriodId = id;
+        this.saveCurrentState(); // Auto-save on period change
     }
 
     removeDiscountPeriod(id: string) {
@@ -115,6 +122,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
                 this.activeDiscountPeriodId = '';
             }
             this.discountPeriods.forEach((p, index) => p.name = `Discount Period ${index + 1}`);
+            this.saveCurrentState(); // Auto-save on period change
         }
     }
 
@@ -122,13 +130,14 @@ export class DiscountsIncentivesComponent implements OnChanges {
         const id = Date.now().toString();
         this.incentivePeriods.push({
             id: id,
-            name: `Incentive Period ${this.incentivePeriods.length + 1}`,
+            name: 'Incentive',
             timePeriod: 'Date range',
             startDate: '',
             endDate: '',
             activeIncentives: []
         });
         this.activeIncentivePeriodId = id;
+        this.saveCurrentState(); // Auto-save on period change
     }
 
     removeIncentivePeriod(id: string) {
@@ -137,12 +146,13 @@ export class DiscountsIncentivesComponent implements OnChanges {
             if (this.activeIncentivePeriodId === id) {
                 this.activeIncentivePeriodId = this.incentivePeriods[0].id;
             }
-            this.incentivePeriods.forEach((p, index) => p.name = `Incentive Period ${index + 1}`);
+            this.incentivePeriods.forEach((p, index) => p.name = 'Incentive');
+            this.saveCurrentState(); // Auto-save on period change
         }
     }
 
     // Product Quota Tracking
-    // Fixed business limit: max 999 products can receive discounts/incentives per quote
+    // Fixed business limit: max 976 products can receive discounts/incentives per quote
     totalCatalogProducts: number = 999;
     // Running total of product line items committed in all applied discounts/incentives
     usedQuotaCount: number = 0;
@@ -190,6 +200,8 @@ export class DiscountsIncentivesComponent implements OnChanges {
     // Persistent Selection State
     persistentSelectedGroups = new Map<string, any>();
     persistentSelectedIndividuals = new Map<string, any>();
+    // Track Product2 IDs that were added via bulk CSV upload
+    bulkUploadedProductIds = new Set<string>();
     // Flag to avoid refetching data on navigation back
     private dataFetched = false;
 
@@ -257,6 +269,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
         private toastService: ToastService,
         private loadingService: LoadingService,
         private quoteRefreshService: QuoteRefreshService,
+        private discountIncentiveStateService: DiscountIncentiveStateService,
         private el: ElementRef,
         private router: Router
     ) {
@@ -292,14 +305,152 @@ export class DiscountsIncentivesComponent implements OnChanges {
     }
 
     ngOnInit() {
-        // Deprecated: API calls are now deferred until modal opens
+        // Load persisted state when component initializes
+        this.loadPersistedState();
     }
 
-    ngOnChanges(changes: SimpleChanges) {
+    ngOnDestroy() {
+        // Save current state when component is destroyed (navigation away)
+        this.saveCurrentState();
+    }
+
+    private loadPersistedState() {
+        // Check if this is a page refresh by looking at navigation type
+        const isPageRefresh = (performance.navigation && performance.navigation.type === 1) || 
+                             (performance.getEntriesByType && 
+                              (performance.getEntriesByType('navigation')[0] as any)?.type === 'reload');
+        
+        if (isPageRefresh) {
+            // Clear state on page refresh and start fresh
+            this.discountIncentiveStateService.clearState();
+            console.log('🔄 Page refresh detected - clearing discount/incentive state');
+            return;
+        }
+        
+        // Load persisted state for tab switches
+        const state = this.discountIncentiveStateService.loadState();
+        
+        // Only restore if state has meaningful data (not just defaults)
+        const hasData = state.discountPeriods.some(p => p.startDate || p.endDate || p.activeDiscounts.length > 0) ||
+                       state.incentivePeriods.some(p => p.startDate || p.endDate || p.activeIncentives.length > 0) ||
+                       state.discountForm.granularity !== 'Select' ||
+                       state.incentiveForm.type !== 'Select';
+        
+        if (hasData) {
+            console.log('📋 Restoring discount/incentive state from tab switch');
+            
+            // Restore form data
+            this.discountForm = { ...state.discountForm };
+            this.incentiveForm = { ...state.incentiveForm };
+            
+            // Restore periods
+            this.discountPeriods = [...state.discountPeriods];
+            this.incentivePeriods = [...state.incentivePeriods];
+            this.activeDiscountPeriodId = state.activeDiscountPeriodId;
+            this.activeIncentivePeriodId = state.activeIncentivePeriodId;
+            
+            // Restore active tab
+            this.activeTab = state.activeTab;
+            
+            // Restore selection state
+            this.persistentSelectedGroups = new Map(state.persistentSelectedGroups);
+            this.persistentSelectedIndividuals = new Map(state.persistentSelectedIndividuals);
+            this.persistentIncentiveGroups = new Map(state.persistentIncentiveGroups);
+            this.bulkUploadedProductIds = new Set(state.bulkUploadedProductIds || []);
+            
+            // Restore product data if available
+            if (state.productGroups.length > 0) {
+                this.productGroups = [...state.productGroups];
+                this.dataFetched = true;
+            }
+            if (state.individualProducts.length > 0) {
+                this.individualProducts = [...state.individualProducts];
+            }
+            if (state.dropdownOptions.length > 0) {
+                this.dropdownOptions = [...state.dropdownOptions];
+            }
+            if (state.selectedDropdownOption) {
+                this.selectedDropdownOption = state.selectedDropdownOption;
+            }
+        }
+    }
+
+    private saveCurrentState() {
+        this.discountIncentiveStateService.saveState({
+            discountForm: this.discountForm,
+            incentiveForm: this.incentiveForm,
+            discountPeriods: this.discountPeriods,
+            incentivePeriods: this.incentivePeriods,
+            activeDiscountPeriodId: this.activeDiscountPeriodId,
+            activeIncentivePeriodId: this.activeIncentivePeriodId,
+            activeTab: this.activeTab,
+            persistentSelectedGroups: this.persistentSelectedGroups,
+            persistentSelectedIndividuals: this.persistentSelectedIndividuals,
+            persistentIncentiveGroups: this.persistentIncentiveGroups,
+            bulkUploadedProductIds: this.bulkUploadedProductIds,
+            productGroups: this.productGroups,
+            individualProducts: this.individualProducts,
+            dropdownOptions: this.dropdownOptions,
+            selectedDropdownOption: this.selectedDropdownOption
+        });
+    }
+
+    ngOnChanges(changes: any) {
         if (changes['productId'] && changes['productId'].currentValue && changes['productId'].currentValue !== changes['productId'].previousValue) {
             this.dataFetched = false; // Reset if product ID actually changes
+            this._existingLinesLoaded = false;
             this.resetAllState();
         }
+    }
+
+    private _existingLinesLoaded = false;
+
+    private loadFromExisting(items: any[]) {
+        if (this._existingLinesLoaded || !items) return;
+
+        const incentives = items.filter(i => (Number(i.Incentive__c) || 0) > 0);
+        if (incentives.length === 0) return;
+
+        // Group by StartDate and EndDate
+        const groups = new Map<string, any[]>();
+        incentives.forEach(item => {
+            const key = `${item.StartDate}_${item.EndDate}`;
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key)!.push(item);
+        });
+
+        if (groups.size === 0) return;
+
+        // Initialize incentivePeriods
+        this.incentivePeriods = [];
+        let pIndex = 1;
+        groups.forEach((groupItems, key) => {
+            const [startDate, endDate] = key.split('_');
+            const totalAmount = groupItems.reduce((sum, item) => sum + (Number(item.Incentive__c) || 0), 0);
+
+            const period = {
+                id: (pIndex++).toString(),
+                name: 'Incentive',
+                timePeriod: 'Date range',
+                startDate: startDate || '',
+                endDate: endDate || '',
+                activeIncentives: [{
+                    id: 'existing_' + pIndex,
+                    title: 'Existing Incentives',
+                    subtext: `${groupItems.length} item${groupItems.length !== 1 ? 's' : ''}`,
+                    value: groupItems.length === 1 ? `$${groupItems[0].Incentive__c}` : `$${totalAmount.toFixed(2)} (Total)`,
+                    type: 'incentive',
+                    responseTime: 'Loaded'
+                }]
+            };
+            this.incentivePeriods.push(period);
+        });
+
+        if (this.incentivePeriods.length > 0) {
+            this.activeIncentivePeriodId = this.incentivePeriods[0].id;
+        }
+        
+        this._existingLinesLoaded = true;
     }
 
     resetAllState() {
@@ -308,7 +459,7 @@ export class DiscountsIncentivesComponent implements OnChanges {
         ];
         this.activeDiscountPeriodId = '1';
         this.incentivePeriods = [
-            { id: '1', name: 'Incentive Period 1', timePeriod: 'Date range', startDate: '', endDate: '', activeIncentives: [] }
+            { id: '1', name: 'Incentive', timePeriod: 'Date range', startDate: '', endDate: '', activeIncentives: [] }
         ];
         this.activeIncentivePeriodId = '1';
         this.activeTab = 'discounts';
@@ -409,15 +560,16 @@ export class DiscountsIncentivesComponent implements OnChanges {
         this.loadIndividualProducts();
     }
 
-    // When Region or Billing Frequency filters are applied, trigger search instead of load
+    // When Region or Billing Frequency filters are applied, use the PCM faceted filter API
     applyFilters() {
         this.individualCurrentOffset = 0;
-        const criteria = this.getFacetedCriteria();
+        const criteria = this.getFilterCriteria();
         
-        // If we have any active filters or search term, use search API
-        if (criteria.length > 0 || this.productSearchTerm) {
-            this.executeSearch();
+        // If we have active Region/Billing filters, use the faceted filter API
+        if (criteria.length > 0) {
+            this.executeFacetedFilter();
         } else {
+            // No filters active, reload default products
             this.loadIndividualProducts();
         }
     }
@@ -425,6 +577,8 @@ export class DiscountsIncentivesComponent implements OnChanges {
     setActiveTab(tab: 'discounts' | 'incentives') {
         this.activeTab = tab;
         this.periodDropdownOpen = false;
+        this.saveCurrentState(); // Auto-save on tab change
+        
         if (tab === 'incentives') {
             const quoteId = this.contextService.currentContext?.quoteId;
             if (quoteId) {
@@ -437,25 +591,29 @@ export class DiscountsIncentivesComponent implements OnChanges {
         }
     }
 
-    // Dropdown Handlers
+    // Dropdown Handlers with auto-save
     selectGranularity(option: string) {
         this.discountForm.granularity = option;
         this.granularityOpen = false;
+        this.saveCurrentState(); // Auto-save on change
     }
 
     selectType(option: string) {
         this.discountForm.type = option;
         this.typeOpen = false;
+        this.saveCurrentState(); // Auto-save on change
     }
 
     selectPriceRef(option: string) {
         this.discountForm.priceReference = option;
         this.priceRefOpen = false;
+        this.saveCurrentState(); // Auto-save on change
     }
 
     selectIncentiveType(option: string) {
         this.incentiveForm.type = option;
         this.incentiveTypeOpen = false;
+        this.saveCurrentState(); // Auto-save on change
     }
 
     minDate: string = new Date().toLocaleDateString('en-CA');
@@ -794,49 +952,20 @@ export class DiscountsIncentivesComponent implements OnChanges {
     onProductSearch() {
         console.log('[onProductSearch] Triggered with term:', this.productSearchTerm);
 
-        const criteria = this.getFacetedCriteria();
-        const hasFacetedFilters = criteria.length > 2;
-
-        // If search term is empty AND no faceted filters, reload default products for current category
-        if (!this.productSearchTerm && !hasFacetedFilters) {
-            console.log('[onProductSearch] No search term or active filters, reloading default products');
+        // If search term is empty, reload default products for current category
+        if (!this.productSearchTerm) {
+            console.log('[onProductSearch] No search term, reloading default products');
             this.loadIndividualProducts();
             return;
         }
 
         this.individualCurrentOffset = 0; // Reset pagination offset on new search
-
-        // Allow search if we have a category OR a search term OR active faceted filters
-        const classId = this.selectedDropdownOption?.Id || this.categoryId || this.bundleCategoryId;
-        if (!classId && !this.productSearchTerm && !hasFacetedFilters) {
-            console.warn('[onProductSearch] No category/dropdown option selected for search.');
-            this.toastService.show('Please select a product category first.', 'warning');
-            return;
-        }
-
         this.executeSearch();
     }
 
-    // Builds criteria payload from the selected Region and Billing Frequency dropdowns.
-    private getFacetedCriteria(): any[] {
+    // Builds criteria for Region/Billing Frequency filters ONLY (for faceted PCM filter API)
+    private getFilterCriteria(): any[] {
         const criteria: any[] = [];
-
-        // Only add defaults if we have a search term. 
-        // For regional/billing filters, we want the "alone" structure as requested.
-        if (this.productSearchTerm) {
-            criteria.push(
-                {
-                    "property": "isActive",
-                    "operator": "eq",
-                    "value": true
-                },
-                {
-                    "property": "Type",
-                    "operator": "eq",
-                    "value": ""
-                }
-            );
-        }
 
         if (this.selectedRegion) {
             criteria.push({
@@ -857,35 +986,119 @@ export class DiscountsIncentivesComponent implements OnChanges {
         return criteria;
     }
 
+    // Builds criteria for global search API (includes isActive/Type defaults)
+    private getSearchCriteria(): any[] {
+        const criteria: any[] = [
+            {
+                "property": "isActive",
+                "operator": "eq",
+                "value": true
+            },
+            {
+                "property": "Type",
+                "operator": "eq",
+                "value": ""
+            }
+        ];
+        return criteria;
+    }
+
+    // Executes Region/Billing faceted filter using PCM API with classificationId in URL
+    executeFacetedFilter() {
+        if (this.currentProductReq) {
+            this.currentProductReq.unsubscribe();
+        }
+
+        const criteria = this.getFilterCriteria();
+        if (criteria.length === 0) {
+            this.loadIndividualProducts();
+            return;
+        }
+
+        // Use the classification ID of the selected group (dropdown option)
+        const classificationId = this.selectedDropdownOption?.classificationId 
+            || this.selectedDropdownOption?.Id
+            || this.categoryId;
+
+        if (!classificationId) {
+            console.warn('[executeFacetedFilter] No classification ID available for faceted filter.');
+            this.toastService.show('Please select a product group first.', 'warning');
+            return;
+        }
+
+        this.isIndividualLoading = true;
+
+        console.log('[executeFacetedFilter] Using classificationId:', classificationId, 'with criteria:', criteria);
+
+        this.currentProductReq = this.rcaApiService.facetedProductSearch(
+            classificationId,
+            criteria,
+            Number(this.individualPageSize) || 100,
+            Number(this.individualCurrentOffset) || 0
+        ).pipe(
+            finalize(() => this.isIndividualLoading = false)
+        ).subscribe({
+            next: (data) => {
+                this.individualTotalCount = data.totalCount || data.totalSize || 0;
+                const newProducts = data.result || data.products || [];
+                // Map to UI model
+                this.individualProducts = newProducts.map((p: any) => {
+                    const resolvedId = p.productSellingModelOptions?.[0]?.productId || p.id;
+                    const defaultPrice = p.prices?.find((pr: any) => pr.isDefault) || p.prices?.[0];
+
+                    return {
+                        id: resolvedId,
+                        name: p.name || p.fields?.Name || 'Unknown Product',
+                        family: p.additionalFields?.Family || p.fields?.Family || this.selectedDropdownOption?.Name || 'Other',
+                        selected: false,
+                        discount: 0,
+                        quantity: 1,
+                        price: defaultPrice?.price || p.unitPrice || 0,
+                        pricebookEntryId: defaultPrice?.priceBookEntryId || p.pricebookEntryId || '',
+                        isBundleChild: false,
+                        sortOrder: p.additionalFields?.RCA_Sort_order__c || p.fields?.RCA_Sort_order__c
+                    };
+                });
+
+                // Restore persistent selection state
+                this.individualProducts.forEach((p: any) => {
+                    if (this.persistentSelectedIndividuals.has(p.id)) {
+                        p.selected = true;
+                        this.persistentSelectedIndividuals.set(p.id, p);
+                    }
+                });
+            },
+            error: (err) => {
+                console.error('Faceted filter error', err);
+                this.toastService.show('Filter failed', 'error');
+            }
+        });
+    }
+
+    // Executes global search using PCM search API with categoryIds in body
     executeSearch() {
         if (this.currentProductReq) {
             this.currentProductReq.unsubscribe();
         }
 
-        const criteria = this.getFacetedCriteria();
-
-        // Check if search is cleared AND no criteria are present
-        if (!this.productSearchTerm && criteria.length === 0) {
+        // Check if search is cleared
+        if (!this.productSearchTerm) {
             this.loadIndividualProducts();
             return;
         }
 
         this.isIndividualLoading = true;
 
-        // Use the selected dropdown option's classification ID (the facet button like "Compute")
-        // For PCM search, use the category ID from the discovery page (PCM Product) 
-        // as requested, instead of the classification ID.
-        const searchCategoryId = this.selectedDropdownOption?.classificationId 
-            || this.selectedDropdownOption?.Id
-            || this.bundleCategoryId
-            || this.categoryId;
+        // For PCM global search, always use the category ID from the product discovery
+        // response (categories[0].id) - NOT the classification ID
+        const searchCategoryId = this.bundleCategoryId;
 
-        console.log('[executeSearch] Using classification ID:', searchCategoryId, 'with criteria:', criteria);
+        console.log('[executeSearch] Using category ID from discovery:', searchCategoryId, 'with searchTerm:', this.productSearchTerm);
 
         this.currentProductReq = this.rcaApiService.searchProducts(
             this.productSearchTerm || '',
             searchCategoryId ? [searchCategoryId] : [],
-            criteria as any[],
+            this.getSearchCriteria(),
             Number(this.individualPageSize) || 100,
             Number(this.individualCurrentOffset) || 0
         ).pipe(
@@ -1539,10 +1752,16 @@ export class DiscountsIncentivesComponent implements OnChanges {
                 const responseTimeSecs = ((endTime - startTime) / 1000).toFixed(2);
                 this.toastService.show(`${selectedItems.length} products uploaded successfully (${responseTimeSecs}s)`, 'success');
                 
+                // Track bulk uploaded Product2 IDs for preview classification
+                selectedItems.forEach(item => {
+                    if (item.id) this.bulkUploadedProductIds.add(item.id);
+                });
+                
                 // Add to UI summary
                 this.addDiscountToUI('Bulk Upload', 0, selectedItems.length, 'CSV Data', selectedItems.length, responseTimeSecs);
                 
                 this.quoteRefreshService.setRefreshNeeded(true);
+                this.saveCurrentState(); // Persist bulk IDs
                 this.dataFetched = false;
                 this.showProductSelector = false; 
                 this.router.navigate(['/configure-quote']); 
@@ -1776,7 +1995,6 @@ export class DiscountsIncentivesComponent implements OnChanges {
                         "EndDate": this.activeIncentivePeriod.endDate,
                         "PeriodBoundary": "Anniversary",
                         "Quantity": 1,
-                        "Discount": 100, // Incentives are 100% discount
                         "Incentive__c": parseFloat(item.incentiveAmount) || 0,
                         "SortOrder": Number(item.sortOrder) || 0
                     };

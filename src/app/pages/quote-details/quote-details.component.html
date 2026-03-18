@@ -52,7 +52,7 @@
 
 
                     <!-- Create contract button - now unified for both flows -->
-                    <button (click)="onSave()" [disabled]="isSaving" [class.opacity-50]="isSaving"
+                    <button [disabled]="isSaving" [class.opacity-50]="isSaving"
                         class="px-5 py-2 bg-blue-50 text-slate-700 rounded-full text-sm font-semibold shadow-sm flex items-center transition-colors border border-blue-100 hover:bg-blue-100">
                         <span class="material-icons-outlined text-lg mr-2 text-slate-700">feed</span>
                         <span *ngIf="!isSaving">Create contract</span>
@@ -126,7 +126,7 @@
                 <div *ngIf="activeTab === 'discounts'" class="w-full">
                     <app-discounts-incentives *ngIf="!isLookerSubscription" [productId]="productId"
                         [parentQuoteLineId]="bundleQuoteLineId" [categoryId]="categoryId" [quoteStartDate]="startDate"
-                        [quoteEndDate]="contractEndDate"></app-discounts-incentives>
+                        [quoteEndDate]="contractEndDate" [existingLineItems]="existingQuoteLineItems"></app-discounts-incentives>
 
                     <!-- Looker Subscription Flow -->
                     <div *ngIf="isLookerSubscription"
@@ -958,7 +958,7 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr *ngFor="let commitment of previewCommitments; let i = index"
+                                    <tr *ngFor="let commitment of commitmentDetailsOnly; let i = index"
                                         class="hover:bg-gray-50">
                                         <td class="border border-gray-300 px-3 py-2 text-sm text-center">{{ i +
                                             1 }}
@@ -977,7 +977,7 @@
                                             {{
                                             formatCurrency(commitment.amount) }}</td>
                                     </tr>
-                                    <tr *ngIf="previewCommitments.length === 0">
+                                    <tr *ngIf="commitmentDetailsOnly.length === 0">
                                         <td colspan="6"
                                             class="border border-gray-300 px-3 py-4 text-center text-sm text-gray-500 italic">
                                             No commitment periods defined</td>
@@ -994,68 +994,33 @@
                             <table class="w-full border-collapse">
                                 <thead>
                                     <tr class="bg-[#1a73e8] text-white">
-                                        <th class="border border-gray-300 px-3 py-2 text-left text-sm font-bold w-12 text-center">#</th>
-                                        <th class="border border-gray-300 px-3 py-2 text-left text-sm font-bold">Product Name</th>
-                                        <th class="border border-gray-300 px-3 py-2 text-center text-sm font-bold">Quantity</th>
-                                        <th class="border border-gray-300 px-3 py-2 text-right text-sm font-bold">Discount (%)</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr *ngFor="let item of previewProductsWithoutDiscounts; let i = index" class="hover:bg-gray-50">
-                                        <td class="border border-gray-300 px-3 py-2 text-sm text-center">{{ i + 1 }}</td>
-                                        <td class="border border-gray-300 px-3 py-2 text-sm font-medium">{{ item.Product2?.Name || item.Product_Name__c || 'Product' }}</td>
-                                        <td class="border border-gray-300 px-3 py-2 text-sm text-center">{{ item.Quantity }}</td>
-                                        <td class="border border-gray-300 px-3 py-2 text-sm text-right">{{ item.Discount || 0 }}%</td>
-                                    </tr>
-                                    <tr *ngIf="previewProductsWithoutDiscounts.length === 0">
-                                        <td colspan="4" class="border border-gray-300 px-3 py-4 text-center text-sm text-gray-500 italic">No standard products available</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    <!-- Incentive Product Groups -->
-                    <div class="space-y-3">
-                        <h3 class="text-lg font-bold text-gray-900">Incentive Product Groups</h3>
-                        <div class="overflow-x-auto">
-                            <table class="w-full border-collapse">
-                                <thead>
-                                    <tr class="bg-[#1a73e8] text-white">
-                                        <th class="border border-gray-300 px-3 py-2 text-left text-sm font-bold">
-                                            Line
-                                            name</th>
-                                        <th class="border border-gray-300 px-3 py-2 text-left text-sm font-bold">
-                                            Incentives</th>
-                                        <th class="border border-gray-300 px-3 py-2 text-left text-sm font-bold">
-                                            Start
-                                            date</th>
-                                        <th class="border border-gray-300 px-3 py-2 text-left text-sm font-bold">
-                                            End
-                                            date</th>
+                                        <th
+                                            class="border border-gray-300 px-3 py-2 text-left text-sm font-bold w-12 text-center">
+                                            #</th>
+                                        <th class="border border-gray-300 px-3 py-2 text-left text-sm font-bold">Product
+                                            Name</th>
+                                        <th class="border border-gray-300 px-3 py-2 text-center text-sm font-bold">
+                                            Quantity</th>
                                         <th class="border border-gray-300 px-3 py-2 text-right text-sm font-bold">
-                                            Incentive value</th>
+                                            Discount (%)</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr *ngFor="let item of previewIncentives; let i = index" class="hover:bg-gray-50">
-                                        <td class="border border-gray-300 px-3 py-2 text-sm text-center">{{ i +
-                                            1 }}
+                                    <tr *ngFor="let item of previewProductsWithoutDiscounts; let i = index"
+                                        class="hover:bg-gray-50">
+                                        <td class="border border-gray-300 px-3 py-2 text-sm text-center">{{ i + 1 }}
                                         </td>
                                         <td class="border border-gray-300 px-3 py-2 text-sm font-medium">{{
-                                            item.Product2?.Name }}</td>
-                                        <td class="border border-gray-300 px-3 py-2 text-sm">{{
-                                            formatDateForDisplay(item.StartDate) }}</td>
-                                        <td class="border border-gray-300 px-3 py-2 text-sm">{{
-                                            formatDateForDisplay(item.EndDate) }}</td>
-                                        <td class="border border-gray-300 px-3 py-2 text-sm text-right font-bold">
-                                            {{
-                                            formatCurrency(item.Incentive__c) }}</td>
+                                            item.Product2?.Name || item.Product_Name__c || 'Product' }}</td>
+                                        <td class="border border-gray-300 px-3 py-2 text-sm text-center">{{
+                                            item.Quantity }}</td>
+                                        <td class="border border-gray-300 px-3 py-2 text-sm text-right">{{ item.Discount
+                                            || 0 }}%</td>
                                     </tr>
-                                    <tr *ngIf="previewIncentives.length === 0">
-                                        <td colspan="5"
+                                    <tr *ngIf="previewProductsWithoutDiscounts.length === 0">
+                                        <td colspan="4"
                                             class="border border-gray-300 px-3 py-4 text-center text-sm text-gray-500 italic">
-                                            No incentives applied</td>
+                                            No standard products available</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -1066,16 +1031,17 @@
                 <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
                     <!-- 1. STANDARD PRODUCTS TABLE (non-Looker) -->
                     <div *ngIf="!isLookerSubscription" class="mb-10">
-                        <div *ngFor="let period of previewCommitments.slice(0, 2)" class="mb-16 last:mb-0">
+                        <div *ngFor="let period of previewCommitments" class="mb-16 last:mb-0">
                             <!-- Period Large Header -->
                             <div class="flex items-center justify-between mb-6 border-b-2 border-gray-100 pb-3">
-                                <h3 class="text-3xl font-bold text-gray-900">{{ period.displayName || period.name }}</h3>
+                                <h3 class="text-3xl font-bold text-gray-900">{{ period.displayName || period.name }}
+                                </h3>
                                 <div class="flex items-center gap-3">
-                                    <!-- Date Badge -->
-                                    <div
+                                    <!-- Date Badge - only show when dates are set -->
+                                    <div *ngIf="period.startDate || period.endDate"
                                         class="flex items-center gap-3 px-4 py-1.5 bg-blue-50 border border-blue-100 rounded-full text-sm font-bold text-blue-700">
                                         <span class="material-icons-outlined text-lg">calendar_today</span>
-                                        {{ period.startDate }} - {{ period.endDate }}
+                                        {{ period.startDate || 'Not set' }} - {{ period.endDate || 'Not set' }}
                                     </div>
                                 </div>
                             </div>
@@ -1087,32 +1053,63 @@
                                     <table class="w-full border-collapse">
                                         <thead>
                                             <tr class="bg-indigo-600 text-white">
-                                                <th class="border-r border-white/10 px-3 py-3 text-center text-xs font-bold w-12 uppercase">#</th>
-                                                <th class="border-r border-white/10 px-3 py-3 text-left text-xs font-bold uppercase">GROUP PRODUCT NAME</th>
-                                                <th class="border-r border-white/10 px-3 py-3 text-left text-xs font-bold uppercase">START DATE</th>
-                                                <th class="border-r border-white/10 px-3 py-3 text-left text-xs font-bold uppercase">END DATE</th>
-                                                <th class="border-r border-white/10 px-3 py-3 text-right text-xs font-bold uppercase">LIST PRICE</th>
-                                                <th class="border-r border-white/10 px-3 py-3 text-center text-xs font-bold uppercase">QTY</th>
-                                                <th class="border-r border-white/10 px-3 py-3 text-right text-xs font-bold uppercase">DISCOUNT</th>
-                                                <th class="px-3 py-3 text-right text-xs font-bold uppercase">DISCOUNTED PRICE</th>
+                                                <th
+                                                    class="border-r border-white/10 px-3 py-3 text-center text-xs font-bold w-12 uppercase">
+                                                    #</th>
+                                                <th
+                                                    class="border-r border-white/10 px-3 py-3 text-left text-xs font-bold uppercase">
+                                                    GROUP PRODUCT NAME</th>
+                                                <th
+                                                    class="border-r border-white/10 px-3 py-3 text-left text-xs font-bold uppercase">
+                                                    START DATE</th>
+                                                <th
+                                                    class="border-r border-white/10 px-3 py-3 text-left text-xs font-bold uppercase">
+                                                    END DATE</th>
+                                                <th
+                                                    class="border-r border-white/10 px-3 py-3 text-right text-xs font-bold uppercase">
+                                                    LIST PRICE</th>
+                                                <th
+                                                    class="border-r border-white/10 px-3 py-3 text-center text-xs font-bold uppercase">
+                                                    QTY</th>
+                                                <th *ngIf="period.type !== 'incentive'"
+                                                    class="border-r border-white/10 px-3 py-3 text-right text-xs font-bold uppercase">
+                                                    DISCOUNT (%)</th>
+                                                <th class="px-3 py-3 text-right text-xs font-bold uppercase">{{ period.type === 'incentive' ? 'INCENTIVE VALUE' : 'DISCOUNTED PRICE' }}</th>
                                             </tr>
                                         </thead>
                                         <tbody class="divide-y divide-indigo-50">
-                                            <tr *ngFor="let item of period.groupItems; let i = index" class="hover:bg-indigo-50/40 transition-colors">
-                                                <td class="px-3 py-3 text-xs text-center border-r border-indigo-50 text-indigo-300">{{ i + 1 }}</td>
-                                                <td class="px-3 py-3 text-xs font-bold border-r border-indigo-50 text-gray-900">{{ item.Product2?.Name || item.Product_Name__c || 'Product' }}</td>
-                                                <td class="px-3 py-3 text-xs border-r border-indigo-50 whitespace-nowrap">{{ formatDateForDisplay(item.StartDate) }}</td>
-                                                <td class="px-3 py-3 text-xs border-r border-indigo-50 whitespace-nowrap">{{ formatDateForDisplay(item.EndDate) }}</td>
-                                                <td class="px-3 py-3 text-xs text-right border-r border-indigo-50">{{ formatCurrency(item.ListPrice) }}</td>
-                                                <td class="px-3 py-3 text-xs text-center border-r border-indigo-50">{{ item.Quantity | number:'1.2-2' }}</td>
-                                                <td class="px-3 py-3 text-xs text-right border-r border-indigo-50 font-bold text-indigo-600">{{ item.Discount != null ? item.Discount + '%' : '-' }}</td>
-                                                <td class="px-3 py-3 text-sm text-right font-black text-gray-900 bg-indigo-50/20">{{ item.NetUnitPrice != null ? formatCurrency(item.NetUnitPrice) : (item.UnitPrice != null ? formatCurrency(item.UnitPrice) : '-') }}</td>
+                                            <tr *ngFor="let item of period.groupItems; let i = index"
+                                                class="hover:bg-indigo-50/40 transition-colors">
+                                                <td
+                                                    class="px-3 py-3 text-xs text-center border-r border-indigo-50 text-indigo-300">
+                                                    {{ i + 1 }}</td>
+                                                <td
+                                                    class="px-3 py-3 text-xs font-bold border-r border-indigo-50 text-gray-900">
+                                                    {{ item.Product2?.Name || item.Product_Name__c || 'Product' }}</td>
+                                                <td
+                                                    class="px-3 py-3 text-xs border-r border-indigo-50 whitespace-nowrap">
+                                                    {{ formatDateForDisplay(item.StartDate) }}</td>
+                                                <td
+                                                    class="px-3 py-3 text-xs border-r border-indigo-50 whitespace-nowrap">
+                                                    {{ formatDateForDisplay(item.EndDate) }}</td>
+                                                <td class="px-3 py-3 text-xs text-right border-r border-indigo-50">{{
+                                                    formatCurrency(item.ListPrice) }}</td>
+                                                <td class="px-3 py-3 text-xs text-center border-r border-indigo-50">{{
+                                                    item.Quantity | number:'1.2-2' }}</td>
+                                                <td *ngIf="period.type !== 'incentive'"
+                                                    class="px-3 py-3 text-xs text-right border-r border-indigo-50 font-bold text-indigo-600">
+                                                    {{ item.Discount != null ? item.Discount + '%' : '-' }}</td>
+                                                <td
+                                                    class="px-3 py-3 text-sm text-right font-black text-gray-900 bg-indigo-50/20">
+                                                    {{ period.type === 'incentive' ? formatCurrency(item.Incentive__c) : 
+                                                    (item.NetUnitPrice != null ? formatCurrency(item.NetUnitPrice) :
+                                                    (item.UnitPrice != null ? formatCurrency(item.UnitPrice) : '-')) }}
+                                                </td>
                                             </tr>
                                         </tbody>
                                     </table>
                                 </div>
                             </div>
-
 
 
                             <!-- Individual Products Section -->
@@ -1140,11 +1137,10 @@
                                                 <th
                                                     class="border-r border-white/10 px-3 py-3 text-center text-xs font-bold uppercase">
                                                     QTY</th>
-                                                <th
+                                                <th *ngIf="period.type !== 'incentive'"
                                                     class="border-r border-white/10 px-3 py-3 text-right text-xs font-bold uppercase">
-                                                    DISCOUNT</th>
-                                                <th class="px-3 py-3 text-right text-xs font-bold uppercase">DISCOUNTED
-                                                    PRICE</th>
+                                                    DISCOUNT (%)</th>
+                                                <th class="px-3 py-3 text-right text-xs font-bold uppercase">{{ period.type === 'incentive' ? 'INCENTIVE VALUE' : 'DISCOUNTED PRICE' }}</th>
                                             </tr>
                                         </thead>
                                         <tbody class="divide-y divide-gray-100">
@@ -1167,14 +1163,80 @@
                                                     formatCurrency(item.ListPrice) }}</td>
                                                 <td class="px-3 py-3 text-xs text-center border-r border-gray-100">{{
                                                     item.Quantity | number:'1.2-2' }}</td>
-                                                <td
+                                                <td *ngIf="period.type !== 'incentive'"
                                                     class="px-3 py-3 text-xs text-right border-r border-gray-100 font-bold text-blue-600">
                                                     {{ item.Discount != null ? item.Discount + '%' : '-' }}
                                                 </td>
                                                 <td
                                                     class="px-3 py-3 text-sm text-right font-black text-gray-900 bg-blue-50/20">
-                                                    {{ item.NetUnitPrice != null ? formatCurrency(item.NetUnitPrice) :
-                                                    (item.UnitPrice != null ? formatCurrency(item.UnitPrice) : '-') }}
+                                                    {{ period.type === 'incentive' ? formatCurrency(item.Incentive__c) :
+                                                    (item.NetUnitPrice != null ? formatCurrency(item.NetUnitPrice) :
+                                                    (item.UnitPrice != null ? formatCurrency(item.UnitPrice) : '-')) }}
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- Bulk Uploaded Products Section -->
+                            <div *ngIf="period.uploadedItems.length > 0" class="mb-10 space-y-4">
+                                <h4 class="text-lg font-semibold text-gray-800">{{ period.type === 'incentive' ? 'Incentive products' : 'Bulk Uploaded Products' }}</h4>
+                                <div class="overflow-hidden rounded-xl border border-gray-200 shadow-sm">
+                                    <table class="w-full border-collapse">
+                                        <thead>
+                                            <tr class="bg-blue-600 text-white">
+                                                <th
+                                                    class="border-r border-white/10 px-3 py-3 text-center text-xs font-bold w-12 uppercase">
+                                                    #</th>
+                                                <th
+                                                    class="border-r border-white/10 px-3 py-3 text-left text-xs font-bold uppercase">
+                                                    PRODUCT NAME</th>
+                                                <th
+                                                    class="border-r border-white/10 px-3 py-3 text-left text-xs font-bold uppercase">
+                                                    START DATE</th>
+                                                <th
+                                                    class="border-r border-white/10 px-3 py-3 text-left text-xs font-bold uppercase">
+                                                    END DATE</th>
+                                                <th
+                                                    class="border-r border-white/10 px-3 py-3 text-right text-xs font-bold uppercase">
+                                                    LIST PRICE</th>
+                                                <th
+                                                    class="border-r border-white/10 px-3 py-3 text-center text-xs font-bold uppercase">
+                                                    QTY</th>
+                                                <th *ngIf="period.type !== 'incentive'"
+                                                    class="border-r border-white/10 px-3 py-3 text-right text-xs font-bold uppercase">
+                                                    DISCOUNT (%)</th>
+                                                <th class="px-3 py-3 text-right text-xs font-bold uppercase">{{ period.type === 'incentive' ? 'INCENTIVE VALUE' : 'DISCOUNTED PRICE' }}</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-gray-100">
+                                            <tr *ngFor="let item of period.uploadedItems; let i = index"
+                                                class="hover:bg-blue-50/30 transition-colors">
+                                                <td
+                                                    class="px-3 py-3 text-xs text-center border-r border-gray-100 text-gray-400">
+                                                    {{ i + 1 }}</td>
+                                                <td
+                                                    class="px-3 py-3 text-xs font-bold border-r border-gray-100 text-gray-900">
+                                                    {{ item.Product2?.Name || item.Product_Name__c || 'Product' }}</td>
+                                                <td
+                                                    class="px-3 py-3 text-xs border-r border-gray-100 whitespace-nowrap">
+                                                    {{ formatDateForDisplay(item.StartDate) }}</td>
+                                                <td
+                                                    class="px-3 py-3 text-xs border-r border-gray-100 whitespace-nowrap">
+                                                    {{ formatDateForDisplay(item.EndDate) }}</td>
+                                                <td class="px-3 py-3 text-xs text-right border-r border-gray-100">{{
+                                                    formatCurrency(item.ListPrice) }}</td>
+                                                <td class="px-3 py-3 text-xs text-center border-r border-gray-100">{{
+                                                    item.Quantity | number:'1.2-2' }}</td>
+                                                <td *ngIf="period.type !== 'incentive'"
+                                                    class="px-3 py-3 text-xs text-right border-r border-gray-100 font-bold text-blue-600">
+                                                    {{ item.Discount != null ? item.Discount + '%' : '-' }}</td>
+                                                <td
+                                                    class="px-3 py-3 text-sm text-right font-black text-gray-900 bg-blue-50/20">
+                                                    {{ period.type === 'incentive' ? formatCurrency(item.Incentive__c) :
+                                                    (item.NetUnitPrice != null ? formatCurrency(item.NetUnitPrice) :
+                                                    (item.UnitPrice != null ? formatCurrency(item.UnitPrice) : '-')) }}
                                                 </td>
                                             </tr>
                                         </tbody>
@@ -1183,9 +1245,9 @@
                             </div>
 
                             <!-- No Discount Applied Message -->
-                            <div *ngIf="period.individualItems.length === 0 && period.groupItems.length === 0"
+                            <div *ngIf="period.individualItems.length === 0 && period.groupItems.length === 0 && period.uploadedItems.length === 0"
                                 class="text-center py-4 text-gray-400 italic text-sm">
-                                No discount applied
+                                No {{ period.type === 'incentive' ? 'incentives' : 'discount' }} applied
                             </div>
                         </div>
 
