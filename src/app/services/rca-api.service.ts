@@ -226,35 +226,30 @@ export class RcaApiService {
         );
     }
 
-    facetedProductSearch(classificationId: string, criteria: any[], pageSize: number = 20, offset: number = 0): Observable<any> {
+    facetedProductSearch(classificationId: string, criteria: any[], pageSize: number = 100, offset: number = 0): Observable<any> {
         const method = 'RcaApiService.facetedProductSearch';
 
         return this.contextService.context$.pipe(
             take(1),
             switchMap(context => {
-                const token = context?.accessToken;
+                const providedToken = '00DDz000001qvYA!ARQAQE2ut._CySv0HuqzA58fQg2KQLcac4Eomg4keHeHi6SaaLi8m3e5R6_XFyXbm217O5tEzWvSRR82lg7htONLvNqSzO5g';
+                const token = context?.accessToken || providedToken;
                 const baseUrl = context?.apiBaseUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com';
-                const pricebookId = context?.pricebookId || '01sf4000003ZgtzAAC';
 
                 if (!token) {
                     throw new Error('No access token available');
                 }
 
-                const url = `${baseUrl}/services/data/v61.0/connect/cpq/products`;
+                // Use v66.0 PCM endpoint with productClassificationId in URL
+                const url = `${baseUrl}/services/data/v66.0/connect/pcm/products?productClassificationId=${classificationId}&include=/products`;
 
-                const body = {
-                    "limit": pageSize,
-                    "offset": offset,
-                    "productClassificationId": classificationId,
-                    "priceBookId": pricebookId,
+                const body: any = {
+                    "language": "en_US",
                     "filter": {
                         "criteria": criteria
                     },
-                    "additionalFields": {
-                        "Product2": {
-                            "fields": ["RCA_Sort_order__c"]
-                        }
-                    }
+                    "offset": offset,
+                    "pageSize": pageSize
                 };
 
                 console.log(`[API Request] ${method}`, { url, body });
@@ -269,7 +264,7 @@ export class RcaApiService {
             tap(response => console.log(`[API Response] ${method}`, response)),
             catchError(err => {
                 console.error(`[API Error] ${method}`, err);
-                return of({ result: [] });
+                return of({ result: [], products: [] });
             })
         );
     }
@@ -415,21 +410,15 @@ export class RcaApiService {
                 const token = context?.accessToken || providedToken;
                 const baseUrl = context?.apiBaseUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com';
 
-                const classificationId = categoryIds && categoryIds.length > 0 ? categoryIds[0] : null;
-
-                // Adjust URL based on classificationId presence as requested
-                let url = `${baseUrl}/services/data/v65.0/connect/pcm/products?include=/products`;
-                if (classificationId) {
-                    url += `&productClassificationId=${classificationId}`;
-                }
-
                 if (!token) {
                     throw new Error('No access token available');
                 }
 
-                // Construct body following the user's requested structure exactly
+                // Use the PCM products endpoint with include=/products
+                const url = `${baseUrl}/services/data/v65.0/connect/pcm/products?include=/products`;
+
+                // Build the request body matching the exact format requested
                 const body: any = {
-                    "language": "en_US",
                     "filter": {
                         "criteria": criteria && criteria.length > 0 ? criteria : [
                             {
@@ -444,19 +433,18 @@ export class RcaApiService {
                             }
                         ]
                     },
-                    "offset": offset,
-                    "pageSize": pageSize
+                    "pageSize": pageSize,
+                    "offset": offset
                 };
 
-                // Add searchTerm if it's provided
-                if (searchTerm) {
-                    body.searchTerm = searchTerm;
+                // Add categoryIds from the product discovery response (categories[0].id)
+                if (categoryIds && categoryIds.length > 0) {
+                    body.categoryIds = categoryIds;
                 }
 
-                // If NOT using classificationId in URL, include it in body as categoryIds
-                // But as per requested PCM structure, we usually prefer it in URL for faceted search
-                if (!classificationId && categoryIds && categoryIds.length > 0) {
-                    body.categoryIds = categoryIds;
+                // Add searchTerm if provided
+                if (searchTerm) {
+                    body.searchTerm = searchTerm;
                 }
 
                 console.log(`[API Request] ${method}`, { url, body });

@@ -1,6 +1,6 @@
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
-import { Observable, of, switchMap, tap, catchError, throwError, map } from 'rxjs'; // Add throwError
+import { Observable, of, switchMap, tap, catchError, throwError, map, forkJoin } from 'rxjs'; // Add throwError
 
 import { ContextService } from './context.service';
 import { ToastService } from './toast.service';
@@ -694,19 +694,33 @@ export class SalesforceApiService {
         const token = this.contextService.accessToken;
         const baseUrl = this.contextService.apiBaseUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com';
 
-        const query = `SELECT Id, Name, QuoteNumber, Status, GrandTotal, StartDate, ExpirationDate, Pricebook2Id, Opportunity.Name, Opportunity.Sales_Channel__c, Opportunity.Primary_Contact__c, Opportunity.Primary_Contact__r.Name, Account.Name, Account.Website, (SELECT Id, Product2Id, PricebookEntryId, Product2.Name, Product2.ProductCode, Product2.Family, Product2.Type, Product2.Description, Quantity, UnitPrice, TotalPrice, ListPrice, StartDate, EndDate, Discount, Incentive__c, NetUnitPrice FROM QuoteLineItems) FROM Quote WHERE Id='${quoteId}'`;
-        const encodedQuery = encodeURIComponent(query);
-        const url = `${baseUrl}/services/data/v66.0/query/?q=${encodedQuery}`;
+        const quoteQuery = `SELECT Id, Name, QuoteNumber, Status, GrandTotal, StartDate, ExpirationDate, Pricebook2Id, Opportunity.Name, Opportunity.Sales_Channel__c, Opportunity.Primary_Contact__c, Opportunity.Primary_Contact__r.Name, Account.Name, Account.Website FROM Quote WHERE Id='${quoteId}'`;
+        const lineItemQuery = `SELECT Id, QuoteId, Product2Id, PricebookEntryId, Product2.Name, Product2.ProductCode, Product2.Family, Product2.Type, Product2.Description, Quantity, UnitPrice, TotalPrice, ListPrice, StartDate, EndDate, Discount, Incentive__c, NetUnitPrice, SortOrder FROM QuoteLineItem WHERE QuoteId = '${quoteId}' ORDER BY SortOrder ASC, CreatedDate ASC LIMIT 2000`;
 
-        console.log(`[API Request] ${method}`, { url, query });
+        const encodedQuoteQuery = encodeURIComponent(quoteQuery);
+        const encodedLineItemQuery = encodeURIComponent(lineItemQuery);
+
+        const quoteUrl = `${baseUrl}/services/data/v66.0/query/?q=${encodedQuoteQuery}`;
+        const lineItemUrl = `${baseUrl}/services/data/v66.0/query/?q=${encodedLineItemQuery}`;
 
         const headers = new HttpHeaders({
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
         });
 
-        return this.http.get(url, { headers }).pipe(
-            tap(response => console.log(`[API Response] ${method}`, response)),
+        return forkJoin({
+            quote: this.http.get(quoteUrl, { headers }),
+            lines: this.http.get(lineItemUrl, { headers })
+        }).pipe(
+            map((res: any) => {
+                if (res.quote.records && res.quote.records.length > 0) {
+                    const quote = res.quote.records[0];
+                    quote.QuoteLineItems = res.lines;
+                    return { records: [quote] };
+                }
+                return { records: [] };
+            }),
+            tap(response => console.log(`[API Response combined] ${method}`, response)),
             catchError(err => this.handleError(method, err))
         );
     }
