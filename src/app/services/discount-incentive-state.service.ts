@@ -34,27 +34,28 @@ export interface DiscountIncentiveState {
     currency: string;
     selectedItemsCount: number;
   };
-  
+
   // Periods
   discountPeriods: DiscountPeriod[];
   incentivePeriods: IncentivePeriod[];
   activeDiscountPeriodId: string;
   activeIncentivePeriodId: string;
-  
+
   // Active tab
   activeTab: 'discounts' | 'incentives';
-  
+
   // Selection state
   persistentSelectedGroups: Map<string, any>;
   persistentSelectedIndividuals: Map<string, any>;
   persistentIncentiveGroups: Map<string, any>;
   bulkUploadedProductIds: Set<string>;
-  
+
   // Product data
   productGroups: any[];
   individualProducts: any[];
   dropdownOptions: any[];
   selectedDropdownOption: any;
+  quoteId?: string;
 }
 
 @Injectable({
@@ -63,7 +64,7 @@ export interface DiscountIncentiveState {
 export class DiscountIncentiveStateService {
   private stateSubject = new BehaviorSubject<DiscountIncentiveState | null>(null);
   public state$ = this.stateSubject.asObservable();
-  
+
   // In-memory storage - gets cleared on page refresh
   private inMemoryState: DiscountIncentiveState | null = null;
 
@@ -95,7 +96,7 @@ export class DiscountIncentiveStateService {
       incentivePeriods: [
         {
           id: '1',
-          name: 'Incentive',
+          name: 'Incentives',
           timePeriod: 'Date range',
           startDate: '',
           endDate: '',
@@ -116,23 +117,42 @@ export class DiscountIncentiveStateService {
     };
   }
 
-  saveState(state: Partial<DiscountIncentiveState>) {
+  saveState(state: Partial<DiscountIncentiveState>, quoteId?: string) {
     const currentState = this.inMemoryState || this.getDefaultState();
+    
+    // If quoteId changes, clear state first
+    if (quoteId && currentState.quoteId && currentState.quoteId !== quoteId) {
+       this.clearState();
+       const freshState = this.getDefaultState();
+       const newState = { ...freshState, ...state, quoteId };
+       this.inMemoryState = newState;
+       this.stateSubject.next(newState);
+       return;
+    }
+
     const newState = { ...currentState, ...state };
+    if (quoteId) newState.quoteId = quoteId;
     
     // Store in memory only - will be lost on page refresh
     this.inMemoryState = newState;
     this.stateSubject.next(newState);
   }
 
-  loadState(): DiscountIncentiveState {
+  loadState(quoteId?: string): DiscountIncentiveState {
+    // If quoteId changes, clear state
+    if (quoteId && this.inMemoryState && this.inMemoryState.quoteId && this.inMemoryState.quoteId !== quoteId) {
+      this.clearState();
+    }
+
     // Return in-memory state if available, otherwise return default
     if (this.inMemoryState) {
+      if (quoteId && !this.inMemoryState.quoteId) this.inMemoryState.quoteId = quoteId;
       this.stateSubject.next(this.inMemoryState);
       return this.inMemoryState;
     }
-    
+
     const defaultState = this.getDefaultState();
+    if (quoteId) defaultState.quoteId = quoteId;
     this.stateSubject.next(defaultState);
     this.inMemoryState = defaultState;
     return defaultState;

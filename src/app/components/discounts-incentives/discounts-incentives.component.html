@@ -280,7 +280,7 @@
                 <div class="grid grid-cols-2 gap-3">
                     <!-- Discount Type -->
                     <div class="relative">
-                    <div (click)="closeAllDropdowns(); typeOpen = !typeOpen; $event.stopPropagation()"
+                        <div (click)="closeAllDropdowns(); typeOpen = !typeOpen; $event.stopPropagation()"
                             class="bg-white border border-gray-400 rounded-lg p-2 h-[52px] flex justify-between items-center cursor-pointer hover:border-gray-300 transition-colors">
                             <div class="flex flex-col justify-center overflow-hidden">
                                 <label class="text-[11px] text-gray-500 mb-0.5 leading-none">Discount
@@ -369,7 +369,7 @@
                     <div (click)="closeAllDropdowns(); periodDropdownOpen = !periodDropdownOpen; $event.stopPropagation()"
                         class="bg-white border border-gray-400 rounded-lg p-2 h-[52px] flex justify-between items-center cursor-pointer hover:border-gray-300 transition-colors">
                         <div class="flex flex-col justify-center">
-                            <label class="text-[11px] text-gray-500 mb-0.5 leading-none">Incentive
+                            <label class="text-[11px] text-gray-500 mb-0.5 leading-none">Incentives
                                 period</label>
                             <span class="text-sm font-medium text-gray-900 leading-tight">
                                 {{ activeIncentivePeriod.name }}
@@ -431,7 +431,7 @@
                 <button (click)="addIncentive()"
                     class="w-full h-[40px] flex items-center justify-center bg-[#0b57d0] rounded-full text-sm font-bold text-white hover:bg-blue-700 transition-colors shadow-md mt-4">
                     <span class="material-icons-outlined text-[18px] mr-2">add</span>
-                    Add Incentive
+                    Add Incentives
                 </button>
             </div>
         </div>
@@ -528,7 +528,8 @@
 
                 <!-- Region Dropdown -->
                 <div class="relative">
-                    <button (click)="closeAllDropdowns(); regionDropdownOpen = !regionDropdownOpen; $event.stopPropagation()"
+                    <button
+                        (click)="closeAllDropdowns(); regionDropdownOpen = !regionDropdownOpen; $event.stopPropagation()"
                         class="flex items-center justify-between min-w-[140px] px-3 py-1.5 bg-white border rounded-md shadow-sm hover:bg-gray-50 min-h-[36px] text-xs font-bold transition-colors"
                         [ngClass]="selectedRegion ? 'border-blue-500 text-blue-700' : 'border-gray-300 text-gray-700'">
                         <span class="truncate">{{ selectedRegion ? selectedRegion.label : 'Region' }}</span>
@@ -568,7 +569,8 @@
 
                 <!-- Billing Frequency Dropdown -->
                 <div class="relative">
-                    <button (click)="closeAllDropdowns(); billingDropdownOpen = !billingDropdownOpen; $event.stopPropagation()"
+                    <button
+                        (click)="closeAllDropdowns(); billingDropdownOpen = !billingDropdownOpen; $event.stopPropagation()"
                         class="flex items-center justify-between min-w-[160px] px-3 py-1.5 bg-white border rounded-md shadow-sm hover:bg-gray-50 min-h-[36px] text-xs font-bold transition-colors"
                         [ngClass]="selectedBillingFreq ? 'border-blue-500 text-blue-700' : 'border-gray-300 text-gray-700'">
                         <span class="truncate">{{ selectedBillingFreq ? selectedBillingFreq.label : 'Billing
@@ -709,7 +711,7 @@
                         <!-- Always show Amount column for Incentives -->
                         <th *ngIf="selectorCalledFrom === 'incentives'"
                             class="px-3 py-2 text-right pr-6 w-36 text-blue-600">
-                            Incentive</th>
+                            Incentives</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
@@ -835,12 +837,7 @@
 </div>
 
 <!-- Upload Products Modal at root level to avoid clipping -->
-<app-upload-products-modal 
-    [isOpen]="showUploadModal" 
-    [selectedPeriodName]="activeDiscountPeriod?.name || ''"
-    [selectedStartDate]="activeDiscountPeriod?.startDate || ''"
-    [selectedEndDate]="activeDiscountPeriod?.endDate || ''"
-    [remainingQuota]="remainingProductsQuota"
-    (close)="closeUploadModal()"
-    (finish)="handleBulkUpload($event)">
+<app-upload-products-modal [isOpen]="showUploadModal" [selectedPeriodName]="activeDiscountPeriod?.name || ''"
+    [selectedStartDate]="activeDiscountPeriod?.startDate || ''" [selectedEndDate]="activeDiscountPeriod?.endDate || ''"
+    [remainingQuota]="remainingProductsQuota" (close)="closeUploadModal()" (finish)="handleBulkUpload($event)">
 </app-upload-products-modal>

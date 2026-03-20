@@ -1,5 +1,6 @@
 import { Component, HostListener, OnInit, inject, ViewChild } from '@angular/core';
 import { DiscountsIncentivesComponent } from '../../components/discounts-incentives/discounts-incentives.component';
+import { DiscountIncentiveStateService } from '../../services/discount-incentive-state.service';
 import { CommonModule } from '@angular/common';
 import { QuoteRefreshService } from '../../services/quote-refresh.service';
 import { CartService } from '../../services/cart.service';
@@ -50,6 +51,7 @@ export class QuoteDetailsComponent implements OnInit {
     private quoteDataService = inject(QuoteDataService);
     private toastService = inject(ToastService);
     private quoteRefreshService = inject(QuoteRefreshService);
+    private discountIncentiveStateService = inject(DiscountIncentiveStateService);
 
     isSaving: boolean = false;
     isLoading: boolean = true; // Start in loading state
@@ -845,11 +847,11 @@ export class QuoteDetailsComponent implements OnInit {
         this.lastValidTermStart = this.termStartInput;
         this.lastValidTermEnd = this.termEndDate;
         const now = Date.now();
-        if (now - QuoteDetailsComponent.lastInitTime < 500) {
-            console.warn('⚠️ [QuoteDetails] Duplicate Init detected within 500ms! Skipping execution.');
-            return;
-        }
         QuoteDetailsComponent.lastInitTime = now;
+
+        // Clear Discount/Incentive state when entering from Discovery
+        this.discountIncentiveStateService.clearState();
+        console.log('🧹 [QuoteDetails] Cleared Discount/Incentive state on entry from Discovery');
 
         // Initially default Quote Start Date to today
         this.startDate = this.toIsoDateString(new Date());
@@ -939,7 +941,7 @@ export class QuoteDetailsComponent implements OnInit {
                             this.productName = 'No Products';
                             this.productId = null;
                             this.bundleQuoteLineId = null;
-                            
+
                             // Redirect to opportunities page if no products found
                             this.toastService.show('No products found in this quote. Redirecting to opportunities...', 'info');
                             this.router.navigate(['/']);
@@ -1180,6 +1182,24 @@ export class QuoteDetailsComponent implements OnInit {
 
                     // First pass: collect all matching items for this period
                     const periodItems: any[] = [];
+                    
+                    // Collect valid discount values for this period to differentiate between periods with same dates
+                    const periodDiscountValues = new Set<number>(
+                        (period.activeDiscounts || [])
+                            .map((ad: any) => parseFloat(ad.value))
+                            .filter((v: number) => !isNaN(v) && v > 0)
+                    );
+
+                    // Get sets for explicit matching
+                    const bulkIds = this.discountsIncentives?.bulkUploadedProductIds || new Set<string>();
+                    const individualProductIds = new Set<string>(
+                        Array.from(this.discountsIncentives?.persistentSelectedIndividuals?.keys() || [])
+                    );
+                    const selectedGroupNames = new Set<string>(
+                        Array.from(this.discountsIncentives?.persistentSelectedGroups?.keys() || [])
+                            .map(name => name.toLowerCase())
+                    );
+
                     this.previewData.QuoteLineItems.records.forEach((item: any) => {
                         if (item.Id && matchedItemIds.has(item.Id)) return;
                         const isBundle = item.Product2Id === this.productId || (item.Product2?.Id === this.productId);
@@ -1187,9 +1207,19 @@ export class QuoteDetailsComponent implements OnInit {
 
                         const itemDiscount = parseFloat(item.Discount) || 0;
                         const itemIncentive = parseFloat(item.Incentive__c) || 0;
+                        const productId = item.Product2Id || item.Product2?.Id || '';
+                        const productName = (item.Product2?.Name || '').toLowerCase();
 
-                        // Discount Period should only show items with Discount > 0 and Incentive == 0
-                        if (itemDiscount === 0 || itemIncentive > 0) return;
+                        const isBulk = productId && bulkIds.has(productId);
+                        const isIndividualSeletion = productId && individualProductIds.has(productId);
+                        const isGroupSelection = productName && selectedGroupNames.has(productName);
+
+                        // Discount Period match criteria:
+                        // 1. Must have Incentive == 0
+                        if (itemIncentive > 0) return;
+                        
+                        // 2. Must have a discount OR be a explicitly uploaded/selected item (which might have 0% yet)
+                        if (itemDiscount === 0 && !isBulk && !isIndividualSeletion && !isGroupSelection) return;
 
                         const itemStartStr = item.StartDate;
                         const itemEndStr = item.EndDate;
@@ -1199,35 +1229,49 @@ export class QuoteDetailsComponent implements OnInit {
                             const itemEndNorm = itemEndStr ? itemEndStr.substring(0, 10) : '';
                             const periodEndNorm = endDateStr ? endDateStr.substring(0, 10) : '';
 
-                            let matches = false;
+                            let dateMatches = false;
                             if (periodEndNorm && itemEndNorm) {
-                                matches = (itemStartNorm === periodStartNorm && itemEndNorm === periodEndNorm);
+                                dateMatches = (itemStartNorm === periodStartNorm && itemEndNorm === periodEndNorm);
                             } else {
                                 const itemStart = new Date(itemStartStr).getTime();
-                                matches = pEnd ? (itemStart >= pStart.getTime() && itemStart <= pEnd) : (itemStart >= pStart.getTime());
+                                dateMatches = pEnd ? (itemStart >= pStart.getTime() && itemStart <= pEnd) : (itemStart >= pStart.getTime());
                             }
 
-                            if (matches) {
+                            if (dateMatches) {
+                                // If it's an explicit selection (Bulk/Individual/Group), it belongs here (assigned via dates)
+                                if (isBulk || isIndividualSeletion || isGroupSelection) {
+                                    periodItems.push(item);
+                                    return;
+                                }
+
+                                // Otherwise, if it's an overall discount period (Groups), check if value matches
+                                if (periodDiscountValues.size > 0 && !periodDiscountValues.has(itemDiscount)) {
+                                    return;
+                                }
                                 periodItems.push(item);
                             }
                         }
                     });
 
                     // Second pass: classify each item
-                    const bulkIds = this.discountsIncentives?.bulkUploadedProductIds || new Set<string>();
-
                     periodItems.forEach((item: any) => {
                         if (item.Id) matchedItemIds.add(item.Id);
                         const productName = (item.Product2?.Name || '').toLowerCase();
                         const productId = item.Product2Id || item.Product2?.Id;
 
                         const isBulkUploaded = productId && bulkIds.has(productId);
+                        const isIndividualInUI = productId && individualProductIds.has(productId);
+                        const isGroup = groupProductNames.has(productName);
 
-                        if (isBulkUploaded) {
-                            uploadedItems.push(item);
-                        } else if (groupProductNames.has(productName)) {
+                        if (isGroup) {
                             groupItems.push(item);
+                        } else if (isIndividualInUI) {
+                            // PRIORITIZE INDIVIDUAL Selection over Bulk (First Bug Fix)
+                            individualItems.push(item);
+                        } else if (isBulkUploaded) {
+                            uploadedItems.push(item);
                         } else {
+                            // Default fallback
                             individualItems.push(item);
                         }
                     });
@@ -1242,9 +1286,8 @@ export class QuoteDetailsComponent implements OnInit {
                 endDate: endDateStr ? this.formatDateForDisplay(endDateStr) : '',
                 months: period.months || this.commitmentPeriods[index]?.months,
                 amount: period.amount,
-                individualItems,
+                bulkIndividualItems: [...individualItems, ...uploadedItems],
                 groupItems,
-                uploadedItems
             });
         });
 
@@ -1287,21 +1330,47 @@ export class QuoteDetailsComponent implements OnInit {
                             const itemEndNorm = itemEndStr ? itemEndStr.substring(0, 10) : '';
                             const periodEndNorm = endDateStr ? endDateStr.substring(0, 10) : '';
 
-                            let matches = false;
+                            // Collect valid incentive values for this period to differentiate between identical date periods
+                            const periodIncentiveValues = new Set<number>(
+                                (period.activeIncentives || [])
+                                    .map((ai: any) => parseFloat(ai.incentiveAmount))
+                                    .filter((v: number) => !isNaN(v) && v > 0)
+                            );
+
+                            let dateMatches = false;
                             if (periodEndNorm && itemEndNorm) {
-                                matches = (itemStartNorm === periodStartNorm && itemEndNorm === periodEndNorm);
+                                dateMatches = (itemStartNorm === periodStartNorm && itemEndNorm === periodEndNorm);
                             } else {
                                 const itemStart = new Date(itemStartStr).getTime();
-                                matches = pEnd ? (itemStart >= pStart.getTime() && itemStart <= pEnd) : (itemStart >= pStart.getTime());
+                                dateMatches = pEnd ? (itemStart >= pStart.getTime() && itemStart <= pEnd) : (itemStart >= pStart.getTime());
                             }
 
-                            if (matches) {
+                            if (dateMatches) {
+                                // If we have specific incentives in this period, only match if the item's incentive is one of them.
+                                if (periodIncentiveValues.size > 0 && !periodIncentiveValues.has(itemIncentive)) {
+                                    return;
+                                }
+
                                 if (item.Id) matchedItemIds.add(item.Id);
                                 const productName = (item.Product2?.Name || '').toLowerCase();
-                                const isGroup = groupProductNames.has(productName);
+                                const productId = item.Product2Id || item.Product2?.Id;
+
+                                const individualIds = this.discountsIncentives?.persistentSelectedIndividuals || new Map<string, any>();
+                                const bulkIds = this.discountsIncentives?.bulkUploadedProductIds || new Set<string>();
                                 
-                                if (isGroup) groupItems.push(item);
-                                else individualItems.push(item);
+                                const isGroup = groupProductNames.has(productName);
+                                const isIndividualInUI = productId && individualIds.has(productId);
+                                const isBulkUploaded = productId && bulkIds.has(productId);
+
+                                if (isGroup) {
+                                    groupItems.push(item);
+                                } else if (isIndividualInUI) {
+                                    individualItems.push(item);
+                                } else if (isBulkUploaded) {
+                                    uploadedItems.push(item);
+                                } else {
+                                    individualItems.push(item);
+                                }
                             }
                         }
                     });
@@ -1310,15 +1379,14 @@ export class QuoteDetailsComponent implements OnInit {
 
             previews.push({
                 type: 'incentive',
-                name: 'Incentive',
-                displayName: 'Incentive',
+                name: 'Incentives',
+                displayName: 'Incentives',
                 startDate: startDateStr ? this.formatDateForDisplay(startDateStr) : '',
                 endDate: endDateStr ? this.formatDateForDisplay(endDateStr) : '',
                 months: period.months,
                 amount: period.amount,
-                individualItems,
+                bulkIndividualItems: [...individualItems, ...uploadedItems],
                 groupItems,
-                uploadedItems
             });
         });
 
@@ -1391,9 +1459,8 @@ export class QuoteDetailsComponent implements OnInit {
                     endDate: this.formatDateForDisplay(endDate),
                     months: months,
                     amount: amount,
-                    individualItems: individualItems,
+                    bulkIndividualItems: [...individualItems, ...uploadedItems],
                     groupItems: groupItems,
-                    uploadedItems: uploadedItems
                 });
 
                 currentStartDate = new Date(endDate);
@@ -1407,19 +1474,19 @@ export class QuoteDetailsComponent implements OnInit {
     // Build list of products without discounts or incentives
     buildProductsWithoutDiscounts(): any[] {
         const productsWithoutDiscounts: any[] = [];
-        
+
         if (this.previewData?.QuoteLineItems?.records) {
             this.previewData.QuoteLineItems.records.forEach((item: any) => {
                 const itemDiscount = (item.Discount != null) ? parseFloat(item.Discount) : 0;
                 const itemIncentive = (item.Incentive__c != null) ? parseFloat(item.Incentive__c) : 0;
-                
+
                 // Only include items that have NO discount AND NO incentive
                 if (itemDiscount === 0 && itemIncentive === 0) {
                     productsWithoutDiscounts.push(item);
                 }
             });
         }
-        
+
         return productsWithoutDiscounts;
     }
 
@@ -2065,6 +2132,8 @@ export class QuoteDetailsComponent implements OnInit {
                 if (!skipFeedback) {
                     this.toastService.show('Quote Data Saved Successfully!', 'success');
                     this.showSuccessPopup = true;
+                    // Clear state after successful submit
+                    this.discountIncentiveStateService.clearState();
                 }
                 if (onSuccess) onSuccess();
             },
@@ -2772,11 +2841,11 @@ export class QuoteDetailsComponent implements OnInit {
             const startObj = this.parseDate(this.termStartInput);
             let years = Math.round(this.calculateSubscriptionTerm(this.termStartInput, this.termEndDate) / 12);
             if (years < 1) years = 1;
-            
+
             const expectedEnd = new Date(startObj);
             expectedEnd.setFullYear(expectedEnd.getFullYear() + years);
             expectedEnd.setDate(expectedEnd.getDate() - 1);
-            
+
             if (this.toIsoDateString(expectedEnd) !== this.termEndDate) {
                 this.toastService.show('Error: For Yearly periods, the total duration must be exactly in full years.', 'error');
                 return false;

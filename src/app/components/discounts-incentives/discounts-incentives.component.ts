@@ -82,7 +82,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
     incentivePeriods = [
         {
             id: '1',
-            name: 'Incentive',
+            name: 'Incentives',
             timePeriod: 'Date range',
             startDate: '',
             endDate: '',
@@ -130,7 +130,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         const id = Date.now().toString();
         this.incentivePeriods.push({
             id: id,
-            name: 'Incentive',
+            name: 'Incentives',
             timePeriod: 'Date range',
             startDate: '',
             endDate: '',
@@ -146,7 +146,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
             if (this.activeIncentivePeriodId === id) {
                 this.activeIncentivePeriodId = this.incentivePeriods[0].id;
             }
-            this.incentivePeriods.forEach((p, index) => p.name = 'Incentive');
+            this.incentivePeriods.forEach((p, index) => p.name = 'Incentives');
             this.saveCurrentState(); // Auto-save on period change
         }
     }
@@ -170,7 +170,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
     }
 
     // Dropdown Options
-    incentiveTypeOptions = ['Select', 'Incentive type 1', 'Incentive type 2'];
+    incentiveTypeOptions = ['Select', 'Incentives type 1', 'Incentives type 2'];
 
 
 
@@ -316,48 +316,49 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
 
     private loadPersistedState() {
         // Check if this is a page refresh by looking at navigation type
-        const isPageRefresh = (performance.navigation && performance.navigation.type === 1) || 
-                             (performance.getEntriesByType && 
-                              (performance.getEntriesByType('navigation')[0] as any)?.type === 'reload');
-        
+        const isPageRefresh = (performance.navigation && performance.navigation.type === 1) ||
+            (performance.getEntriesByType &&
+                (performance.getEntriesByType('navigation')[0] as any)?.type === 'reload');
+
         if (isPageRefresh) {
             // Clear state on page refresh and start fresh
             this.discountIncentiveStateService.clearState();
             console.log('🔄 Page refresh detected - clearing discount/incentive state');
             return;
         }
-        
+
         // Load persisted state for tab switches
-        const state = this.discountIncentiveStateService.loadState();
-        
+        const quoteId = this.contextService.currentContext?.quoteId;
+        const state = this.discountIncentiveStateService.loadState(quoteId);
+
         // Only restore if state has meaningful data (not just defaults)
         const hasData = state.discountPeriods.some(p => p.startDate || p.endDate || p.activeDiscounts.length > 0) ||
-                       state.incentivePeriods.some(p => p.startDate || p.endDate || p.activeIncentives.length > 0) ||
-                       state.discountForm.granularity !== 'Select' ||
-                       state.incentiveForm.type !== 'Select';
-        
+            state.incentivePeriods.some(p => p.startDate || p.endDate || p.activeIncentives.length > 0) ||
+            state.discountForm.granularity !== 'Select' ||
+            state.incentiveForm.type !== 'Select';
+
         if (hasData) {
             console.log('📋 Restoring discount/incentive state from tab switch');
-            
+
             // Restore form data
             this.discountForm = { ...state.discountForm };
             this.incentiveForm = { ...state.incentiveForm };
-            
+
             // Restore periods
             this.discountPeriods = [...state.discountPeriods];
             this.incentivePeriods = [...state.incentivePeriods];
             this.activeDiscountPeriodId = state.activeDiscountPeriodId;
             this.activeIncentivePeriodId = state.activeIncentivePeriodId;
-            
+
             // Restore active tab
             this.activeTab = state.activeTab;
-            
+
             // Restore selection state
             this.persistentSelectedGroups = new Map(state.persistentSelectedGroups);
             this.persistentSelectedIndividuals = new Map(state.persistentSelectedIndividuals);
             this.persistentIncentiveGroups = new Map(state.persistentIncentiveGroups);
             this.bulkUploadedProductIds = new Set(state.bulkUploadedProductIds || []);
-            
+
             // Restore product data if available
             if (state.productGroups.length > 0) {
                 this.productGroups = [...state.productGroups];
@@ -376,6 +377,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
     }
 
     private saveCurrentState() {
+        const quoteId = this.contextService.currentContext?.quoteId;
         this.discountIncentiveStateService.saveState({
             discountForm: this.discountForm,
             incentiveForm: this.incentiveForm,
@@ -392,7 +394,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
             individualProducts: this.individualProducts,
             dropdownOptions: this.dropdownOptions,
             selectedDropdownOption: this.selectedDropdownOption
-        });
+        }, quoteId);
     }
 
     ngOnChanges(changes: any) {
@@ -430,7 +432,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
 
             const period = {
                 id: (pIndex++).toString(),
-                name: 'Incentive',
+                name: 'Incentives',
                 timePeriod: 'Date range',
                 startDate: startDate || '',
                 endDate: endDate || '',
@@ -449,7 +451,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         if (this.incentivePeriods.length > 0) {
             this.activeIncentivePeriodId = this.incentivePeriods[0].id;
         }
-        
+
         this._existingLinesLoaded = true;
     }
 
@@ -459,7 +461,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         ];
         this.activeDiscountPeriodId = '1';
         this.incentivePeriods = [
-            { id: '1', name: 'Incentive', timePeriod: 'Date range', startDate: '', endDate: '', activeIncentives: [] }
+            { id: '1', name: 'Incentives', timePeriod: 'Date range', startDate: '', endDate: '', activeIncentives: [] }
         ];
         this.activeIncentivePeriodId = '1';
         this.activeTab = 'discounts';
@@ -564,7 +566,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
     applyFilters() {
         this.individualCurrentOffset = 0;
         const criteria = this.getFilterCriteria();
-        
+
         // If we have active Region/Billing filters, use the faceted filter API
         if (criteria.length > 0) {
             this.executeFacetedFilter();
@@ -578,7 +580,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         this.activeTab = tab;
         this.periodDropdownOpen = false;
         this.saveCurrentState(); // Auto-save on tab change
-        
+
         if (tab === 'incentives') {
             const quoteId = this.contextService.currentContext?.quoteId;
             if (quoteId) {
@@ -641,7 +643,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         if (!period.startDate || !period.endDate) return;
 
         if (period.endDate < period.startDate) {
-            this.toastService.show('Incentive End Date cannot be earlier than Start Date.', 'warning');
+            this.toastService.show('Incentives End Date cannot be earlier than Start Date.', 'warning');
             period.endDate = '';
         }
 
@@ -662,7 +664,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         // Date Validation: Ensure start and end dates are selected for the active period
         const currentPeriod = source === 'discounts' ? this.activeDiscountPeriod : this.activeIncentivePeriod;
         if (!currentPeriod || !currentPeriod.startDate || !currentPeriod.endDate) {
-            const periodLabel = source === 'discounts' ? 'Discount' : 'Incentive';
+            const periodLabel = source === 'discounts' ? 'Discount' : 'Incentives';
             this.toastService.show(`Please select both Start and End dates for the ${periodLabel} Period first.`, 'warning');
             return;
         }
@@ -706,20 +708,33 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
             this.productGroups.forEach(g => {
                 g.selected = this.persistentIncentiveGroups.has(g.id);
                 // If it was selected, ensure the object in the map is updated with any fresh data
-                if (g.selected) this.persistentIncentiveGroups.set(g.id, g);
+                if (g.selected) {
+                    this.persistentIncentiveGroups.set(g.id, g);
+                } else {
+                    g.incentiveAmount = 0; // Reset stale value
+                }
             });
             this.individualProducts.forEach(p => {
                 p.selected = false;
+                p.incentiveAmount = 0; // Reset stale value
             });
         } else {
             // Discounts track both
             this.productGroups.forEach(g => {
                 g.selected = this.persistentSelectedGroups.has(g.id);
-                if (g.selected) this.persistentSelectedGroups.set(g.id, g);
+                if (g.selected) {
+                    this.persistentSelectedGroups.set(g.id, g);
+                } else {
+                    g.discount = 0; // Reset stale value
+                }
             });
             this.individualProducts.forEach(p => {
                 p.selected = this.persistentSelectedIndividuals.has(p.id);
-                if (p.selected) this.persistentSelectedIndividuals.set(p.id, p);
+                if (p.selected) {
+                    this.persistentSelectedIndividuals.set(p.id, p);
+                } else {
+                    p.discount = 0; // Reset stale value
+                }
             });
         }
     }
@@ -751,7 +766,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
 
                 // Store all classifications for mapping bubbles
                 this.allClassifications = records;
-                
+
                 // 1. Get Classifications for the bundle (Groups Tab) - only those without child bundles
                 const classifications = records.filter((r: any) => r.It_has_Bundle_Products__c === false);
                 this.mapNewProductData(classifications);
@@ -857,7 +872,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
                 // Handle various response formats (result, products, items, or direct array)
                 const newProducts = data.result || data.products || data.items || (Array.isArray(data) ? data : []);
                 this.individualTotalCount = data.totalCount || data.totalSize || (Array.isArray(newProducts) ? newProducts.length : 0);
-                
+
                 console.log(`✅ [loadIndividualProducts] Fetched ${newProducts.length} products. Total: ${this.individualTotalCount}`);
 
                 // Map to UI model
@@ -927,7 +942,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         // Increment offset
         this.individualCurrentOffset += Number(this.individualPageSize);
         console.log('➡️ [Pagination] Moving to next page. New Offset:', this.individualCurrentOffset);
-        
+
         if (this.productSearchTerm) {
             this.executeSearch();
         } else {
@@ -940,7 +955,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         if (this.individualCurrentOffset >= pageSize) {
             this.individualCurrentOffset -= pageSize;
             console.log('⬅️ [Pagination] Moving to previous page. New Offset:', this.individualCurrentOffset);
-            
+
             if (this.productSearchTerm) {
                 this.executeSearch();
             } else {
@@ -1016,7 +1031,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         }
 
         // Use the classification ID of the selected group (dropdown option)
-        const classificationId = this.selectedDropdownOption?.classificationId 
+        const classificationId = this.selectedDropdownOption?.classificationId
             || this.selectedDropdownOption?.Id
             || this.categoryId;
 
@@ -1325,10 +1340,10 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
             this.persistentSelectedGroups = new Map(this.snapshotSelectedGroups);
             this.persistentSelectedIndividuals = new Map(this.snapshotSelectedIndividuals);
             this.persistentIncentiveGroups = new Map(this.snapshotIncentiveGroups);
-            
+
             // Sync the .selected property for items currently in view
             this.syncSelectionState();
-            
+
             console.log('🔄 [Selection Management] Cancelled selection. Rolled back to previous state.');
         } else {
             console.log('✅ [Selection Management] Confirmed selection.');
@@ -1456,7 +1471,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
             } else {
                 map = this.productTab === 'groups' ? this.persistentSelectedGroups : this.persistentSelectedIndividuals;
             }
-            
+
             return Array.from(map.values()).sort((a, b) => {
                 const valA = a[this.sortConfig.column];
                 const valB = b[this.sortConfig.column];
@@ -1751,20 +1766,20 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
                 const endTime = performance.now();
                 const responseTimeSecs = ((endTime - startTime) / 1000).toFixed(2);
                 this.toastService.show(`${selectedItems.length} products uploaded successfully (${responseTimeSecs}s)`, 'success');
-                
+
                 // Track bulk uploaded Product2 IDs for preview classification
                 selectedItems.forEach(item => {
                     if (item.id) this.bulkUploadedProductIds.add(item.id);
                 });
-                
+
                 // Add to UI summary
                 this.addDiscountToUI('Bulk Upload', 0, selectedItems.length, 'CSV Data', selectedItems.length, responseTimeSecs);
-                
+
                 this.quoteRefreshService.setRefreshNeeded(true);
                 this.saveCurrentState(); // Persist bulk IDs
                 this.dataFetched = false;
-                this.showProductSelector = false; 
-                this.router.navigate(['/configure-quote']); 
+                this.showProductSelector = false;
+                this.router.navigate(['/configure-quote']);
                 console.log('✅ Bulk Upload complete. Redirecting to Configure Quote.');
             },
             error: (err) => {
@@ -1888,9 +1903,9 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
                     this.dataFetched = false;
                     // Signal that quote line items need refresh due to discount changes
                     this.quoteRefreshService.setRefreshNeeded(true);
-                    
+
                     this.showProductSelector = false;
-                    this.router.navigate(['/configure-quote']); 
+                    this.router.navigate(['/configure-quote']);
                 },
                 error: (err: any) => {
                     console.error('Failed to update quote', err);
@@ -1901,7 +1916,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
     private addDiscountToUI(granularity: string, groupCount: number, individualCount: number, value: string, committedProductCount: number = 0, responseTimeSecs?: string) {
         // Update the running quota
         this.usedQuotaCount += committedProductCount;
-        
+
         let title = `${granularity} Discount - Flat Rate (%)`;
         let subtext = `${groupCount} Product Groups, ${individualCount} Products ${responseTimeSecs ? '(' + responseTimeSecs + 's)' : ''}`;
 
