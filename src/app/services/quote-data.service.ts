@@ -13,6 +13,7 @@ export interface QuoteData {
     primaryContactName: string | null;
     salesChannel: string | null;
     productName: string | null; // Added productName for UI display
+    productId: string | null;
     categoryId: string | null;
 }
 
@@ -32,6 +33,7 @@ export class QuoteDataService {
         primaryContactName: null,
         salesChannel: null,
         productName: null,
+        productId: null,
         categoryId: null
     });
 
@@ -59,6 +61,7 @@ export class QuoteDataService {
             primaryContactName: null,
             salesChannel: null,
             productName: null,
+            productId: null,
             categoryId: null
         });
     }

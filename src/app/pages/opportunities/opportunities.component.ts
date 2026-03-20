@@ -99,34 +99,16 @@ export class OpportunitiesComponent implements OnInit {
             next: (response) => {
                 const records = response.records || [];
 
-                // Now we need to get Account and Owner names for each opportunity
-                if (records.length === 0) {
-                    this.opportunities = [];
-                    this.updatePagination();
-                    return;
-                }
-
-                // Fetch Account and Owner details
-                this.sfApi.getOpportunitiesDetails(records.map((r: any) => r.Id)).subscribe({
-                    next: (detailsResponse) => {
-                        const detailedRecords = detailsResponse.records || [];
-                        this.rawDetailedRecords = detailedRecords;
-
-                        this.opportunities = detailedRecords.map((record: any) => ({
-                            id: record.Id,
-                            name: record.Name,
-                            accountName: record.Account?.Name || '-',
-                            owner: record.Owner?.Name || '-',
-                            amount: record.Amount != null ? `$${record.Amount.toLocaleString()}` : '-',
-                            closeDate: record.CloseDate || '-'
-                        }));
-
-                        this.updatePagination();
-                    },
-                    error: (err) => {
-                        this.updatePagination();
-                    }
-                });
+                this.rawDetailedRecords = records;
+                this.opportunities = records.map((record: any) => ({
+                    id: record.Id,
+                    name: record.Name,
+                    accountName: record.Account?.Name || '-',
+                    owner: record.Owner?.Name || '-',
+                    amount: record.Amount != null ? `$${record.Amount.toLocaleString()}` : '-',
+                    closeDate: record.CloseDate || '-'
+                }));
+                this.updatePagination();
             },
             error: (err) => {
                 this.updatePagination();
@@ -135,31 +117,40 @@ export class OpportunitiesComponent implements OnInit {
     }
 
     createQuote(opp: any): void {
-        const rawOpp = this.rawDetailedRecords.find((r: any) => r.Id === opp.id);
-        if (rawOpp) {
-            console.log('[Opportunities] Selected Opportunity:', rawOpp);
+        this.loadingService.show();
+        this.sfApi.getOpportunityDetails(opp.id).pipe(
+            finalize(() => this.loadingService.hide())
+        ).subscribe({
+            next: (rawOpp: any) => {
+                if (rawOpp) {
+                    console.log('[Opportunities] Detailed Opportunity for Quote:', rawOpp);
 
-            // Extract Primary Contact from subquery
-            let contactName = null;
-            if (rawOpp.OpportunityContactRoles && rawOpp.OpportunityContactRoles.records && rawOpp.OpportunityContactRoles.records.length > 0) {
-                contactName = rawOpp.OpportunityContactRoles.records[0].Contact?.Name;
+                    // Extract Primary Contact from subquery
+                    let contactName = null;
+                    if (rawOpp.OpportunityContactRoles && rawOpp.OpportunityContactRoles.records && rawOpp.OpportunityContactRoles.records.length > 0) {
+                        contactName = rawOpp.OpportunityContactRoles.records[0].Contact?.Name;
+                    }
+
+                    this.quoteService.setQuoteData({
+                        opportunityId: rawOpp.Id,
+                        opportunityName: rawOpp.Name,
+                        accountId: rawOpp.AccountId,
+                        accountName: rawOpp.Account?.Name,
+                        website: rawOpp.Account?.Website,
+                        pricebook2Id: rawOpp.Pricebook2Id,
+                        primaryContactName: contactName,
+                        salesChannel: rawOpp.Sales_Channel__c || 'Direct'
+                    });
+
+                    this.rcaApi.getProducts();
+                    this.router.navigate(['/products'], {
+                        queryParams: { opportunityId: rawOpp.Id }
+                    });
+                }
+            },
+            error: (err) => {
+                console.error('Error fetching opportunity details:', err);
             }
-
-            this.quoteService.setQuoteData({
-                opportunityId: rawOpp.Id,
-                opportunityName: rawOpp.Name,
-                accountId: rawOpp.AccountId,
-                accountName: rawOpp.Account?.Name,
-                website: rawOpp.Account?.Website, // Added website mapping
-                pricebook2Id: rawOpp.Pricebook2Id,
-                primaryContactName: contactName, // Added contact mapping
-                salesChannel: rawOpp.Sales_Channel__c || 'Direct'
-            });
-        }
-
-        this.rcaApi.getProducts();
-        this.router.navigate(['/products'], {
-            queryParams: { opportunityId: opp.id }
         });
     }
 

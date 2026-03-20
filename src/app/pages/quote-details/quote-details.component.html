@@ -126,7 +126,7 @@
                 <div *ngIf="activeTab === 'discounts'" class="w-full">
                     <app-discounts-incentives *ngIf="!isLookerSubscription" [productId]="productId"
                         [parentQuoteLineId]="bundleQuoteLineId" [categoryId]="categoryId" [quoteStartDate]="startDate"
-                        [quoteEndDate]="contractEndDate"
+                        [quoteEndDate]="contractEndDate" [isLookerSubscription]="isLookerSubscription"
                         [existingLineItems]="existingQuoteLineItems"></app-discounts-incentives>
 
                     <!-- Looker Subscription Flow -->

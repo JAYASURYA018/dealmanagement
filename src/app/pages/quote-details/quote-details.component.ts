@@ -893,108 +893,35 @@ export class QuoteDetailsComponent implements OnInit {
                 this.productName = quoteData.productName;
                 this.initializeLookerDataIfNeeded();
             }
+            if (quoteData.productId) {
+                this.productId = quoteData.productId;
+            }
             if (quoteData.categoryId) {
                 this.categoryId = quoteData.categoryId;
             }
         });
 
-        const quoteId = this.contextService.currentContext?.quoteId;
-        if (quoteId && quoteId.startsWith('0Q0')) {
-            this.sfApi.getQuotePreview(quoteId).subscribe({
-                next: (res) => {
-                    if (res.records && res.records.length > 0) {
-                        const quote = res.records[0];
-
-
-                        if (quote.QuoteNumber) {
-                            const formatted = `Q-${quote.QuoteNumber}`;
-                            this.quoteDataService.setQuoteData({ quoteNumber: formatted });
-                            this.quoteId = formatted;
-                        }
-
-
-                        if (quote.Account && quote.Account.Website) {
-                            this.website = quote.Account.Website;
-                        }
-
-                        if (quote.Opportunity) {
-                            if (quote.Opportunity.Sales_Channel__c) {
-                                this.salesChannel = quote.Opportunity.Sales_Channel__c;
-                            }
-                            // Prefer relationship Name
-                            if (quote.Opportunity.Primary_Contact__r && quote.Opportunity.Primary_Contact__r.Name) {
-                                this.primaryContactName = quote.Opportunity.Primary_Contact__r.Name;
-                            } else if (quote.Opportunity.Primary_Contact__c && !this.primaryContactName) {
-                                // Fallback only if we don't already have a name from somewhere else
-                                this.primaryContactName = quote.Opportunity.Primary_Contact__c;
-                            }
-                        }
-
-                        if (quote.QuoteLineItems?.records?.length > 0) {
-                            const lineItem = quote.QuoteLineItems.records[0];
-                            this.productName = lineItem.Product2?.Name || 'Product';
-                            this.productId = lineItem.Product2Id || lineItem.Product2?.Id;
-                            this.bundleQuoteLineId = lineItem.Id;
-                            this.bundlePricebookEntryId = lineItem.PricebookEntryId;
-                            this.existingQuoteLineItems = quote.QuoteLineItems.records;
-                        } else {
-                            this.productName = 'No Products';
-                            this.productId = null;
-                            this.bundleQuoteLineId = null;
-
-                            // Redirect to opportunities page if no products found
-                            this.toastService.show('No products found in this quote. Redirecting to opportunities...', 'info');
-                            this.router.navigate(['/']);
-                            return;
-                        }
-
-                        if (quote.Pricebook2Id) {
-                            this.pricebookId = quote.Pricebook2Id;
-                        }
-
-                        // Load existing Start Date from the record
-                        if (quote.StartDate) {
-                            this.startDate = quote.StartDate;
-                            // termStartInput intentionally left empty by default per user request
-                        }
-
-                        // Load existing Expiration Date from the record
-                        if (quote.ExpirationDate) {
-                            this.expirationDate = quote.ExpirationDate;
-                        } else {
-                            this.checkAndDefaultExpirationDate();
-                        }
-
-                        this.updateExpirationDate();
-                        this.updateBaselineStates();
-                        this.initializeLookerDataIfNeeded();
-                    }
-                    this.isLoading = false; // Data loaded
-                },
-                error: (err) => {
-                    /* Handle error silently or simplistic alert if needed */
-                    this.isLoading = false; // Stop loading on error
-                }
-            });
-        } else {
-            this.updateBaselineStates();
-            this.toastService.show('Invalid or missing quote ID. Redirecting...', 'error');
-            this.router.navigate(['/']);
-            this.isLoading = false; // No valid quote ID, stop loading
-        }
-
         this.contextService.context$.subscribe(ctx => {
             if (!this.accountName) this.accountName = ctx.accountName;
             if (!this.opportunityName) this.opportunityName = ctx.opportunityName;
-            this.website = ctx.website;
+            if (ctx.website) this.website = ctx.website;
             this.primaryContactName = ctx.primaryContactName;
             this.salesChannel = ctx.salesChannel;
-            this.quoteId = ctx.quoteId || 'Q-1234';
+            
+            // Prefer human-readable quoteNumber (if it doesn't look like a Salesforce ID)
+            if (ctx.quoteId && (!this.quoteId || this.quoteId.startsWith('0Q0'))) {
+                this.quoteId = ctx.quoteId;
+            }
+            
             this.isGCP = !!ctx.isGCPFamily;
         });
+        
         // Delay the check slightly to ensure product details (and isLookerSubscription) are resolved
         setTimeout(() => {
             this.initializeLookerDataIfNeeded();
+            this.updateExpirationDate();
+            this.updateBaselineStates();
+            this.isLoading = false;
         }, 100);
     }
 
@@ -1012,6 +939,12 @@ export class QuoteDetailsComponent implements OnInit {
                     this.loadBillingFrequency(picklists);
                     this.loadTermStartsOn(picklists);
 
+                    // Also fetch Product2 picklists specifically for the subscription flow
+                    // This fulfills the requirement to call getProductPicklistValues in the subscription flow.
+                    this.sfApi.getProductPicklistValues().subscribe({
+                        next: (pRes) => console.log('✅ Product2 Picklist values loaded for subscription flow.'),
+                        error: (err) => console.error('Error loading Product2 picklists:', err)
+                    });
                 },
                 error: err => console.error('Error loading picklists:', err)
             });

@@ -25,6 +25,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
     @Input() categoryId: string | null = null;
     @Input() quoteStartDate: string | null = null;
     @Input() quoteEndDate: string | null = null;
+    @Input() isLookerSubscription: boolean = false;
     @Input() set existingLineItems(items: any[]) {
         if (items && items.length > 0) {
             this.loadFromExisting(items);
@@ -581,17 +582,6 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         this.activeTab = tab;
         this.periodDropdownOpen = false;
         this.saveCurrentState(); // Auto-save on tab change
-
-        if (tab === 'incentives') {
-            const quoteId = this.contextService.currentContext?.quoteId;
-            if (quoteId) {
-                // Fetch bundle quote line items when switching to incentives tab as requested
-                this.salesforceApiService.getBundleQuoteLineItems(quoteId).subscribe({
-                    next: (res) => console.log('✅ [Incentive Tab] Bundle Line Items fetched:', res),
-                    error: (err) => console.error('❌ [Incentive Tab] Failed to fetch bundle line items:', err)
-                });
-            }
-        }
     }
 
     // Dropdown Handlers with auto-save
@@ -686,8 +676,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         this.showProductSelector = true;
         // Always start on Product Groups tab
         this.productTab = 'groups';
-        // Load picklist filter options (Region, Billing Freq) if not yet loaded
-        this.loadPicklistOptions();
+        // Redundant call removed - picklists only needed for individual tab if subscription
         if (this.productId) {
             // Always re-fetch if productGroups is empty OR coming from incentives and not yet loaded
             if (!this.dataFetched || this.productGroups.length === 0) {
@@ -982,6 +971,12 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
             this.loadIndividualProducts();
             return;
         }
+
+        // As requested: clear existing filters when performing a global search
+        this.selectedRegion = null;
+        this.selectedBillingFreq = null;
+        this.regionSearchText = '';
+        this.billingSearchText = '';
 
         this.individualCurrentOffset = 0; // Reset pagination offset on new search
         this.executeSearch();
@@ -1419,7 +1414,8 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
 
     // Picklist Filter Methods
     loadPicklistOptions() {
-        // Only load once unless specifically forced or needed
+        // Only load for subscription flow once unless specifically forced or needed
+        if (!this.isLookerSubscription) return; 
         if (this.picklistLoaded || this.isPicklistLoading) return;
 
         this.isPicklistLoading = true;
@@ -1491,7 +1487,13 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         this.showProductSelector = false;
         // Reset search/filters when closing
         this.productSearchTerm = '';
+        this.bundleSearchTerm = '';
+        this.dropdownSearchText = '';
         this.filterQuery = '';
+        this.selectedRegion = null;
+        this.selectedBillingFreq = null;
+        this.regionSearchText = '';
+        this.billingSearchText = '';
     }
 
     switchProductTab(tab: 'groups' | 'individual') {

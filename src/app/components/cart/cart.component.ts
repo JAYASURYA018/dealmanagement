@@ -101,10 +101,13 @@ export class CartComponent implements AfterViewInit, OnChanges {
                 // Extract QuoteNumber and other details if needed from the Quote
                 if (quoteDetails && quoteDetails.QuoteNumber) {
                     const formatted = `Q-${quoteDetails.QuoteNumber}`;
+                    const firstItem = cartItems[0] as any;
                     this.quoteDataService.setQuoteData({
                         quoteId: quoteDetails.Id,
                         quoteNumber: formatted,
-                        categoryId: cartItems[0] ? (cartItems[0] as any).categoryId : null
+                        productId: firstItem ? firstItem.id : null,
+                        productName: firstItem ? firstItem.name : 'No Products',
+                        categoryId: firstItem ? firstItem.categoryId : null
                     });
                 }
 

@@ -65,6 +65,7 @@ export class ProductDiscoveryComponent implements OnInit, AfterViewInit {
                     opportunityName: opp.Name,
                     accountId: opp.AccountId,
                     accountName: opp.Account?.Name, // Account name is now here
+                    website: opp.Account?.Website, // Map website here
                     pricebook2Id: opp.Pricebook2Id
                 });
 

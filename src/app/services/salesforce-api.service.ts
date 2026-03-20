@@ -81,7 +81,7 @@ export class SalesforceApiService {
         const token = this.contextService.accessToken;
         const baseUrl = this.contextService.apiBaseUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com';
 
-        const query = `SELECT Id, Name, AccountId, Account.Name, Pricebook2Id, Primary_Contact__c, Sales_Channel__c FROM Opportunity WHERE Id = '${opportunityId}'`;
+        const query = `SELECT Id, Name, AccountId, Account.Name, Account.Website, Pricebook2Id, Primary_Contact__c, Sales_Channel__c, (SELECT Contact.Name FROM OpportunityContactRoles) FROM Opportunity WHERE Id = '${opportunityId}'`;
         const encodedQuery = encodeURIComponent(query);
         const url = `${baseUrl}/services/data/v65.0/query/?q=${encodedQuery}`;
 
@@ -667,7 +667,7 @@ export class SalesforceApiService {
 
         // Build the WHERE clause with multiple IDs
         const idsString = ids.map(id => `'${id}'`).join(',');
-        const query = `SELECT Id, Name, Amount, CloseDate, AccountId, Account.Name, Owner.Name, Pricebook2Id, Primary_Contact__c, Sales_Channel__c, (SELECT Contact.Name FROM OpportunityContactRoles WHERE IsPrimary = true) FROM Opportunity WHERE Id IN (${idsString})`;
+        const query = `SELECT Id, Name, Amount, CloseDate, AccountId, Account.Name, Account.Website, Owner.Name, Pricebook2Id, Primary_Contact__c, Sales_Channel__c, (SELECT Contact.Name FROM OpportunityContactRoles WHERE IsPrimary = true) FROM Opportunity WHERE Id IN (${idsString})`;
         const encodedQuery = encodeURIComponent(query);
         const url = `${baseUrl}/services/data/v65.0/query/?q=${encodedQuery}`;
 
