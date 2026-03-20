@@ -793,6 +793,102 @@ export class SalesforceApiService {
     }
 
     /**
+     * Searches for products using the Connect CPQ Search API
+     */
+    searchProducts(searchTerm: string, categoryId: string | null, criteria: any[] = []): Observable<any> {
+        const method = 'SalesforceApiService.searchProducts';
+        const token = this.contextService.accessToken;
+        const baseUrl = this.contextService.apiBaseUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com';
+        const url = `${baseUrl}/services/data/v66.0/connect/cpq/products/search`;
+
+        const body: any = {
+            "filter": {
+                "criteria": criteria && criteria.length > 0 ? criteria : [
+                    {
+                        "property": "isActive",
+                        "operator": "eq",
+                        "value": true
+                    }
+                ]
+            },
+            "additionalFields": {
+                "Product2": {
+                    "fields": ["RCA_Sort_order__c"]
+                }
+            },
+            "limit": 999,
+            "searchTerm": searchTerm
+        };
+
+        if (categoryId) {
+            body.categoryId = categoryId;
+        }
+
+        console.log(`[API Request] ${method}`, { url, body });
+
+        const headers = new HttpHeaders({
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        });
+
+        return this.http.post(url, body, { headers }).pipe(
+            tap(response => console.log(`[API Response] ${method}`, response)),
+            catchError(err => this.handleError(method, err))
+        );
+    }
+
+    /**
+     * Searches for product groups (bundles) using the Connect CPQ Search API
+     */
+    searchProductGroups(searchTerm: string, categoryId: string | null): Observable<any> {
+        const method = 'SalesforceApiService.searchProductGroups';
+        const token = this.contextService.accessToken;
+        const baseUrl = this.contextService.apiBaseUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com';
+        const url = `${baseUrl}/services/data/v66.0/connect/cpq/products/search`;
+
+        const body: any = {
+            "filter": {
+                "criteria": [
+                    {
+                        "property": "isActive",
+                        "operator": "eq",
+                        "value": true
+                    },
+                    {
+                        "property": "Type",
+                        "operator": "eq",
+                        "value": "bundle"
+                    }
+                ]
+            },
+            "additionalFields": {
+                "Product2": {
+                    "fields": ["RCA_Sort_order__c"]
+                }
+            },
+            "limit": 600,
+            "productClassificationId": "11BDz00000000NvMAI",
+            "searchTerm": searchTerm
+        };
+
+        if (categoryId) {
+            body.categoryId = categoryId;
+        }
+
+        console.log(`[API Request] ${method}`, { url, body });
+
+        const headers = new HttpHeaders({
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        });
+
+        return this.http.post(url, body, { headers }).pipe(
+            tap(response => console.log(`[API Response] ${method}`, response)),
+            catchError(err => this.handleError(method, err))
+        );
+    }
+
+    /**
      * Fetches Bundle Details (Product Component Groups)
      */
     getBundleDetails(bundleId: string): Observable<any> {

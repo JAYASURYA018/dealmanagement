@@ -222,11 +222,12 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
     individualCurrentOffset: number = 0;
     individualTotalLoaded: number = 0;
     isIndividualLoading: boolean = false;
-    private currentProductReq: any;
-
     productSearchTerm: string = '';
+    private currentProductReq: any;
     rootClassificationId: string = '11BDz00000000NvMAI'; // ID for fetching sibling bundles (e.g., NvMAI)
     bundleCategoryId: string | null = null;
+    bundleSearchTerm: string = '';
+
 
     // Picklist Filter State (Region + Billing Frequency dropdowns)
     picklistLoaded = false;
@@ -893,7 +894,11 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
                         price: defaultPrice?.price || p.unitPrice || 0,
                         pricebookEntryId: defaultPrice?.priceBookEntryId || p.pricebookEntryId || '',
                         isBundleChild: false,
-                        sortOrder: p.additionalFields?.RCA_Sort_order__c
+                        // Access sort order from multiple possible locations
+                        sortOrder: p.additionalFields?.RCA_Sort_order__c || 
+                                   p.fields?.RCA_Sort_order__c || 
+                                   p.additionalFields?.Product2?.RCA_Sort_order__c ||
+                                   p.additionalFields?.Product2?.fields?.RCA_Sort_order__c
                     };
                 });
 
@@ -966,6 +971,10 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
 
     onProductSearch() {
         console.log('[onProductSearch] Triggered with term:', this.productSearchTerm);
+        
+        // Reset view mode to 'all' to ensure search results are visible
+        this.viewMode = 'all';
+        this.filterQuery = '';
 
         // If search term is empty, reload default products for current category
         if (!this.productSearchTerm) {
@@ -1054,11 +1063,17 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
             finalize(() => this.isIndividualLoading = false)
         ).subscribe({
             next: (data) => {
-                this.individualTotalCount = data.totalCount || data.totalSize || 0;
-                const newProducts = data.result || data.products || [];
+                const newProducts = data.result || data.products || data.items || [];
+                this.individualTotalCount = data.totalCount || data.count || (Array.isArray(newProducts) ? newProducts.length : 0);
+                
+                console.log(`✅ [executeFacetedFilter] Fetched ${newProducts.length} filtered products.`);
+
                 // Map to UI model
                 this.individualProducts = newProducts.map((p: any) => {
+                    // Extract Product2 ID from selling model if available, else use product ID
                     const resolvedId = p.productSellingModelOptions?.[0]?.productId || p.id;
+                    
+                    // Find default price record to get the PricebookEntry ID
                     const defaultPrice = p.prices?.find((pr: any) => pr.isDefault) || p.prices?.[0];
 
                     return {
@@ -1071,7 +1086,11 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
                         price: defaultPrice?.price || p.unitPrice || 0,
                         pricebookEntryId: defaultPrice?.priceBookEntryId || p.pricebookEntryId || '',
                         isBundleChild: false,
-                        sortOrder: p.additionalFields?.RCA_Sort_order__c || p.fields?.RCA_Sort_order__c
+                        // Access sort order from multiple possible locations in the JSON structure
+                        sortOrder: p.additionalFields?.RCA_Sort_order__c || 
+                                   p.fields?.RCA_Sort_order__c || 
+                                   p.additionalFields?.Product2?.RCA_Sort_order__c ||
+                                   p.additionalFields?.Product2?.fields?.RCA_Sort_order__c
                     };
                 });
 
@@ -1079,8 +1098,18 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
                 this.individualProducts.forEach((p: any) => {
                     if (this.persistentSelectedIndividuals.has(p.id)) {
                         p.selected = true;
+                        const saved = this.persistentSelectedIndividuals.get(p.id);
+                        p.discount = saved.discount;
+                        p.quantity = saved.quantity;
                         this.persistentSelectedIndividuals.set(p.id, p);
                     }
+                });
+
+                // Sort by RCA_Sort_order__c if available
+                this.individualProducts.sort((a: any, b: any) => {
+                    const sortA = Number(a.sortOrder) || 0;
+                    const sortB = Number(b.sortOrder) || 0;
+                    return sortA - sortB;
                 });
             },
             error: (err) => {
@@ -1110,20 +1139,21 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
 
         console.log('[executeSearch] Using category ID from discovery:', searchCategoryId, 'with searchTerm:', this.productSearchTerm);
 
-        this.currentProductReq = this.rcaApiService.searchProducts(
+        const criteria = this.getFilterCriteria();
+        this.currentProductReq = this.salesforceApiService.searchProducts(
             this.productSearchTerm || '',
-            searchCategoryId ? [searchCategoryId] : [],
-            this.getSearchCriteria(),
-            Number(this.individualPageSize) || 100,
-            Number(this.individualCurrentOffset) || 0
+            searchCategoryId,
+            criteria
         ).pipe(
             finalize(() => this.isIndividualLoading = false)
         ).subscribe({
-            next: (data) => {
-                this.individualTotalCount = data.totalCount || data.totalSize || 0;
-                const newProducts = data.result || data.products || [];
+            next: (data: any) => {
+                this.individualTotalCount = data.totalCount || data.count || data.total || (data.products ? data.products.length : 0);
+                const newProducts = data.products || data.result || [];
                 // Map to UI model
-                this.individualProducts = newProducts.map((p: any) => {
+                this.individualProducts = newProducts
+                    .filter((p: any) => p.productType !== 'Bundle') // Filter out bundles in individual tab!
+                    .map((p: any) => {
                     const resolvedId = p.productSellingModelOptions?.[0]?.productId || p.id;
                     const defaultPrice = p.prices?.find((pr: any) => pr.isDefault) || p.prices?.[0];
 
@@ -1137,7 +1167,10 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
                         price: defaultPrice?.price || p.unitPrice || 0,
                         pricebookEntryId: defaultPrice?.priceBookEntryId || p.pricebookEntryId || '',
                         isBundleChild: false,
-                        sortOrder: p.additionalFields?.RCA_Sort_order__c || p.fields?.RCA_Sort_order__c
+                        sortOrder: p.additionalFields?.RCA_Sort_order__c || 
+                                   p.fields?.RCA_Sort_order__c || 
+                                   p.additionalFields?.Product2?.RCA_Sort_order__c ||
+                                   p.additionalFields?.Product2?.fields?.RCA_Sort_order__c
                     };
                 });
 
@@ -1145,13 +1178,108 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
                 this.individualProducts.forEach((p: any) => {
                     if (this.persistentSelectedIndividuals.has(p.id)) {
                         p.selected = true;
+                        const saved = this.persistentSelectedIndividuals.get(p.id);
+                        p.discount = saved.discount;
+                        p.quantity = saved.quantity;
                         this.persistentSelectedIndividuals.set(p.id, p);
                     }
                 });
+
+                // Sort by RCA_Sort_order__c if available
+                this.individualProducts.sort((a: any, b: any) => {
+                    const sortA = Number(a.sortOrder) || 0;
+                    const sortB = Number(b.sortOrder) || 0;
+                    return sortA - sortB;
+                });
             },
-            error: (err) => {
+            error: (err: any) => {
                 console.error('Search error', err);
                 this.toastService.show('Search failed', 'error');
+            }
+        });
+    }
+
+    onGroupSearch() {
+        console.log('🔍 [onGroupSearch] CALLED. bundleSearchTerm:', `"${this.bundleSearchTerm}"`);
+        
+        // Reset view mode to 'all' to ensure search results are visible
+        this.viewMode = 'all';
+        this.filterQuery = '';
+
+        if (!this.bundleSearchTerm || this.bundleSearchTerm.trim() === '') {
+            console.log('⚠️ [onGroupSearch] Term is empty or whitespace, reloading default groups');
+            this.fetchProductDetails();
+            return;
+        }
+
+        console.log('🚀 [onGroupSearch] Proceeding to executeGroupSearch');
+        this.executeGroupSearch();
+    }
+
+    executeGroupSearch() {
+        if (this.currentProductReq) {
+            this.currentProductReq.unsubscribe();
+        }
+
+        this.isLoading = true;
+        const searchCategoryId = this.bundleCategoryId;
+
+        console.log('[executeGroupSearch] Using category ID from discovery:', searchCategoryId, 'with searchTerm:', this.bundleSearchTerm);
+
+        this.currentProductReq = this.salesforceApiService.searchProductGroups(
+            this.bundleSearchTerm || '',
+            searchCategoryId
+        ).pipe(
+            finalize(() => this.isLoading = false)
+        ).subscribe({
+            next: (data: any) => {
+                const results = data.products || data.result || [];
+                console.log(`✅ [executeGroupSearch] Fetched ${results.length} bundle products.`);
+
+                // Map search results to UI model for groups
+                this.productGroups = results.map((p: any) => {
+                    // Try to find matching classification to get the right classification ID
+                    const match = this.allClassifications.find(c => (c.Name || '').toLowerCase() === (p.name || '').toLowerCase());
+                    
+                    return {
+                        id: match ? match.Id : p.id,
+                        productId: p.id,
+                        name: p.name || 'Unknown Bundle',
+                        No_Of_Child_Products__c: p.fields?.No_Of_Child_Products__c || 0,
+                        selected: false,
+                        discount: 0,
+                        incentiveAmount: 0,
+                        pricebookEntryId: p.prices?.[0]?.priceBookEntryId || '',
+                        price: p.prices?.[0]?.price || 0,
+                        sortOrder: p.additionalFields?.RCA_Sort_order__c || 
+                                   p.fields?.RCA_Sort_order__c || 
+                                   p.additionalFields?.Product2?.RCA_Sort_order__c
+                    };
+                });
+
+                // Restore selection state for groups
+                this.productGroups.forEach(g => {
+                    if (this.selectorCalledFrom === 'incentives') {
+                        g.selected = this.persistentIncentiveGroups.has(g.id);
+                        if (g.selected) {
+                            const saved = this.persistentIncentiveGroups.get(g.id);
+                            g.incentiveAmount = saved.incentiveAmount;
+                        }
+                    } else {
+                        g.selected = this.persistentSelectedGroups.has(g.id);
+                        if (g.selected) {
+                            const saved = this.persistentSelectedGroups.get(g.id);
+                            g.discount = saved.discount;
+                        }
+                    }
+                });
+
+                // Sort groups by sort order
+                this.productGroups.sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0));
+            },
+            error: (err) => {
+                console.error('Group search error', err);
+                this.toastService.show('Group search failed', 'error');
             }
         });
     }
@@ -1163,7 +1291,17 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         }
     }
 
+    onGroupSearchTermChange(term: string) {
+        console.log('✍️ [onGroupSearchTermChange] New Term:', `"${term}"`, 'Current bundleSearchTerm:', `"${this.bundleSearchTerm}"`);
+        if (!term || term.trim() === '') {
+            console.log('🧹 [onGroupSearchTermChange] Term cleared, reloading groups');
+            this.bundleSearchTerm = '';
+            this.onGroupSearch();
+        }
+    }
+
     mapNewProductData(items: any[]) {
+        console.log(`🗺️ [mapNewProductData] Mapping ${items.length} items to productGroups.`);
         this.productGroups = items.map(item => ({
             id: item.id || item.Id,
             name: item.name || item.Name,
@@ -1176,6 +1314,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
             sortOrder: item.additionalFields?.RCA_Sort_order__c,
             components: []
         }));
+        console.log(`✅ [mapNewProductData] productGroups updated. Count: ${this.productGroups.length}`);
 
 
         // Restore persistent selection state
@@ -1458,7 +1597,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         if (this.filterQuery) {
             const lowerQuery = this.filterQuery.toLowerCase();
             items = items.filter(item =>
-                item.name.toLowerCase().includes(lowerQuery) ||
+                (item.name || '').toLowerCase().includes(lowerQuery) ||
                 (item.family && item.family.toLowerCase().includes(lowerQuery))
             );
         }
@@ -2066,10 +2205,6 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
                 this.productGroups.forEach(g => { g.selected = false; });
                 this.dataFetched = false;
                 this.quoteRefreshService.setRefreshNeeded(true);
-            },
-            error: (err: any) => {
-                console.error('[Incentives] Error adding incentive:', err);
-                this.toastService.show('Error adding incentive', 'error');
             }
         });
     }

@@ -235,22 +235,33 @@ export class RcaApiService {
                 const providedToken = '00DDz000001qvYA!ARQAQE2ut._CySv0HuqzA58fQg2KQLcac4Eomg4keHeHi6SaaLi8m3e5R6_XFyXbm217O5tEzWvSRR82lg7htONLvNqSzO5g';
                 const token = context?.accessToken || providedToken;
                 const baseUrl = context?.apiBaseUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com';
+                const pricebookId = context?.pricebookId || '01sf4000003ZgtzAAC';
 
                 if (!token) {
                     throw new Error('No access token available');
                 }
 
-                // Use v66.0 PCM endpoint with productClassificationId in URL
-                const url = `${baseUrl}/services/data/v66.0/connect/pcm/products?productClassificationId=${classificationId}&include=/products`;
+                // Updated to v66.0 CPQ products endpoint as requested
+                const url = `${baseUrl}/services/data/v66.0/connect/cpq/products`;
 
                 const body: any = {
-                    "language": "en_US",
+                    "limit": pageSize,
+                    "productClassificationId": classificationId,
+                    "priceBookId": pricebookId,
+                    "additionalFields": {
+                        "Product2": {
+                            "fields": ["RCA_Sort_order__c"]
+                        }
+                    },
                     "filter": {
                         "criteria": criteria
-                    },
-                    "offset": offset,
-                    "pageSize": pageSize
+                    }
                 };
+
+                // Add offset if applicable
+                if (offset > 0) {
+                    body.offset = offset;
+                }
 
                 console.log(`[API Request] ${method}`, { url, body });
 

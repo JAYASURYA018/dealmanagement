@@ -1180,9 +1180,12 @@
                             </div>
 
                             <!-- No Discount Applied Message -->
+                            <!-- No Discount / Incentive Message -->
                             <div *ngIf="period.bulkIndividualItems.length === 0 && period.groupItems.length === 0"
-                                class="text-center py-4 text-gray-400 italic text-sm">
-                                No {{ period.type === 'incentive' ? 'incentives' : 'discount' }} applied
+                                class="text-center py-4 text-black text-sm">
+
+                                No product selected for {{ period.type === 'incentive' ? 'incentives' : 'discounts' }}
+
                             </div>
                         </div>
 

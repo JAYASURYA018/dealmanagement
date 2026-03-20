@@ -7,3 +7,29 @@ body {
     @apply bg-gray-50 text-gray-900 font-sans;
     font-family: 'Inter', sans-serif;
 }
+
+/* Force horizontal scrollbars to always show */
+.always-scrollbar {
+    overflow-x: auto !important;
+    scrollbar-width: auto; /* Firefox */
+}
+
+.always-scrollbar::-webkit-scrollbar {
+    height: 8px !important;
+    display: block !important;
+}
+
+.always-scrollbar::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.always-scrollbar::-webkit-scrollbar-thumb {
+    background: #bbb;
+    border-radius: 4px;
+    border: 2px solid #f1f1f1;
+}
+
+.always-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #999;
+}

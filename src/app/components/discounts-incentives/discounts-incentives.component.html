@@ -521,6 +521,16 @@
                 </button>
             </div>
 
+            <!-- Product Group Search -->
+            <div class="relative flex-1" *ngIf="productTab === 'groups'">
+                <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
+                    <span class="material-icons-outlined text-[18px]">search</span>
+                </span>
+                <input type="text" [(ngModel)]="bundleSearchTerm" (keyup.enter)="onGroupSearch()" (search)="onGroupSearch()" 
+                    (ngModelChange)="onGroupSearchTermChange($event)" placeholder="Search product groups..."
+                    class="w-full pl-10 pr-4 py-1.5 bg-white border border-gray-300 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 transition-all min-h-[36px]">
+            </div>
+
             <!-- Classification + Region + Billing Frequency Dropdowns for Individual Products -->
             <div *ngIf="productTab === 'individual' && !isLoading"
                 class="flex items-center gap-3 relative z-20 flex-wrap">
