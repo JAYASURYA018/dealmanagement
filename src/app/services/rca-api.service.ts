@@ -165,11 +165,13 @@ export class RcaApiService {
                     throw new Error('No access token available');
                 }
 
-                // Reverting to v61.0 and 'limit' as requested by user
-                let url = `${baseUrl}/services/data/v61.0/connect/cpq/products`;
+                // Use v66.0 for better cursor support if available, otherwise v61.0 as fallback
+                let url = `${baseUrl}/services/data/v66.0/connect/cpq/products`;
 
-                if (pageSize !== undefined && offset !== undefined) {
-                    url += `?limit=${pageSize}&offset=${offset}`;
+                // If cursor is present, we should avoid offset/limit in URL as they are in body
+                if (!payload.cursor && pageSize !== undefined && offset !== undefined) {
+                    // Traditional offset paging in URL (v61.0 style)
+                    // url += `?limit=${pageSize}&offset=${offset}`;
                 }
 
                 console.log(`[API Request] ${method}`, { url, payload });
@@ -226,7 +228,7 @@ export class RcaApiService {
         );
     }
 
-    facetedProductSearch(classificationId: string, criteria: any[], pageSize: number = 100, offset: number = 0): Observable<any> {
+    facetedProductSearch(classificationId: string, criteria: any[], pageSize: number = 100, offset: number = 0, cursor: string | null = null): Observable<any> {
         const method = 'RcaApiService.facetedProductSearch';
 
         return this.contextService.context$.pipe(
@@ -241,7 +243,7 @@ export class RcaApiService {
                     throw new Error('No access token available');
                 }
 
-                // Updated to v66.0 CPQ products endpoint as requested
+                // Use v66.0 for better cursor support
                 const url = `${baseUrl}/services/data/v66.0/connect/cpq/products`;
 
                 const body: any = {
@@ -258,8 +260,10 @@ export class RcaApiService {
                     }
                 };
 
-                // Add offset if applicable
-                if (offset > 0) {
+                // Add cursor if available (Omit if null or empty)
+                if (cursor && cursor.trim() !== "") {
+                    body.cursor = cursor;
+                } else if (offset > 0) {
                     body.offset = offset;
                 }
 

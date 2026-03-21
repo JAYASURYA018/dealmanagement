@@ -229,6 +229,11 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
     bundleCategoryId: string | null = null;
     bundleSearchTerm: string = '';
 
+    // Cursor Pagination State
+    nextPageCursor: string | null = null;
+    cursorStack: string[] = ['']; // Stack of cursors for forward/backward navigation
+    currentCursorIndex: number = 0;
+
 
     // Picklist Filter State (Region + Billing Frequency dropdowns)
     picklistLoaded = false;
@@ -552,28 +557,38 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
 
     selectDropdownOption(option: any) {
         this.selectedDropdownOption = option;
-
-        // Clear all filters when changing classification as requested
-        this.productSearchTerm = '';
+        
+        // As requested: clear existing filters when selecting a new classification
         this.selectedRegion = null;
         this.selectedBillingFreq = null;
         this.regionSearchText = '';
         this.billingSearchText = '';
 
-        this.individualCurrentOffset = 0; // Reset pagination
+        // Reset Cursor Pagination for the new classification selection
+        this.cursorStack = [''];
+        this.currentCursorIndex = 0;
+        this.nextPageCursor = null;
+
+        this.individualCurrentOffset = 0; // Reset pagination offset on new selection
+        
+        // We should also reset the search term if a classification is selected
+        this.productSearchTerm = '';
+        
         this.loadIndividualProducts();
     }
 
     // When Region or Billing Frequency filters are applied, use the PCM faceted filter API
     applyFilters() {
+        // Reset offset (though we now prefer cursors)
         this.individualCurrentOffset = 0;
+        
         const criteria = this.getFilterCriteria();
 
         // If we have active Region/Billing filters, use the faceted filter API
         if (criteria.length > 0) {
             this.executeFacetedFilter();
         } else {
-            // No filters active, reload default products
+            // No filters active, reload default products for category
             this.loadIndividualProducts();
         }
     }
@@ -651,6 +666,11 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
     // Selector Actions
     openProductSelector(source: 'discounts' | 'incentives' = 'discounts') {
         this.selectorCalledFrom = source;
+
+        // Fetch Region/Billing filters only for the Discounts flow (Period 1/2) as requested
+        if (source === 'discounts') {
+            this.loadPicklistOptions();
+        }
 
         // Date Validation: Ensure start and end dates are selected for the active period
         const currentPeriod = source === 'discounts' ? this.activeDiscountPeriod : this.activeIncentivePeriod;
@@ -835,12 +855,14 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         const targetClassId = this.selectedDropdownOption.classificationId || this.selectedDropdownOption.Id;
         console.log('🔍 [loadIndividualProducts] Using targetClassId:', targetClassId, 'for category:', this.selectedDropdownOption.Name);
 
-        // Construct the body using limit and offset for compatibility with v61.0
-        const body = {
+        // Get the cursor for the current page from the stack if available
+        const currentCursor = this.cursorStack[this.currentCursorIndex];
+
+        // Construct the body – using cursor if available (Omit if null or empty)
+        const body: any = {
             "limit": this.individualPageSize,
             "productClassificationId": targetClassId,
             "priceBookId": this.contextService.currentContext?.pricebookId || '01sf4000003ZgtzAAC',
-            "offset": this.individualCurrentOffset,
             "additionalFields": {
                 "Product2": {
                     "fields": ["RCA_Sort_order__c"]
@@ -848,7 +870,14 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
             }
         };
 
-        console.log('📊 [loadIndividualProducts] Call 3: Fetching individual products with CPQ API:', body);
+        if (currentCursor && currentCursor.trim() !== "") {
+            body.cursor = currentCursor;
+        } else {
+            // Only add offset if cursor is not present
+            body.offset = this.individualCurrentOffset;
+        }
+
+        console.log(`📊 [loadIndividualProducts] Page: ${this.currentCursorIndex + 1}, Cursor: "${currentCursor || ''}" CPQ API Body:`, body);
 
         if (this.currentProductReq) {
             this.currentProductReq.unsubscribe();
@@ -859,11 +888,14 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
             finalize(() => this.isIndividualLoading = false)
         ).subscribe({
             next: (data) => {
+                // Update nextPageCursor from API response
+                this.nextPageCursor = data.cursor || null;
+
                 // Handle various response formats (result, products, items, or direct array)
                 const newProducts = data.result || data.products || data.items || (Array.isArray(data) ? data : []);
                 this.individualTotalCount = data.totalCount || data.totalSize || (Array.isArray(newProducts) ? newProducts.length : 0);
 
-                console.log(`✅ [loadIndividualProducts] Fetched ${newProducts.length} products. Total: ${this.individualTotalCount}`);
+                console.log(`✅ [loadIndividualProducts] Fetched ${newProducts.length} products. Next Cursor: ${this.nextPageCursor || 'None'}`);
 
                 // Map to UI model
                 const mappedProducts = newProducts.map((p: any) => {
@@ -921,9 +953,12 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
     handlePageSizeChange(newSize: number) {
         this.individualPageSize = Number(newSize);
         this.individualCurrentOffset = 0;
-        // this.currentIndividualClassIndex = 0; // Reset to start? Or keep current class?
-        // User implied "continuous" flow. Let's restart to be safe and simple.
+        
         if (this.productSearchTerm) {
+            // Reset Cursor Pagination for the new page size
+            this.cursorStack = [''];
+            this.currentCursorIndex = 0;
+            this.nextPageCursor = null;
             this.executeSearch();
         } else {
             this.loadIndividualProducts();
@@ -933,27 +968,73 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
     individualTotalCount: number = 0;
 
     nextPage() {
-        // Increment offset
-        this.individualCurrentOffset += Number(this.individualPageSize);
-        console.log('➡️ [Pagination] Moving to next page. New Offset:', this.individualCurrentOffset);
+        console.log('➡️ [Pagination] Moving forward');
 
-        if (this.productSearchTerm) {
-            this.executeSearch();
+        // Common cursor logic for Global Search, Classification search, and Faceted filters
+        if (this.nextPageCursor && this.currentCursorIndex === this.cursorStack.length - 1) {
+            // We have a new cursor and we are at the end of the stack
+            this.cursorStack.push(this.nextPageCursor);
+        }
+
+        if (this.currentCursorIndex < this.cursorStack.length - 1) {
+            this.currentCursorIndex++;
+            
+            if (this.productSearchTerm) {
+                this.executeSearch();
+            } else {
+                // Update offset just in case some logic still relies on it
+                this.individualCurrentOffset += Number(this.individualPageSize);
+                
+                // Choose between faceted filter and classification search
+                const criteria = this.getFilterCriteria();
+                if (criteria.length > 0) {
+                    this.executeFacetedFilter();
+                } else {
+                    this.loadIndividualProducts();
+                }
+            }
         } else {
-            this.loadIndividualProducts();
+            console.warn('⚠️ No more pages available (no nextPageCursor)');
         }
     }
 
     prevPage() {
-        const pageSize = Number(this.individualPageSize);
-        if (this.individualCurrentOffset >= pageSize) {
-            this.individualCurrentOffset -= pageSize;
-            console.log('⬅️ [Pagination] Moving to previous page. New Offset:', this.individualCurrentOffset);
+        console.log('⬅️ [Pagination] Moving backward');
 
+        if (this.currentCursorIndex > 0) {
+            this.currentCursorIndex--;
+            
             if (this.productSearchTerm) {
                 this.executeSearch();
             } else {
-                this.loadIndividualProducts();
+                // Move offset backward
+                const pageSize = Number(this.individualPageSize);
+                if (this.individualCurrentOffset >= pageSize) {
+                    this.individualCurrentOffset -= pageSize;
+                }
+
+                // Choose between faceted filter and classification search
+                const criteria = this.getFilterCriteria();
+                if (criteria.length > 0) {
+                    this.executeFacetedFilter();
+                } else {
+                    this.loadIndividualProducts();
+                }
+            }
+        } else {
+            // Traditional offset-based paging fallback
+            if (!this.productSearchTerm) {
+                const pageSize = Number(this.individualPageSize);
+                if (this.individualCurrentOffset >= pageSize) {
+                    this.individualCurrentOffset -= pageSize;
+                    
+                    const criteria = this.getFilterCriteria();
+                    if (criteria.length > 0) {
+                        this.executeFacetedFilter();
+                    } else {
+                        this.loadIndividualProducts();
+                    }
+                }
             }
         }
     }
@@ -977,6 +1058,11 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         this.selectedBillingFreq = null;
         this.regionSearchText = '';
         this.billingSearchText = '';
+
+        // Reset Cursor Pagination for new search
+        this.cursorStack = ['']; 
+        this.currentCursorIndex = 0;
+        this.nextPageCursor = null;
 
         this.individualCurrentOffset = 0; // Reset pagination offset on new search
         this.executeSearch();
@@ -1047,18 +1133,49 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
 
         this.isIndividualLoading = true;
 
-        console.log('[executeFacetedFilter] Using classificationId:', classificationId, 'with criteria:', criteria);
+        // Get the cursor for the current page from the stack if available
+        const currentCursor = this.cursorStack[this.currentCursorIndex];
+
+        console.log('[executeFacetedFilter] Using classificationId:', classificationId, 'Page:', this.currentCursorIndex + 1, 'Cursor:', currentCursor || 'initial');
 
         this.currentProductReq = this.rcaApiService.facetedProductSearch(
             classificationId,
             criteria,
             Number(this.individualPageSize) || 100,
-            Number(this.individualCurrentOffset) || 0
+            Number(this.individualCurrentOffset) || 0,
+            currentCursor
         ).pipe(
             finalize(() => this.isIndividualLoading = false)
         ).subscribe({
             next: (data) => {
+                // Update nextPageCursor from API response
+                this.nextPageCursor = data.cursor || null;
+
                 const newProducts = data.result || data.products || data.items || [];
+                this.individualTotalCount = data.totalCount || data.totalSize || (Array.isArray(newProducts) ? newProducts.length : 0);
+
+                console.log(`✅ [executeFacetedFilter] Fetched ${newProducts.length} products. Next Cursor: ${this.nextPageCursor || 'None'}`);
+
+                // Map to UI model
+                const mappedProducts = newProducts.map((p: any) => {
+                    const resolvedId = p.productSellingModelOptions?.[0]?.productId || p.id;
+                    const defaultPrice = p.prices?.find((pr: any) => pr.isDefault) || p.prices?.[0];
+
+                    return {
+                        id: resolvedId,
+                        name: p.name,
+                        family: this.selectedDropdownOption?.Name || 'Filtered',
+                        selected: false,
+                        discount: 0,
+                        quantity: 1,
+                        price: defaultPrice?.price || p.unitPrice || 0,
+                        pricebookEntryId: defaultPrice?.priceBookEntryId || p.pricebookEntryId || '',
+                        isBundleChild: false,
+                        sortOrder: p.additionalFields?.RCA_Sort_order__c || 
+                                   p.fields?.RCA_Sort_order__c || 
+                                   p.additionalFields?.Product2?.fields?.RCA_Sort_order__c
+                    };
+                });
                 this.individualTotalCount = data.totalCount || data.count || (Array.isArray(newProducts) ? newProducts.length : 0);
                 
                 console.log(`✅ [executeFacetedFilter] Fetched ${newProducts.length} filtered products.`);
@@ -1114,7 +1231,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         });
     }
 
-    // Executes global search using PCM search API with categoryIds in body
+    // Executes global search using CPQ Search API (v66.0) with cursor-based pagination
     executeSearch() {
         if (this.currentProductReq) {
             this.currentProductReq.unsubscribe();
@@ -1128,46 +1245,60 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
 
         this.isIndividualLoading = true;
 
-        // For PCM global search, always use the category ID from the product discovery
-        // response (categories[0].id) - NOT the classification ID
+        // Use the category ID from the discovery response
         const searchCategoryId = this.bundleCategoryId;
 
-        console.log('[executeSearch] Using category ID from discovery:', searchCategoryId, 'with searchTerm:', this.productSearchTerm);
+        // Get the cursor for the current page from the stack
+        const currentCursor = this.cursorStack[this.currentCursorIndex];
+
+        console.log(`[executeSearch] Page: ${this.currentCursorIndex + 1}, Cursor: "${currentCursor}", SearchTerm: "${this.productSearchTerm}"`);
 
         const criteria = this.getFilterCriteria();
         this.currentProductReq = this.salesforceApiService.searchProducts(
             this.productSearchTerm || '',
             searchCategoryId,
-            criteria
+            criteria,
+            currentCursor,
+            this.individualPageSize
         ).pipe(
             finalize(() => this.isIndividualLoading = false)
         ).subscribe({
             next: (data: any) => {
-                this.individualTotalCount = data.totalCount || data.count || data.total || (data.products ? data.products.length : 0);
+                // Update nextPageCursor from API response
+                this.nextPageCursor = data.cursor || null;
+                
+                // Track total size from API (if available)
+                this.individualTotalCount = data.totalCount || data.count || data.totalSize || 0;
+                
                 const newProducts = data.products || data.result || [];
-                // Map to UI model
-                this.individualProducts = newProducts
-                    .filter((p: any) => p.productType !== 'Bundle') // Filter out bundles in individual tab!
-                    .map((p: any) => {
-                    const resolvedId = p.productSellingModelOptions?.[0]?.productId || p.id;
-                    const defaultPrice = p.prices?.find((pr: any) => pr.isDefault) || p.prices?.[0];
+                console.log(`✅ [executeSearch] Fetched ${newProducts.length} products. Next Cursor: ${this.nextPageCursor}`);
 
-                    return {
-                        id: resolvedId,
-                        name: p.name || p.fields?.Name || 'Unknown Product',
-                        family: p.additionalFields?.Family || p.fields?.Family || this.selectedDropdownOption?.Name || 'Other',
-                        selected: false,
-                        discount: 0,
-                        quantity: 1,
-                        price: defaultPrice?.price || p.unitPrice || 0,
-                        pricebookEntryId: defaultPrice?.priceBookEntryId || p.pricebookEntryId || '',
-                        isBundleChild: false,
-                        sortOrder: p.additionalFields?.RCA_Sort_order__c || 
-                                   p.fields?.RCA_Sort_order__c || 
-                                   p.additionalFields?.Product2?.RCA_Sort_order__c ||
-                                   p.additionalFields?.Product2?.fields?.RCA_Sort_order__c
-                    };
-                });
+                // Map to UI model with specific field mapping requirements
+                this.individualProducts = newProducts
+                    .filter((p: any) => p.productType !== 'Bundle') // Filter out bundles in individual tab
+                    .map((p: any) => {
+                        const resolvedId = p.id; // Map result[].id to Product ID
+                        
+                        // Map result[].prices[0].priceBookEntryId to Pricebook Entry ID
+                        const defaultPrice = p.prices?.find((pr: any) => pr.isDefault) || p.prices?.[0];
+
+                        return {
+                            id: resolvedId,
+                            name: p.name || p.fields?.Name || 'Unknown Product',
+                            family: p.additionalFields?.Family || p.fields?.Family || this.selectedDropdownOption?.Name || 'Other',
+                            selected: false,
+                            discount: 0,
+                            quantity: 1,
+                            price: defaultPrice?.price || p.unitPrice || 0,
+                            pricebookEntryId: defaultPrice?.priceBookEntryId || p.pricebookEntryId || '',
+                            isBundleChild: false,
+                            // Map result[].additionalFields.Product2.RCA_Sort_order__c to SortOrder
+                            sortOrder: p.additionalFields?.Product2?.RCA_Sort_order__c || 
+                                       p.additionalFields?.Product2?.fields?.RCA_Sort_order__c ||
+                                       p.additionalFields?.RCA_Sort_order__c ||
+                                       p.fields?.RCA_Sort_order__c
+                        };
+                    });
 
                 // Restore persistent selection state
                 this.individualProducts.forEach((p: any) => {
@@ -1414,8 +1545,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
 
     // Picklist Filter Methods
     loadPicklistOptions() {
-        // Only load for subscription flow once unless specifically forced or needed
-        if (!this.isLookerSubscription) return; 
+        // Load options for Region and Billing Frequency filters
         if (this.picklistLoaded || this.isPicklistLoading) return;
 
         this.isPicklistLoading = true;
@@ -1452,6 +1582,12 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         this.regionSearchText = '';
         // As requested: remove existing search values when selecting a filter
         this.productSearchTerm = '';
+        
+        // Reset Cursor Pagination for the new filter selection
+        this.cursorStack = [''];
+        this.currentCursorIndex = 0;
+        this.nextPageCursor = null;
+
         if (this.productTab === 'individual') this.applyFilters();
     }
 
@@ -1461,6 +1597,12 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         this.billingSearchText = '';
         // As requested: remove existing search values when selecting a filter
         this.productSearchTerm = '';
+        
+        // Reset Cursor Pagination for the new filter selection
+        this.cursorStack = [''];
+        this.currentCursorIndex = 0;
+        this.nextPageCursor = null;
+
         if (this.productTab === 'individual') this.applyFilters();
     }
 
@@ -1501,10 +1643,8 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         this.filterQuery = ''; // Reset filter on switch
         this.viewMode = 'all'; // Reset to "Show All" when switching tabs
 
-        // As requested: call picklist api when switching to individual products
+        // If individual products are empty, trigger load for the selected dropdown option
         if (tab === 'individual') {
-            this.loadPicklistOptions();
-            // If individual products are empty, trigger load for the selected dropdown option
             if (this.individualProducts.length === 0 && this.selectedDropdownOption) {
                 this.loadIndividualProducts();
             }

@@ -832,12 +832,14 @@
 
                 <!-- Arrows -->
                 <div class="flex items-center gap-1">
-                    <button (click)="prevPage()" [disabled]="individualCurrentOffset === 0"
+                    <button (click)="prevPage()" 
+                        [disabled]="productSearchTerm ? currentCursorIndex === 0 : individualCurrentOffset === 0"
                         class="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-20 disabled:cursor-not-allowed transition-all text-gray-600 hover:text-blue-600">
                         <span class="material-icons-outlined text-[20px]">chevron_left</span>
                     </button>
                     <button (click)="nextPage()"
-                        class="p-1.5 rounded-lg hover:bg-gray-100 transition-all text-gray-600 hover:text-blue-600">
+                        [disabled]="productSearchTerm ? (!nextPageCursor && currentCursorIndex === cursorStack.length - 1) : false"
+                        class="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-20 disabled:cursor-not-allowed transition-all text-gray-600 hover:text-blue-600">
                         <span class="material-icons-outlined text-[20px]">chevron_right</span>
                     </button>
                 </div>

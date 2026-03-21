@@ -795,7 +795,7 @@ export class SalesforceApiService {
     /**
      * Searches for products using the Connect CPQ Search API
      */
-    searchProducts(searchTerm: string, categoryId: string | null, criteria: any[] = []): Observable<any> {
+    searchProducts(searchTerm: string, categoryId: string | null, criteria: any[] = [], cursor: string | null = null, limit: number = 100): Observable<any> {
         const method = 'SalesforceApiService.searchProducts';
         const token = this.contextService.accessToken;
         const baseUrl = this.contextService.apiBaseUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com';
@@ -816,12 +816,17 @@ export class SalesforceApiService {
                     "fields": ["RCA_Sort_order__c"]
                 }
             },
-            "limit": 999,
+            "limit": limit,
             "searchTerm": searchTerm
         };
 
         if (categoryId) {
             body.categoryId = categoryId;
+        }
+
+        // Add cursor only if a valid token exists (Omit if null or empty string per requirement)
+        if (cursor && cursor.trim() !== "") {
+            body.cursor = cursor;
         }
 
         console.log(`[API Request] ${method}`, { url, body });
@@ -833,7 +838,11 @@ export class SalesforceApiService {
 
         return this.http.post(url, body, { headers }).pipe(
             tap(response => console.log(`[API Response] ${method}`, response)),
-            catchError(err => this.handleError(method, err))
+            catchError(err => {
+                // Enhance error logging for cursor issues
+                console.error(`[CRITICAL] cursor: "${cursor}" failed in ${method}`, err);
+                return this.handleError(method, err);
+            })
         );
     }
 
