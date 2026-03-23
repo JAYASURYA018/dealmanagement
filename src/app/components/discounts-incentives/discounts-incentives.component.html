@@ -31,7 +31,7 @@
                         <span class="material-icons-outlined text-[14px] text-blue-500">inventory_2</span>
                         <span class="text-[11px] font-semibold text-gray-600">
                             <span class="text-blue-600 font-bold">{{ remainingProductsQuota | number }}</span>
-                            / {{ totalCatalogProducts | number }} products remaining
+                            / {{ totalCatalogProducts | number }} Products Remaining
                         </span>
                         <!-- Progress bar -->
                         <div class="w-20 h-1.5 bg-gray-200 rounded-full overflow-hidden ml-1">
@@ -47,7 +47,7 @@
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6" (click)="$event.stopPropagation()">
                 <!-- Time Period -->
                 <div class="bg-white p-2 rounded-lg h-[52px] flex flex-col justify-center relative group">
-                    <label class="text-[11px] text-gray-500 mb-0.5 ml-1">Time period</label>
+                    <label class="text-[11px] text-gray-500 mb-0.5 ml-1">Time Period</label>
                     <select [(ngModel)]="dPeriod.timePeriod"
                         class="w-full bg-transparent text-sm font-medium text-gray-900 outline-none appearance-none z-10 relative cursor-pointer">
                         <option *ngFor="let opt of timePeriodOptions" [value]="opt">{{ opt }}</option>
@@ -57,7 +57,7 @@
                 </div>
                 <!-- Start Date -->
                 <div class="bg-white p-2 rounded-lg h-[52px] flex flex-col justify-center relative">
-                    <label class="text-[11px] text-gray-500 mb-0.5 ml-1">Start date</label>
+                    <label class="text-[11px] text-gray-500 mb-0.5 ml-1">Start Date</label>
                     <input type="date" [(ngModel)]="dPeriod.startDate" [min]="quoteStartDate || minDate"
                         [max]="quoteEndDate" (ngModelChange)="validateDiscountDates(dPeriod)"
                         class="w-full bg-transparent text-sm font-medium text-gray-900 outline-none cursor-pointer"
@@ -65,7 +65,7 @@
                 </div>
                 <!-- End Date -->
                 <div class="bg-white p-2 rounded-lg h-[52px] flex flex-col justify-center relative">
-                    <label class="text-[11px] text-gray-500 mb-0.5 ml-1">End date</label>
+                    <label class="text-[11px] text-gray-500 mb-0.5 ml-1">End Date</label>
                     <input type="date" [(ngModel)]="dPeriod.endDate"
                         [min]="dPeriod.startDate || quoteStartDate || minDate" [max]="quoteEndDate"
                         (ngModelChange)="validateDiscountDates(dPeriod)"
@@ -110,7 +110,7 @@
         <button *ngIf="discountPeriods.length < 2" (click)="addDiscountPeriod()"
             class="mb-6 flex items-center gap-2 px-4 py-2 border border-blue-600 rounded-lg text-sm font-bold text-blue-600 bg-white hover:bg-blue-50 transition-colors w-fit shadow-sm">
             <span class="material-icons-outlined text-[18px]">add_circle_outline</span>
-            Add another discount period
+            Add Another Discount Period
         </button>
 
         <!-- Incentives Period Card -->
@@ -142,7 +142,7 @@
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6" (click)="$event.stopPropagation()">
                 <!-- Time Period -->
                 <div class="bg-white p-2 rounded-lg h-[52px] flex flex-col justify-center relative group">
-                    <label class="text-[11px] text-gray-500 mb-0.5 ml-1">Time period</label>
+                    <label class="text-[11px] text-gray-500 mb-0.5 ml-1">Time Period</label>
                     <select [(ngModel)]="iPeriod.timePeriod"
                         class="w-full bg-transparent text-sm font-medium text-gray-900 outline-none appearance-none z-10 relative cursor-pointer">
                         <option *ngFor="let opt of timePeriodOptions" [value]="opt">{{ opt }}</option>
@@ -152,7 +152,7 @@
                 </div>
                 <!-- Start Date -->
                 <div class="bg-white p-2 rounded-lg h-[52px] flex flex-col justify-center relative">
-                    <label class="text-[11px] text-gray-500 mb-0.5 ml-1">Start date</label>
+                    <label class="text-[11px] text-gray-500 mb-0.5 ml-1">Start Date</label>
                     <input type="date" [(ngModel)]="iPeriod.startDate" [min]="quoteStartDate || minDate"
                         [max]="quoteEndDate" (ngModelChange)="validateIncentiveDates(iPeriod)"
                         class="w-full bg-transparent text-sm font-medium text-gray-900 outline-none cursor-pointer"
@@ -160,7 +160,7 @@
                 </div>
                 <!-- End Date -->
                 <div class="bg-white p-2 rounded-lg h-[52px] flex flex-col justify-center relative">
-                    <label class="text-[11px] text-gray-500 mb-0.5 ml-1">End date</label>
+                    <label class="text-[11px] text-gray-500 mb-0.5 ml-1">End Date</label>
                     <input type="date" [(ngModel)]="iPeriod.endDate"
                         [min]="iPeriod.startDate || quoteStartDate || minDate" [max]="quoteEndDate"
                         (ngModelChange)="validateIncentiveDates(iPeriod)"
@@ -327,7 +327,7 @@
                 <!-- Select Products Button -->
                 <button (click)="openProductSelector()"
                     class="w-full h-[40px] flex items-center justify-center bg-white border border-gray-400 rounded-lg text-sm font-bold text-gray-700 hover:bg-gray-50 transition-colors shadow-sm">
-                    Select products
+                    Select Products
                 </button>
 
                 <!-- Selected Products Count Summary for Discounts -->
@@ -365,28 +365,7 @@
             <!-- Incentives Tab -->
             <div *ngIf="activeTab === 'incentives'" class="space-y-4">
                 <!-- Period Selection -->
-                <div class="relative">
-                    <div (click)="closeAllDropdowns(); periodDropdownOpen = !periodDropdownOpen; $event.stopPropagation()"
-                        class="bg-white border border-gray-400 rounded-lg p-2 h-[52px] flex justify-between items-center cursor-pointer hover:border-gray-300 transition-colors">
-                        <div class="flex flex-col justify-center">
-                            <label class="text-[11px] text-gray-500 mb-0.5 leading-none">Incentives
-                                period</label>
-                            <span class="text-sm font-medium text-gray-900 leading-tight">
-                                {{ activeIncentivePeriod.name }}
-                            </span>
-                        </div>
-                        <span class="material-icons-outlined text-gray-500">arrow_drop_down</span>
-                    </div>
-                    <!-- Dropdown -->
-                    <div *ngIf="periodDropdownOpen" (click)="$event.stopPropagation()"
-                        class="absolute left-0 top-[56px] w-full bg-white rounded-lg shadow-xl border border-gray-400 z-20 py-1">
-                        <button *ngFor="let p of incentivePeriods"
-                            (click)="activeIncentivePeriodId = p.id; periodDropdownOpen = false"
-                            class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                            {{ p.name }}
-                        </button>
-                    </div>
-                </div>
+
 
                 <!-- Incentive Type -->
                 <div class="relative">
@@ -413,7 +392,7 @@
                 <!-- Selected Products Summary Bar -->
                 <button (click)="openProductSelector('incentives')"
                     class="w-full h-[40px] flex items-center justify-center bg-white border border-gray-400 rounded-lg text-sm font-bold text-gray-700 hover:bg-gray-50 transition-colors shadow-sm">
-                    Select products
+                    Select Products
                 </button>
 
                 <!-- Selected Products Count Summary -->
@@ -445,7 +424,7 @@
 
         <!-- Header -->
         <div class="px-6 py-1.5 flex justify-between items-center bg-white">
-            <h2 class="text-xl font-bold text-gray-900">Select products</h2>
+            <h2 class="text-xl font-bold text-gray-900">Select Products</h2>
             <button (click)="closeProductSelector()"
                 class="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100 transition-colors">
                 <span class="material-icons-outlined">close</span>
@@ -537,7 +516,7 @@
                 <button (click)="setViewMode('selected')" [class.bg-blue-100]="viewMode === 'selected'"
                     [class.text-blue-700]="viewMode === 'selected'"
                     class="px-3 py-1 text-xs font-bold rounded-md transition-colors text-gray-600 hover:bg-gray-100">
-                    Show selected ({{ productTab === 'groups' ? getSelectedCount('groups') :
+                    Show Selected ({{ productTab === 'groups' ? getSelectedCount('groups') :
                     getSelectedCount('individual') }})
                 </button>
             </div>
@@ -553,8 +532,9 @@
                 <div class="relative">
                     <button
                         (click)="closeAllDropdowns(); regionDropdownOpen = !regionDropdownOpen; $event.stopPropagation()"
-                        class="flex items-center justify-between min-w-[140px] px-3 py-1.5 bg-white border rounded-md shadow-sm hover:bg-gray-50 min-h-[36px] text-xs font-bold transition-colors"
-                        [ngClass]="selectedRegion ? 'border-blue-500 text-blue-700' : 'border-gray-300 text-gray-700'">
+                        class="flex items-center justify-between min-w-[140px] px-3 py-1.5 bg-white border rounded-md shadow-sm hover:bg-gray-50 min-h-[36px] text-xs font-bold transition-colors disabled:opacity-50 disabled:grayscale disabled:pointer-events-none"
+                        [ngClass]="selectedRegion ? 'border-blue-500 text-blue-700' : 'border-gray-300 text-gray-700'"
+                        [disabled]="!!productSearchTerm">
                         <span class="truncate">{{ selectedRegion ? selectedRegion.label : 'Region' }}</span>
                         <span *ngIf="selectedRegion" class="material-icons-outlined text-[14px] ml-1 text-blue-500"
                             (click)="$event.stopPropagation(); selectRegion(null)">close</span>
@@ -594,8 +574,9 @@
                 <div class="relative">
                     <button
                         (click)="closeAllDropdowns(); billingDropdownOpen = !billingDropdownOpen; $event.stopPropagation()"
-                        class="flex items-center justify-between min-w-[160px] px-3 py-1.5 bg-white border rounded-md shadow-sm hover:bg-gray-50 min-h-[36px] text-xs font-bold transition-colors"
-                        [ngClass]="selectedBillingFreq ? 'border-blue-500 text-blue-700' : 'border-gray-300 text-gray-700'">
+                        class="flex items-center justify-between min-w-[160px] px-3 py-1.5 bg-white border rounded-md shadow-sm hover:bg-gray-50 min-h-[36px] text-xs font-bold transition-colors disabled:opacity-50 disabled:grayscale disabled:pointer-events-none"
+                        [ngClass]="selectedBillingFreq ? 'border-blue-500 text-blue-700' : 'border-gray-300 text-gray-700'"
+                        [disabled]="!!productSearchTerm">
                         <span class="truncate">{{ selectedBillingFreq ? selectedBillingFreq.label : 'Billing
                             Frequency'
                             }}</span>
@@ -643,7 +624,8 @@
         </div>
 
         <!-- Classification Cards for Individual Products -->
-        <div *ngIf="productTab === 'individual' && !isLoading" class="mx-6 mt-1 shrink-0">
+        <div *ngIf="productTab === 'individual' && !isLoading" class="mx-6 mt-1 shrink-0"
+            [ngClass]="{'opacity-50 grayscale pointer-events-none': !!productSearchTerm}">
             <div class="bg-white border border-gray-300 rounded-lg p-2 shadow-sm flex items-stretch gap-3">
 
                 <!-- 1. Static Search Box -->
@@ -774,6 +756,7 @@
                                     [ngClass]="{'opacity-50 grayscale pointer-events-none': !item.selected}">
                                     <span class="text-[10px] font-bold text-gray-500 mr-0.5">$</span>
                                     <input type="number" [(ngModel)]="item.incentiveAmount"
+                                        (ngModelChange)="updatePersistentSelected(item)"
                                         (keydown)="restrictNumeric($event)"
                                         class="w-full bg-transparent text-sm font-bold text-gray-900 outline-none text-right [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                         [disabled]="!item.selected" placeholder="0">
@@ -804,7 +787,7 @@
                             [ngClass]="liveQuotaRemaining === 0 ? 'text-red-500' : ((totalCatalogProducts - liveQuotaRemaining) / totalCatalogProducts > 0.75 ? 'text-orange-500' : 'text-blue-600')">
                             {{ liveQuotaRemaining | number }}
                         </span>
-                        of {{ totalCatalogProducts | number }} products remaining
+                        of {{ totalCatalogProducts | number }} Products Remaining
                     </span>
                     <div class="w-48 h-1.5 bg-gray-200 rounded-full overflow-hidden">
                         <div class="h-full rounded-full transition-all duration-500"
@@ -832,7 +815,7 @@
 
                 <!-- Arrows -->
                 <div class="flex items-center gap-1">
-                    <button (click)="prevPage()" 
+                    <button (click)="prevPage()"
                         [disabled]="productSearchTerm ? currentCursorIndex === 0 : individualCurrentOffset === 0"
                         class="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-20 disabled:cursor-not-allowed transition-all text-gray-600 hover:text-blue-600">
                         <span class="material-icons-outlined text-[20px]">chevron_left</span>

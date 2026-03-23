@@ -60,39 +60,26 @@ export class ProductDiscoveryComponent implements OnInit, AfterViewInit {
             next: (opp: any) => {
                 if (!opp) return;
 
+                // Extract Primary Contact from subquery
+                let contactName = null;
+                if (opp.OpportunityContactRoles && opp.OpportunityContactRoles.records && opp.OpportunityContactRoles.records.length > 0) {
+                    contactName = opp.OpportunityContactRoles.records[0].Contact?.Name;
+                }
+
                 this.quoteDataService.setQuoteData({
                     opportunityId: opp.Id,
                     opportunityName: opp.Name,
                     accountId: opp.AccountId,
-                    accountName: opp.Account?.Name, // Account name is now here
-                    website: opp.Account?.Website, // Map website here
-                    pricebook2Id: opp.Pricebook2Id
+                    accountName: opp.Account?.Name,
+                    website: opp.Account?.Website,
+                    pricebook2Id: opp.Pricebook2Id,
+                    primaryContactName: contactName,
+                    salesChannel: opp.Sales_Channel__c || 'Direct'
                 });
-
-                if (opp.Primary_Contact__c) { // Check for custom field standard logic
-                    this.fetchContactDetails(opp.Primary_Contact__c);
-                }
-
-                if (opp.Sales_Channel__c) {
-                    this.quoteDataService.setQuoteData({
-                        salesChannel: opp.Sales_Channel__c
-                    });
-                }
             },
             error: (err) => {
                 // error handled
             }
-        });
-    }
-
-    fetchContactDetails(contactId: string): void {
-        this.salesforceApiService.getContactDetails(contactId).subscribe({
-            next: (contact: any) => {
-                this.quoteDataService.setQuoteData({
-                    primaryContactName: contact.Name
-                });
-            },
-            error: (err) => { /* error */ }
         });
     }
 

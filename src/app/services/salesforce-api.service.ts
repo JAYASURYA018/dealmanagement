@@ -81,7 +81,7 @@ export class SalesforceApiService {
         const token = this.contextService.accessToken;
         const baseUrl = this.contextService.apiBaseUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com';
 
-        const query = `SELECT Id, Name, AccountId, Account.Name, Account.Website, Pricebook2Id, Primary_Contact__c, Sales_Channel__c, (SELECT Contact.Name FROM OpportunityContactRoles) FROM Opportunity WHERE Id = '${opportunityId}'`;
+        const query = `SELECT Id, Name, AccountId, Account.Name, Account.Website, Pricebook2Id, Primary_Contact__c, Sales_Channel__c, (SELECT Contact.Name FROM OpportunityContactRoles WHERE IsPrimary = true) FROM Opportunity WHERE Id = '${opportunityId}'`;
         const encodedQuery = encodeURIComponent(query);
         const url = `${baseUrl}/services/data/v65.0/query/?q=${encodedQuery}`;
 
@@ -611,7 +611,7 @@ export class SalesforceApiService {
         // Query to get opportunities created today only, limited to 5
         // Query for specific date 2026-01-28 onwards (widened to catch timezone spillover)
         // Updated to include Account Website and Primary Contact (via Roles) as requested
-        const query = `SELECT Id, Name, StageName, Amount, CloseDate, Owner.Name, AccountId, Account.Name, Account.Website, CreatedDate, (SELECT Contact.Id, Contact.Name FROM OpportunityContactRoles) FROM Opportunity WHERE CreatedDate >= 2026-01-28T00:00:00Z ORDER BY CreatedDate DESC LIMIT 5`;
+        const query = `SELECT Id, Name, StageName, Amount, CloseDate, Owner.Name, AccountId, Account.Name, Account.Website, CreatedDate, (SELECT Contact.Id, Contact.Name FROM OpportunityContactRoles WHERE IsPrimary = true) FROM Opportunity WHERE CreatedDate >= 2026-01-28T00:00:00Z ORDER BY CreatedDate DESC LIMIT 5`;
         const encodedQuery = encodeURIComponent(query);
         const url = `${baseUrl}/services/data/v65.0/query?q=${encodedQuery}`;
 
@@ -813,7 +813,7 @@ export class SalesforceApiService {
             },
             "additionalFields": {
                 "Product2": {
-                    "fields": ["RCA_Sort_order__c"]
+                    "fields": ["RCA_Sort_order__c", "RCA_Product_Count__c"]
                 }
             },
             "limit": limit,
@@ -872,7 +872,7 @@ export class SalesforceApiService {
             },
             "additionalFields": {
                 "Product2": {
-                    "fields": ["RCA_Sort_order__c"]
+                    "fields": ["RCA_Sort_order__c", "RCA_Product_Count__c"]
                 }
             },
             "limit": 600,

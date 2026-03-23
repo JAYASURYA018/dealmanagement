@@ -72,7 +72,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         {
             id: '1',
             name: 'Discount Period 1',
-            timePeriod: 'Date range',
+            timePeriod: 'Date Range',
             startDate: '',
             endDate: '',
             activeDiscounts: [] as any[]
@@ -84,7 +84,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         {
             id: '1',
             name: 'Incentives',
-            timePeriod: 'Date range',
+            timePeriod: 'Date Range',
             startDate: '',
             endDate: '',
             activeIncentives: [] as any[]
@@ -557,7 +557,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
 
     selectDropdownOption(option: any) {
         this.selectedDropdownOption = option;
-        
+
         // As requested: clear existing filters when selecting a new classification
         this.selectedRegion = null;
         this.selectedBillingFreq = null;
@@ -570,10 +570,10 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         this.nextPageCursor = null;
 
         this.individualCurrentOffset = 0; // Reset pagination offset on new selection
-        
+
         // We should also reset the search term if a classification is selected
         this.productSearchTerm = '';
-        
+
         this.loadIndividualProducts();
     }
 
@@ -581,7 +581,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
     applyFilters() {
         // Reset offset (though we now prefer cursors)
         this.individualCurrentOffset = 0;
-        
+
         const criteria = this.getFilterCriteria();
 
         // If we have active Region/Billing filters, use the faceted filter API
@@ -714,36 +714,46 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
 
     syncSelectionState() {
         if (this.selectorCalledFrom === 'incentives') {
-            // Incentives currently only track group selections in this modal
+            // Incentives track group selections in this modal
             this.productGroups.forEach(g => {
-                g.selected = this.persistentIncentiveGroups.has(g.id);
-                // If it was selected, ensure the object in the map is updated with any fresh data
-                if (g.selected) {
+                const saved = this.persistentIncentiveGroups.get(g.id);
+                if (saved) {
+                    g.selected = true;
+                    // Restore the amount entered by the user
+                    g.incentiveAmount = saved.incentiveAmount || 0;
+                    // Update map with fresh reference to the current object in the list
                     this.persistentIncentiveGroups.set(g.id, g);
                 } else {
-                    g.incentiveAmount = 0; // Reset stale value
+                    g.selected = false;
+                    g.incentiveAmount = 0;
                 }
             });
             this.individualProducts.forEach(p => {
                 p.selected = false;
-                p.incentiveAmount = 0; // Reset stale value
+                p.incentiveAmount = 0;
             });
         } else {
             // Discounts track both
             this.productGroups.forEach(g => {
-                g.selected = this.persistentSelectedGroups.has(g.id);
-                if (g.selected) {
+                const saved = this.persistentSelectedGroups.get(g.id);
+                if (saved) {
+                    g.selected = true;
+                    g.discount = saved.discount;
                     this.persistentSelectedGroups.set(g.id, g);
                 } else {
-                    g.discount = 0; // Reset stale value
+                    g.selected = false;
+                    g.discount = 0;
                 }
             });
             this.individualProducts.forEach(p => {
-                p.selected = this.persistentSelectedIndividuals.has(p.id);
-                if (p.selected) {
+                const saved = this.persistentSelectedIndividuals.get(p.id);
+                if (saved) {
+                    p.selected = true;
+                    p.discount = saved.discount;
                     this.persistentSelectedIndividuals.set(p.id, p);
                 } else {
-                    p.discount = 0; // Reset stale value
+                    p.selected = false;
+                    p.discount = 0;
                 }
             });
         }
@@ -916,10 +926,10 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
                         pricebookEntryId: defaultPrice?.priceBookEntryId || p.pricebookEntryId || '',
                         isBundleChild: false,
                         // Access sort order from multiple possible locations
-                        sortOrder: p.additionalFields?.RCA_Sort_order__c || 
-                                   p.fields?.RCA_Sort_order__c || 
-                                   p.additionalFields?.Product2?.RCA_Sort_order__c ||
-                                   p.additionalFields?.Product2?.fields?.RCA_Sort_order__c
+                        sortOrder: p.additionalFields?.RCA_Sort_order__c ||
+                            p.fields?.RCA_Sort_order__c ||
+                            p.additionalFields?.Product2?.RCA_Sort_order__c ||
+                            p.additionalFields?.Product2?.fields?.RCA_Sort_order__c
                     };
                 });
 
@@ -953,7 +963,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
     handlePageSizeChange(newSize: number) {
         this.individualPageSize = Number(newSize);
         this.individualCurrentOffset = 0;
-        
+
         if (this.productSearchTerm) {
             // Reset Cursor Pagination for the new page size
             this.cursorStack = [''];
@@ -978,13 +988,13 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
 
         if (this.currentCursorIndex < this.cursorStack.length - 1) {
             this.currentCursorIndex++;
-            
+
             if (this.productSearchTerm) {
                 this.executeSearch();
             } else {
                 // Update offset just in case some logic still relies on it
                 this.individualCurrentOffset += Number(this.individualPageSize);
-                
+
                 // Choose between faceted filter and classification search
                 const criteria = this.getFilterCriteria();
                 if (criteria.length > 0) {
@@ -1003,7 +1013,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
 
         if (this.currentCursorIndex > 0) {
             this.currentCursorIndex--;
-            
+
             if (this.productSearchTerm) {
                 this.executeSearch();
             } else {
@@ -1027,7 +1037,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
                 const pageSize = Number(this.individualPageSize);
                 if (this.individualCurrentOffset >= pageSize) {
                     this.individualCurrentOffset -= pageSize;
-                    
+
                     const criteria = this.getFilterCriteria();
                     if (criteria.length > 0) {
                         this.executeFacetedFilter();
@@ -1041,7 +1051,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
 
     onProductSearch() {
         console.log('[onProductSearch] Triggered with term:', this.productSearchTerm);
-        
+
         // Reset view mode to 'all' to ensure search results are visible
         this.viewMode = 'all';
         this.filterQuery = '';
@@ -1060,7 +1070,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         this.billingSearchText = '';
 
         // Reset Cursor Pagination for new search
-        this.cursorStack = ['']; 
+        this.cursorStack = [''];
         this.currentCursorIndex = 0;
         this.nextPageCursor = null;
 
@@ -1171,20 +1181,20 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
                         price: defaultPrice?.price || p.unitPrice || 0,
                         pricebookEntryId: defaultPrice?.priceBookEntryId || p.pricebookEntryId || '',
                         isBundleChild: false,
-                        sortOrder: p.additionalFields?.RCA_Sort_order__c || 
-                                   p.fields?.RCA_Sort_order__c || 
-                                   p.additionalFields?.Product2?.fields?.RCA_Sort_order__c
+                        sortOrder: p.additionalFields?.RCA_Sort_order__c ||
+                            p.fields?.RCA_Sort_order__c ||
+                            p.additionalFields?.Product2?.fields?.RCA_Sort_order__c
                     };
                 });
                 this.individualTotalCount = data.totalCount || data.count || (Array.isArray(newProducts) ? newProducts.length : 0);
-                
+
                 console.log(`✅ [executeFacetedFilter] Fetched ${newProducts.length} filtered products.`);
 
                 // Map to UI model
                 this.individualProducts = newProducts.map((p: any) => {
                     // Extract Product2 ID from selling model if available, else use product ID
                     const resolvedId = p.productSellingModelOptions?.[0]?.productId || p.id;
-                    
+
                     // Find default price record to get the PricebookEntry ID
                     const defaultPrice = p.prices?.find((pr: any) => pr.isDefault) || p.prices?.[0];
 
@@ -1199,10 +1209,10 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
                         pricebookEntryId: defaultPrice?.priceBookEntryId || p.pricebookEntryId || '',
                         isBundleChild: false,
                         // Access sort order from multiple possible locations in the JSON structure
-                        sortOrder: p.additionalFields?.RCA_Sort_order__c || 
-                                   p.fields?.RCA_Sort_order__c || 
-                                   p.additionalFields?.Product2?.RCA_Sort_order__c ||
-                                   p.additionalFields?.Product2?.fields?.RCA_Sort_order__c
+                        sortOrder: p.additionalFields?.RCA_Sort_order__c ||
+                            p.fields?.RCA_Sort_order__c ||
+                            p.additionalFields?.Product2?.RCA_Sort_order__c ||
+                            p.additionalFields?.Product2?.fields?.RCA_Sort_order__c
                     };
                 });
 
@@ -1266,10 +1276,10 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
             next: (data: any) => {
                 // Update nextPageCursor from API response
                 this.nextPageCursor = data.cursor || null;
-                
+
                 // Track total size from API (if available)
                 this.individualTotalCount = data.totalCount || data.count || data.totalSize || 0;
-                
+
                 const newProducts = data.products || data.result || [];
                 console.log(`✅ [executeSearch] Fetched ${newProducts.length} products. Next Cursor: ${this.nextPageCursor}`);
 
@@ -1278,14 +1288,14 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
                     .filter((p: any) => p.productType !== 'Bundle') // Filter out bundles in individual tab
                     .map((p: any) => {
                         const resolvedId = p.id; // Map result[].id to Product ID
-                        
+
                         // Map result[].prices[0].priceBookEntryId to Pricebook Entry ID
                         const defaultPrice = p.prices?.find((pr: any) => pr.isDefault) || p.prices?.[0];
 
                         return {
                             id: resolvedId,
                             name: p.name || p.fields?.Name || 'Unknown Product',
-                            family: p.additionalFields?.Family || p.fields?.Family || this.selectedDropdownOption?.Name || 'Other',
+                            family: this.productSearchTerm ? 'Search Result' : (this.selectedDropdownOption?.Name || 'Other'),
                             selected: false,
                             discount: 0,
                             quantity: 1,
@@ -1293,10 +1303,10 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
                             pricebookEntryId: defaultPrice?.priceBookEntryId || p.pricebookEntryId || '',
                             isBundleChild: false,
                             // Map result[].additionalFields.Product2.RCA_Sort_order__c to SortOrder
-                            sortOrder: p.additionalFields?.Product2?.RCA_Sort_order__c || 
-                                       p.additionalFields?.Product2?.fields?.RCA_Sort_order__c ||
-                                       p.additionalFields?.RCA_Sort_order__c ||
-                                       p.fields?.RCA_Sort_order__c
+                            sortOrder: p.additionalFields?.Product2?.RCA_Sort_order__c ||
+                                p.additionalFields?.Product2?.fields?.RCA_Sort_order__c ||
+                                p.additionalFields?.RCA_Sort_order__c ||
+                                p.fields?.RCA_Sort_order__c
                         };
                     });
 
@@ -1327,7 +1337,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
 
     onGroupSearch() {
         console.log('🔍 [onGroupSearch] CALLED. bundleSearchTerm:', `"${this.bundleSearchTerm}"`);
-        
+
         // Reset view mode to 'all' to ensure search results are visible
         this.viewMode = 'all';
         this.filterQuery = '';
@@ -1366,20 +1376,24 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
                 this.productGroups = results.map((p: any) => {
                     // Try to find matching classification to get the right classification ID
                     const match = this.allClassifications.find(c => (c.Name || '').toLowerCase() === (p.name || '').toLowerCase());
-                    
+
                     return {
                         id: match ? match.Id : p.id,
                         productId: p.id,
                         name: p.name || 'Unknown Bundle',
-                        No_Of_Child_Products__c: p.fields?.No_Of_Child_Products__c || 0,
+                        No_Of_Child_Products__c: p.additionalFields?.RCA_Product_Count__c ||
+                            p.No_Of_Child_Products__c ||
+                            p.fields?.No_Of_Child_Products__c ||
+                            p.additionalFields?.No_Of_Child_Products__c ||
+                            p.additionalFields?.Product2?.RCA_Product_Count__c || 0,
                         selected: false,
                         discount: 0,
                         incentiveAmount: 0,
                         pricebookEntryId: p.prices?.[0]?.priceBookEntryId || '',
                         price: p.prices?.[0]?.price || 0,
-                        sortOrder: p.additionalFields?.RCA_Sort_order__c || 
-                                   p.fields?.RCA_Sort_order__c || 
-                                   p.additionalFields?.Product2?.RCA_Sort_order__c
+                        sortOrder: p.additionalFields?.RCA_Sort_order__c ||
+                            p.fields?.RCA_Sort_order__c ||
+                            p.additionalFields?.Product2?.RCA_Sort_order__c
                     };
                 });
 
@@ -1431,7 +1445,9 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         this.productGroups = items.map(item => ({
             id: item.id || item.Id,
             name: item.name || item.Name,
-            No_Of_Child_Products__c: item.No_Of_Child_Products__c || 0,
+            No_Of_Child_Products__c: item.additionalFields?.RCA_Product_Count__c ||
+                item.additionalFields?.Product2?.RCA_Product_Count__c ||
+                item.No_Of_Child_Products__c || 0,
             selected: false,
             discount: 0,
             price: item.prices?.[0]?.price || 0,
@@ -1441,16 +1457,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
             components: []
         }));
         console.log(`✅ [mapNewProductData] productGroups updated. Count: ${this.productGroups.length}`);
-
-
-        // Restore persistent selection state
-        this.productGroups.forEach(g => {
-            if (this.persistentSelectedGroups.has(g.id)) {
-                g.selected = true;
-                // Update map with fresh reference
-                this.persistentSelectedGroups.set(g.id, g);
-            }
-        });
+        this.syncSelectionState();
     }
 
 
@@ -1582,7 +1589,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         this.regionSearchText = '';
         // As requested: remove existing search values when selecting a filter
         this.productSearchTerm = '';
-        
+
         // Reset Cursor Pagination for the new filter selection
         this.cursorStack = [''];
         this.currentCursorIndex = 0;
@@ -1597,7 +1604,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         this.billingSearchText = '';
         // As requested: remove existing search values when selecting a filter
         this.productSearchTerm = '';
-        
+
         // Reset Cursor Pagination for the new filter selection
         this.cursorStack = [''];
         this.currentCursorIndex = 0;
@@ -1686,22 +1693,29 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
     updatePersistentSelected(item: any) {
         if (!item.selected) return;
 
-        // Prevent leading zeros and cap between 0-100
-        if (item.discount !== null && item.discount !== undefined && item.discount !== '') {
-            let val = Number(item.discount);
-            if (isNaN(val)) val = 0;
-            if (val < 0) val = 0;
-            if (val > 100) {
-                this.toastService.show('Discount cannot be more than 100%.', 'error');
+        // Validation for Discount (only relevant for discounts flow)
+        if (this.selectorCalledFrom !== 'incentives') {
+            if (item.discount !== null && item.discount !== undefined && item.discount !== '') {
+                let val = Number(item.discount);
+                if (isNaN(val)) val = 0;
+                if (val < 0) val = 0;
+                if (val > 100) {
+                    this.toastService.show('Discount cannot be more than 100%.', 'error');
+                    item.discount = null;
+                } else {
+                    item.discount = val;
+                }
+            } else if (item.discount === '') {
                 item.discount = null;
-            } else {
-                item.discount = val;
             }
-        } else if (item.discount === '') {
-            item.discount = null; // Changed from 0 to null
         }
 
-        const map = this.productTab === 'groups' ? this.persistentSelectedGroups : this.persistentSelectedIndividuals;
+        let map: Map<string, any>;
+        if (this.selectorCalledFrom === 'incentives') {
+            map = this.persistentIncentiveGroups;
+        } else {
+            map = this.productTab === 'groups' ? this.persistentSelectedGroups : this.persistentSelectedIndividuals;
+        }
         map.set(item.id, item);
     }
 
