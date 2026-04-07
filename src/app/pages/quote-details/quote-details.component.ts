@@ -1215,12 +1215,7 @@ export class QuoteDetailsComponent implements OnInit {
                             if (g.id) incentiveProductIds.add(g.id);
                         });
 
-                    if (selectedIncentiveGroupNames.size === 1) {
-                        const rawName = Array.from(selectedIncentiveGroupNames)[0];
-                        period.displayName = (rawName as string).split(' ').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-                    } else if (selectedIncentiveGroupNames.size > 1) {
-                        period.displayName = 'Multiple Incentives';
-                    }
+                    period.displayName = 'Incentives';
 
                     this.previewData.QuoteLineItems.records.forEach((item: any) => {
                         if (item.Id && this.matchedPreviewItemIds.has(item.Id)) return;
