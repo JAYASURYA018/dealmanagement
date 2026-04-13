@@ -4,6 +4,7 @@ import { ProductDiscoveryComponent } from './pages/product-discovery/product-dis
 import { QuoteDetailsComponent } from './pages/quote-details/quote-details.component';
 
 import { LoginComponent } from './pages/login/login.component';
+import { QuoteConfigurationComponent } from './pages/quote-configuration/quote-configuration.component';
 
 import { authGuard } from './guards/auth.guard';
 
@@ -16,6 +17,7 @@ export const routes: Routes = [
     { path: 'debug', component: DebugComponent },
     { path: '', component: OpportunitiesComponent },
     { path: 'products', component: ProductDiscoveryComponent },
+    { path: 'quote-configuration', component: QuoteConfigurationComponent },
     { path: 'configure-quote', component: QuoteDetailsComponent },
     { path: '**', redirectTo: '' }
 ];

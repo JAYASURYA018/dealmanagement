@@ -596,6 +596,16 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
     setActiveTab(tab: 'discounts' | 'incentives') {
         this.activeTab = tab;
         this.periodDropdownOpen = false;
+        this.viewMode = 'all'; // Reset view mode when switching tabs
+        
+        // Reset selections and forms when switching tabs to satisfy "fresh tab" requirement
+        this.resetSelections();
+        this.persistentIncentiveGroups.clear();
+        this.incentiveForm.amount = '';
+        this.incentiveForm.type = 'Select';
+        this.discountForm.granularity = 'Select';
+        this.discountForm.priceReference = 'Select';
+
         this.saveCurrentState(); // Auto-save on tab change
     }
 
@@ -694,6 +704,8 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         this.snapshotIncentiveGroups = new Map(this.persistentIncentiveGroups);
 
         this.showProductSelector = true;
+        // Always reset view mode to 'all' for a fresh start as requested
+        this.viewMode = 'all'; 
         // Always start on Product Groups tab
         this.productTab = 'groups';
         // Redundant call removed - picklists only needed for individual tab if subscription
@@ -1634,6 +1646,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         }
 
         this.showProductSelector = false;
+        this.viewMode = 'all'; // Always reset view mode back to "Show All" on close
         // Reset search/filters when closing
         this.productSearchTerm = '';
         this.bundleSearchTerm = '';
@@ -2399,6 +2412,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         this.productGroups.forEach(g => {
             g.selected = false;
             g.discount = 0;
+            g.incentiveAmount = 0;
         });
         this.individualProducts.forEach(p => {
             p.selected = false;
@@ -2406,7 +2420,11 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         });
         this.persistentSelectedGroups.clear();
         this.persistentSelectedIndividuals.clear();
+        this.persistentIncentiveGroups.clear();
         this.discountForm.value = '';
+        this.discountForm.granularity = 'Select';
+        this.discountForm.priceReference = 'Select';
+        this.incentiveForm.type = 'Select';
     }
     restrictNumeric(event: KeyboardEvent) {
         const allowedKeys = ['Backspace', 'Tab', 'Enter', 'ArrowLeft', 'ArrowRight', 'Delete', 'End', 'Home'];
