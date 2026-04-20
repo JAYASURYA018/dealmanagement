@@ -14,17 +14,17 @@
 
                 <div class="flex flex-col">
                     <div class="flex items-center gap-2 mb-0.5">
-                        <h1 class="text-md font-bold text-slate-700 tracking-tight leading-none">Q-123456</h1>
+                        <h1 class="text-md font-bold text-slate-700 tracking-tight leading-none">{{ quoteNumber }}</h1>
                         <span class="px-2 py-0.5 bg-green-500 bg-opacity-10 text-green-600 text-[9px] font-bold rounded-md tracking-wider border border-green-500/20">
                             Draft
                         </span>
                     </div>
                     
                     <div class="flex items-center gap-1.5 text-[11px] font-medium text-slate-500">
-                        <span class="hover:text-blue-600 cursor-pointer transition-colors">Opportunity Name</span>
+                        <span class="hover:text-blue-600 cursor-pointer transition-colors">{{ opportunityName }}</span>
                         <span class="text-slate-300 text-[10px]">›</span>
                         <div class="flex items-center gap-1 text-blue-600 font-bold">
-                            <span>Cymbol</span>
+                            <span>{{ accountName }}</span>
                         </div>
                     </div>
                 </div>
@@ -114,14 +114,21 @@
                 <app-details-of-quote></app-details-of-quote>
             </ng-container>
 
-            <!-- Placeholder for other selections -->
-            <div *ngIf="selectedItemId !== 'quote_details'" class="w-full h-full flex flex-col items-center justify-center p-12 text-center">
-                <div class="w-24 h-24 bg-slate-50 rounded-3xl flex items-center justify-center mb-6 border border-slate-100 shadow-sm animate-pulse">
-                     <span class="material-icons text-5xl text-slate-200">settings</span>
-                </div>
-                <h4 class="text-xl font-bold text-slate-400 mb-2 font-mono">/configuring_product</h4>
-                <p class="text-slate-300 max-w-[300px]">Product specific configuration surface for [{{ selectedItemId }}] will appear here.</p>
-            </div>
+            <!-- Commitment Configuration -->
+            <ng-container *ngIf="selectedItemId !== 'quote_details' && getProductType(selectedItemId) === 'commitment'">
+                <app-commit-configuration [productId]="selectedItemId" [quoteLineId]="getSelectedProduct()?.quoteLineId" [accountName]="accountName"></app-commit-configuration>
+            </ng-container>
+ 
+            <!-- Subscription Configuration -->
+            <ng-container *ngIf="selectedItemId !== 'quote_details' && getProductType(selectedItemId) === 'subscription'">
+                <app-subscription-configuration 
+                    [productId]="selectedItemId" 
+                    [productName]="getSelectedProduct()?.name || ''"
+                    [categoryId]="getSelectedProduct()?.categoryId || ''"
+                    [bundleQuoteLineId]="getSelectedProduct()?.quoteLineId" 
+                    [accountName]="accountName">
+                </app-subscription-configuration>
+            </ng-container>
         </main>
     </div>
 
@@ -146,9 +153,11 @@
             <div class="flex items-center gap-3">
                 <button (click)="openPreview()" class="bg-white text-blue-600 border border-gray-200 hover:bg-blue-50/30 px-6 py-2 rounded-full text-sm font-bold transition-all">Preview</button>
                 <button (click)="resetForm()" class="bg-white text-blue-600 border border-gray-200 hover:bg-blue-50/30 px-6 py-2 rounded-full text-sm font-bold transition-all">Cancel</button>
-                <button (click)="resetForm()" class="bg-white text-blue-600 border border-gray-200 hover:bg-blue-50/30 px-6 py-2 rounded-full text-sm font-bold transition-all">Save</button>
-                <button (click)="onSkipAndSave()" [disabled]="activeTab === 'details'"
-                    [ngClass]="activeTab === 'details' ? 'opacity-50 cursor-not-allowed bg-gray-50 text-gray-400 border-gray-200 shadow-none' : 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700 shadow-sm hover:shadow-md'"
+                <button (click)="onSave()" [disabled]="isSaveDisabled"
+                    [ngClass]="isSaveDisabled ? 'opacity-50 cursor-not-allowed bg-gray-50 text-gray-400 border-gray-200' : 'bg-white text-blue-600 border border-gray-200 hover:bg-blue-50/30'"
+                    class="px-6 py-2 rounded-full text-sm font-bold border transition-all">Save</button>
+                <button (click)="onSkipAndSave()" [disabled]="isSubmitDisabled"
+                    [ngClass]="isSubmitDisabled ? 'opacity-50 cursor-not-allowed bg-gray-50 text-gray-400 border-gray-200 shadow-none' : 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700 shadow-sm hover:shadow-md'"
                     class="px-8 py-2 rounded-full text-sm font-bold border transition-all focus:outline-none">
                     Submit
                 </button>

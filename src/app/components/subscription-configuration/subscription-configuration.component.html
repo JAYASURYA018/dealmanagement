@@ -1,0 +1,185 @@
+<div class="flex flex-col h-full bg-white">
+    <!-- Tab Navigation -->
+    <div class="px-8 pt-6 border-b border-slate-100 flex-shrink-0">
+        <div class="flex gap-8">
+            <button (click)="switchTab('details')"
+                    [ngClass]="activeTab === 'details' ? 'text-blue-600 border-b-2 border-blue-600 font-bold' : 'text-slate-400 font-medium hover:text-slate-600'"
+                    class="pb-4 text-sm transition-all focus:outline-none">
+                Details
+            </button>
+            <button (click)="switchTab('plans')"
+                    [ngClass]="activeTab === 'plans' ? 'text-blue-600 border-b-2 border-blue-600 font-bold' : 'text-slate-400 font-medium hover:text-slate-600'"
+                    class="pb-4 text-sm transition-all focus:outline-none">
+                Plans & Discounts
+            </button>
+        </div>
+    </div>
+
+    <!-- Scrollable Content Area -->
+    <div class="flex-1 overflow-y-auto custom-scrollbar p-8">
+        
+        <!-- Tab 1: Subscription Details (Subscription Periods Tab) -->
+        <div *ngIf="activeTab === 'details'" class="animate-in fade-in slide-in-from-bottom duration-500">
+            
+            <div *ngIf="isLookerSubscription">
+                <!-- SUBSCRIPTION DETAILS SECTION (Top Header) -->
+                <h4 class="text-gray-800 text-base font-bold mb-3">Subscription Details</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                    <!-- Billing Frequency -->
+                    <div (click)="toggleBillingFrequency(); $event.stopPropagation()"
+                        class="bg-slate-50 p-3 rounded-xl border border-transparent transition-all relative group h-[60px] flex flex-col justify-center shadow-sm">
+                        <label class="block text-[10px] text-gray-500 mb-0.5 uppercase tracking-wide font-medium">Billing Frequency</label>
+                        <div class="flex justify-between items-center">
+                            <div class="text-sm font-medium text-gray-900 truncate">{{ billingFrequency || 'Select' }}</div>
+                            <span class="material-icons-outlined text-sm text-gray-400">arrow_drop_down</span>
+                        </div>
+                        <div *ngIf="billingFrequencyOpen" (click)="$event.stopPropagation()"
+                            class="absolute left-0 top-[60px] w-full bg-white rounded-lg shadow-xl border border-gray-100 z-[100] py-2 max-h-[200px] overflow-y-auto slim-scrollbar">
+                            <button *ngFor="let freq of billingFrequencyOptions" (click)="selectBillingFrequency(freq)"
+                                class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 transition-colors">
+                                {{ freq }}
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Operation Type -->
+                    <div (click)="toggleOperationType(); $event.stopPropagation()"
+                        class="bg-slate-50 p-3 rounded-xl border border-transparent transition-all relative group h-[60px] flex flex-col justify-center shadow-sm">
+                        <label class="block text-[10px] text-gray-500 mb-0.5 uppercase tracking-wide font-medium">Operation Type</label>
+                        <div class="flex justify-between items-center">
+                            <div class="text-sm font-medium text-gray-900 truncate">{{ operationType || 'Select' }}</div>
+                            <span class="material-icons-outlined text-sm text-gray-400">arrow_drop_down</span>
+                        </div>
+                        <div *ngIf="operationTypeOpen" (click)="$event.stopPropagation()"
+                            class="absolute left-0 top-[60px] w-full bg-white rounded-lg shadow-xl border border-gray-100 z-[100] py-2">
+                            <button *ngFor="let type of operationTypeOptions" (click)="selectOperationType(type)"
+                                class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 transition-colors">
+                                {{ type }}
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Term Starts on -->
+                    <div (click)="toggleTermStartsOn(); $event.stopPropagation()"
+                        class="bg-slate-50 p-3 rounded-xl border border-transparent transition-all relative group h-[60px] flex flex-col justify-center shadow-sm">
+                        <label class="block text-[10px] text-gray-500 mb-0.5 uppercase tracking-wide font-medium">Term Starts on</label>
+                        <div class="flex justify-between items-center">
+                            <div class="text-sm font-medium text-gray-900 truncate">{{ termStartsOn || 'Select' }}</div>
+                            <span class="material-icons-outlined text-sm text-gray-400">arrow_drop_down</span>
+                        </div>
+                        <div *ngIf="termStartsOnOpen" (click)="$event.stopPropagation()"
+                            class="absolute left-0 top-[60px] w-full bg-white rounded-lg shadow-xl border border-gray-100 z-[100] py-2">
+                            <button *ngFor="let start of termStartsOnOptions" (click)="selectTermStartsOn(start)"
+                                class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 transition-colors">
+                                {{ start }}
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Term Start Date -->
+                    <div [class.opacity-50]="isTermStartDateDisabled()" [class.cursor-not-allowed]="isTermStartDateDisabled()"
+                        class="bg-slate-50 p-3 rounded-xl border border-transparent transition-all relative group h-[60px] flex flex-col justify-center shadow-sm">
+                        <label class="block text-[10px] text-gray-500 mb-0.5 uppercase tracking-wide font-medium">Term Start Date</label>
+                        <div class="flex justify-between items-center w-full relative">
+                            <input type="date" [(ngModel)]="termStartDate" (ngModelChange)="updateExpirationDate()"
+                                [min]="minDate" [disabled]="isTermStartDateDisabled()"
+                                class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10 disabled:cursor-not-allowed"
+                                placeholder="Select">
+                            <div class="text-sm font-medium text-gray-900 leading-tight">{{ formatDate(termStartDate) || 'Select' }}</div>
+                            <span class="material-icons-outlined text-gray-600 text-lg ml-auto pointer-events-none">calendar_today</span>
+                        </div>
+                    </div>
+
+                    <!-- Term End Date -->
+                    <div class="bg-slate-50 p-3 rounded-xl border border-transparent transition-all relative group h-[60px] flex flex-col justify-center shadow-sm">
+                        <label class="block text-[10px] text-gray-500 mb-0.5 uppercase tracking-wide font-medium">Term End Date</label>
+                        <div class="flex justify-between items-center w-full relative">
+                            <input type="date" [(ngModel)]="termEndDate" (ngModelChange)="updateTermFromDates()"
+                                [min]="termStartDate || minDate"
+                                class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" placeholder="Select">
+                            <div class="text-sm font-medium text-gray-900 leading-tight">{{ formatDate(termEndDate) || 'Select' }}</div>
+                            <span class="material-icons-outlined text-gray-600 text-lg ml-auto pointer-events-none">calendar_today</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 2: Subscription Periods & Plans (Plans & Discounts Tab) -->
+        <div *ngIf="activeTab === 'plans'" class="animate-in fade-in duration-500">
+            
+            <div *ngIf="isLookerSubscription">
+                <!-- Subscription Periods List Header -->
+                <div class="flex justify-between items-center mb-10">
+                    <h4 class="text-gray-800 text-[20px] font-medium">Subscription Periods</h4>
+
+                    <div class="flex gap-4">
+                        <!-- Header Input: Start Date -->
+                        <div class="bg-white p-2 rounded-lg border border-gray-300 hover:border-gray-400 transition-colors relative group h-[52px] flex flex-col justify-center min-w-[240px]">
+                            <label class="block text-[12px] text-gray-600 mb-0.5 leading-none">Subscription Start Date</label>
+                            <div class="relative w-full flex items-center">
+                                <input type="date" [(ngModel)]="termStartInput" [min]="minDate"
+                                    (ngModelChange)="updateExpirationDate()"
+                                    class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" placeholder="Select">
+                                <div class="text-sm font-medium text-gray-900 leading-tight">
+                                    {{ termStartInput ? (termStartInput | date:'mediumDate') : 'Select' }}
+                                </div>
+                                <span class="material-icons-outlined text-gray-600 text-lg ml-auto pointer-events-none">calendar_today</span>
+                            </div>
+                        </div>
+                        <!-- Header Input: End Date -->
+                        <div class="bg-white p-2 rounded-lg border border-gray-300 hover:border-gray-400 transition-colors relative group h-[52px] flex flex-col justify-center min-w-[240px]">
+                            <label class="block text-[12px] text-gray-600 mb-0.5 leading-none">Subscription End Date</label>
+                            <div class="relative w-full flex items-center">
+                                <input type="date" [(ngModel)]="termEndDate" [min]="termStartInput || minDate"
+                                    (ngModelChange)="updateTermFromDates()"
+                                    class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" placeholder="Select">
+                                <div class="text-sm font-medium text-gray-900 leading-tight">
+                                    {{ termEndDate ? (termEndDate | date:'mediumDate') : 'Select' }}
+                                </div>
+                                <span class="material-icons-outlined text-gray-600 text-lg ml-auto pointer-events-none">calendar_today</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- List / Empty State -->
+                <div *ngIf="subscriptionPeriods.length === 0" class="flex flex-col items-center justify-center py-16 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                    <button (click)="openSubscriptionModal()"
+                        class="px-8 py-3 bg-blue-600 text-white rounded-full font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 hover:-translate-y-0.5 transition-all mb-4">
+                        Create Subscription Periods
+                    </button>
+                    <p class="text-sm font-medium text-slate-400">You can choose to create yearly or custom periods</p>
+                </div>
+
+                <div *ngIf="subscriptionPeriods.length > 0" class="space-y-6">
+                    <app-subscription-period-item
+                        *ngFor="let period of subscriptionPeriods; let i = index; let first = first; let last = last"
+                        [period]="period" [products]="productOptions" [regionOptions]="lookerRegionOptions"
+                        [frequency]="currentFrequency" [isFirst]="first" [isLast]="last"
+                        [subscriptionStartDate]="termStartDate" [subscriptionEndDate]="termEndDate"
+                        [previousPeriodEndDate]="i > 0 ? subscriptionPeriods[i-1].endDate : ''"
+                        (productChanged)="onSubscriptionProductChanged()"
+                        (remove)="removeSubscriptionPeriod(i)">
+                    </app-subscription-period-item>
+
+                    <button (click)="addSubscriptionPeriodDirectly()"
+                        class="flex items-center gap-3 text-blue-600 font-bold text-sm hover:bg-blue-50 py-3 px-6 rounded-2xl transition-all group">
+                        <div class="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white group-hover:scale-110 transition-transform shadow-md shadow-blue-200">
+                            <span class="material-icons text-sm">add</span>
+                        </div>
+                        Add New Period
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Modals -->
+    <app-subscription-periods-modal 
+        [isOpen]="isSubscriptionModalOpen" 
+        (close)="closeSubscriptionModal()"
+        (create)="onSubscriptionPeriodsCreated($event)">
+    </app-subscription-periods-modal>
+</div>

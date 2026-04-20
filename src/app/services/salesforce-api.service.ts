@@ -1000,4 +1000,48 @@ export class SalesforceApiService {
             catchError(err => this.handleError(method, err))
         );
     }
+
+    /**
+     * Fetches Contacts for a given Account ID
+     */
+    getContactsByAccount(accountId: string): Observable<any> {
+        const method = 'SalesforceApiService.getContactsByAccount';
+        const token = this.contextService.accessToken;
+        const baseUrl = this.contextService.apiBaseUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com';
+
+        const query = `SELECT Id, Name, Email FROM Contact WHERE AccountId = '${accountId}' ORDER BY Name ASC LIMIT 100`;
+        const encodedQuery = encodeURIComponent(query);
+        const url = `${baseUrl}/services/data/v65.0/query/?q=${encodedQuery}`;
+
+        const headers = new HttpHeaders({
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        });
+
+        return this.http.get(url, { headers }).pipe(
+            tap(response => console.log(`[API Response] ${method}`, response)),
+            catchError(err => this.handleError(method, err))
+        );
+    }
+
+    /**
+     * Fetches picklist values for Quote fields
+     */
+    getQuotePicklistValues(recordTypeId: string = '012000000000000AAA'): Observable<any> {
+        const method = 'SalesforceApiService.getQuotePicklistValues';
+        const token = this.contextService.accessToken;
+        const baseUrl = this.contextService.apiBaseUrl;
+
+        const url = `${baseUrl}/services/data/v65.0/ui-api/object-info/Quote/picklist-values/${recordTypeId}/`;
+
+        const headers = new HttpHeaders({
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        });
+
+        return this.http.get(url, { headers }).pipe(
+            tap(response => console.log(`[API Response] ${method}`, response)),
+            catchError(err => this.handleError(method, err))
+        );
+    }
 }

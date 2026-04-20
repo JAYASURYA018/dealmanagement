@@ -1,6 +1,10 @@
-import { Component, OnInit, HostListener } from '@angular/core';
+import { Component, OnInit, HostListener, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { SalesforceApiService } from '../../services/salesforce-api.service';
+import { LoadingService } from '../../services/loading.service';
+import { ToastService } from '../../services/toast.service';
+import { QuoteDataService } from '../../services/quote-data.service';
 
 @Component({
   selector: 'app-details-of-quote',
@@ -14,21 +18,27 @@ import { FormsModule } from '@angular/forms';
   `]
 })
 export class DetailsOfQuoteComponent implements OnInit {
-  accountName = 'Cymbol';
+  private sfApi = inject(SalesforceApiService);
+  private loadingService = inject(LoadingService);
+  private toastService = inject(ToastService);
+  private quoteDataService = inject(QuoteDataService);
+
+  accountId: string | null = null;
+  accountName = '';
   // Primary Contact State
   primaryContactName = '';
   primaryContactOpen = false;
-  primaryContactOptions = ['Alex Morgan', 'Yin Jye Lee', 'Sarah Connor', 'John Doe'];
+  primaryContactOptions: string[] = [];
   
   // Sales Channel State
   salesChannel = '';
   salesChannelOpen = false;
-  salesChannelOptions = ['Reseller', 'Partner', 'Direct'];
+  salesChannelOptions: string[] = [];
   
   // Operation Type State
-  operationType = 'New';
+  operationType = '';
   operationTypeOpen = false;
-  operationTypeOptions = ['New', 'Renewal', 'Amendments'];
+  operationTypeOptions: string[] = [];
 
   // Expiration Date State
   expirationDate = '';
@@ -36,6 +46,56 @@ export class DetailsOfQuoteComponent implements OnInit {
 
   ngOnInit() {
     this.setInitialExpirationDate();
+    this.quoteDataService.quoteData$.subscribe(data => {
+      if (data.accountName) this.accountName = data.accountName;
+      if (data.accountId) {
+        this.accountId = data.accountId;
+        this.loadContacts(data.accountId);
+      }
+      if (data.primaryContactName) this.primaryContactName = data.primaryContactName;
+      if (data.salesChannel) this.salesChannel = data.salesChannel;
+      
+      this.loadAllPicklists();
+    });
+  }
+
+  loadAllPicklists() {
+    this.sfApi.getQuotePicklistValues().subscribe({
+      next: (res) => {
+        const picklists = res.picklistFieldValues;
+        
+        // Sales Channel
+        if (picklists.Sales_Channel__c) {
+          this.salesChannelOptions = picklists.Sales_Channel__c.values.map((v: any) => v.label);
+          if (!this.salesChannel && this.salesChannelOptions.length > 0) {
+            this.salesChannel = this.salesChannelOptions[0];
+          }
+        }
+
+        // Operation Type
+        if (picklists.Operation_Type__c) {
+          this.operationTypeOptions = picklists.Operation_Type__c.values.map((v: any) => v.label);
+          if (!this.operationType && this.operationTypeOptions.length > 0) {
+            this.operationType = this.operationTypeOptions[0];
+          }
+        }
+      },
+      error: (err) => console.error('Error loading quote picklists:', err)
+    });
+  }
+
+  loadContacts(accountId: string) {
+    this.sfApi.getContactsByAccount(accountId).subscribe({
+      next: (res) => {
+        if (res.records) {
+          this.primaryContactOptions = res.records.map((r: any) => r.Name);
+          if (!this.primaryContactName && this.primaryContactOptions.length > 0) {
+            this.primaryContactName = this.primaryContactOptions[0];
+          }
+        }
+      },
+      error: (err) => console.error('Error loading contacts:', err)
+    });
   }
 
   @HostListener('document:click')
@@ -104,11 +164,30 @@ export class DetailsOfQuoteComponent implements OnInit {
     this.expirationDate = expiry.toISOString().split('T')[0];
   }
 
-  toIsoDateString(date: Date): string {
-    if (!date || isNaN(date.getTime())) return '';
-    const y = date.getFullYear();
-    const m = (date.getMonth() + 1).toString().padStart(2, '0');
-    const d = date.getDate().toString().padStart(2, '0');
-    return `${y}-${m}-${d}`;
+  onSave(onSuccess?: () => void) {
+    const quoteId = this.quoteDataService.getQuoteData().quoteId;
+    if (!quoteId) {
+      this.toastService.show('Quote ID not found', 'error');
+      return;
+    }
+
+    this.loadingService.show();
+    this.sfApi.patchQuoteDates(
+      quoteId,
+      new Date().toISOString().split('T')[0], // Use today for start date update if needed
+      this.expirationDate
+    ).subscribe({
+      next: () => {
+        // Also update other fields if needed via similar patch call
+        this.loadingService.hide();
+        this.toastService.show('Quote Details Saved Successfully!', 'success');
+        if (onSuccess) onSuccess();
+      },
+      error: () => this.loadingService.hide()
+    });
+  }
+
+  onSkipAndSave() {
+    this.onSave();
   }
 }

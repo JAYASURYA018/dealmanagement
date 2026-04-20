@@ -20,7 +20,7 @@
                     <span class="material-icons text-gray-400 text-lg">person</span>
                 </div>
                 <div class="flex-1 flex flex-col justify-center">
-                    <label class="block text-[10px] text-slate-400 uppercase font-black mb-0.5 tracking-widest leading-none">Primary contact</label>
+                    <label class="block text-[10px] text-gray-500 mb-0.5 uppercase tracking-wide font-medium">Primary contact</label>
                     <div class="text-sm font-bold text-slate-700 leading-tight truncate">{{ primaryContactName || 'Select' }}</div>
                 </div>
                 <span class="material-icons text-slate-300 text-base">expand_more</span>
@@ -39,7 +39,7 @@
             <!-- Sales Channel -->
             <div (click)="toggleSalesChannel(); $event.stopPropagation()"
                 class="bg-slate-50 p-3 rounded-xl border border-transparent hover:border-blue-100 transition-all cursor-pointer relative group h-[60px] flex flex-col justify-center shadow-sm">
-                <label class="block text-[10px] text-slate-400 uppercase font-black mb-1 tracking-widest leading-none">Sales Channel</label>
+                <label class="block text-[10px] text-gray-500 mb-0.5 uppercase tracking-wide font-medium">Sales Channel</label>
                 <div class="flex justify-between items-center">
                     <div class="text-sm font-bold text-slate-700">{{ salesChannel || 'Select' }}</div>
                     <span class="material-icons text-slate-300 text-sm">expand_more</span>
@@ -59,7 +59,7 @@
             <!-- Operation Type -->
             <div (click)="toggleOperationType(); $event.stopPropagation()"
                 class="bg-slate-50 p-3 rounded-xl border border-transparent hover:border-blue-100 transition-all cursor-pointer relative group h-[60px] flex flex-col justify-center shadow-sm">
-                <label class="block text-[10px] text-slate-400 uppercase font-black mb-1 tracking-widest leading-none">Operation Type</label>
+                <label class="block text-[10px] text-gray-500 mb-0.5 uppercase tracking-wide font-medium">Operation Type</label>
                 <div class="flex justify-between items-center">
                     <div class="text-sm font-bold text-slate-700">{{ operationType || 'Select' }}</div>
                     <span class="material-icons text-slate-300 text-sm">expand_more</span>
@@ -78,7 +78,7 @@
 
             <!-- Expiration Date -->
             <div class="bg-slate-50 p-3 rounded-xl border border-transparent transition-all relative group h-[60px] flex flex-col justify-center shadow-sm">
-                <label class="block text-[10px] text-slate-400 uppercase font-black mb-1 tracking-widest leading-none">Quote Expiration Date</label>
+                <label class="block text-[10px] text-gray-500 mb-0.5 uppercase tracking-wide font-medium">Quote Expiration Date</label>
                 <div class="flex justify-between items-center w-full relative">
                     <input type="date" [(ngModel)]="expirationDate" [min]="minDate"
                         class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
@@ -115,19 +115,17 @@
                 <!-- Legal Contact -->
                 <div class="flex flex-col gap-3">
                     <label class="text-[10px] text-slate-400 uppercase font-black tracking-widest leading-none">Legal Contact</label>
-                    <div class="space-y-2">
-                        <div class="h-2.5 w-full bg-slate-50 rounded-full"></div>
-                        <div class="h-2.5 w-3/4 bg-slate-50 rounded-full"></div>
+                    <div class="text-[12px] font-bold text-slate-700 leading-tight">
+                        Mr.Bunny <br/>
+                        <span class="text-slate-400 font-medium">fake-payments-uat-account&#64;google.com</span>
                     </div>
                 </div>
 
                 <!-- Legal Address -->
                 <div class="flex flex-col gap-3">
                     <label class="text-[10px] text-slate-400 uppercase font-black tracking-widest leading-none">Legal Address</label>
-                    <div class="space-y-2">
-                        <div class="h-2.5 w-full bg-slate-50 rounded-full"></div>
-                        <div class="h-2.5 w-full bg-slate-50 rounded-full"></div>
-                        <div class="h-2.5 w-24 bg-slate-50 rounded-full"></div>
+                    <div class="text-[12px] font-bold text-slate-700 leading-relaxed max-w-[150px]">
+                        100 Canal Pointe Blvd Princeton NJ 08540 US
                     </div>
                 </div>
 
@@ -146,9 +144,11 @@
                         <label class="text-[10px] text-slate-400 uppercase font-black tracking-widest leading-none">Billing & Shipping</label>
                         <label class="text-[10px] text-slate-400 uppercase font-black tracking-widest leading-none">Profiles</label>
                     </div>
-                    <div class="space-y-2">
-                        <div class="h-2.5 w-full bg-slate-50 rounded-full"></div>
-                        <div class="h-2.5 w-3/4 bg-slate-50 rounded-full"></div>
+                    <div class="flex flex-col gap-2">
+                        <span class="text-[13px] font-bold text-blue-600 underline cursor-pointer">16 Accounts</span>
+                        <div class="p-2 bg-slate-50 border border-slate-100 rounded-lg">
+                            <p class="text-[10px] text-slate-600 font-bold leading-snug">Spend-based CUD migration required (GCP Commit Only)</p>
+                        </div>
                     </div>
                 </div>
 

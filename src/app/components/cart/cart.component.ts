@@ -4,6 +4,7 @@ import { Router, RouterModule } from '@angular/router';
 import { CartService } from '../../services/cart.service';
 import { SalesforceApiService } from '../../services/salesforce-api.service';
 import { QuoteDataService } from '../../services/quote-data.service';
+import { forkJoin } from 'rxjs';
 import { switchMap, finalize } from 'rxjs/operators';
 import { LoadingService } from '../../services/loading.service';
 import { SearchFilterService } from '../../services/search-filter.service'; // Import SearchFilterService
@@ -87,7 +88,10 @@ export class CartComponent implements AfterViewInit, OnChanges {
                         quoteId: quoteId
                     });
 
-                    return this.salesforceApi.getQuoteDetails(quoteId);
+                    return forkJoin({
+                        quote: this.salesforceApi.getQuoteDetails(quoteId),
+                        lines: this.salesforceApi.getQuoteLineItems(quoteId)
+                    });
                 } else {
                     throw new Error('Quote Creation Failed');
                 }
@@ -97,17 +101,30 @@ export class CartComponent implements AfterViewInit, OnChanges {
                 this.isSubmitting = false;
             })
         ).subscribe({
-            next: (quoteDetails: any) => {
+            next: (data: any) => {
+                const quoteDetails = data.quote;
+                const lineItems = data.lines.records || [];
+
                 // Extract QuoteNumber and other details if needed from the Quote
                 if (quoteDetails && quoteDetails.QuoteNumber) {
                     const formatted = `Q-${quoteDetails.QuoteNumber}`;
                     const firstItem = cartItems[0] as any;
+                    
                     this.quoteDataService.setQuoteData({
                         quoteId: quoteDetails.Id,
                         quoteNumber: formatted,
                         productId: firstItem ? firstItem.id : null,
                         productName: firstItem ? firstItem.name : 'No Products',
-                        categoryId: firstItem ? firstItem.categoryId : null
+                        categoryId: firstItem ? firstItem.categoryId : null,
+                        products: cartItems.map(item => {
+                            const matchingLine = lineItems.find((li: any) => li.Product2Id === item.id);
+                            return {
+                                id: item.id,
+                                name: item.name,
+                                categoryId: (item as any).categoryId,
+                                quoteLineId: matchingLine ? matchingLine.Id : null
+                            };
+                        })
                     });
                 }
 
@@ -115,7 +132,7 @@ export class CartComponent implements AfterViewInit, OnChanges {
                 this.searchFilterService.setSearchQuery('');
 
                 // Navigate to quote details page
-                this.router.navigate(['/configure-quote']);
+                this.router.navigate(['/quote-configuration']);
             },
             error: (error: any) => {
                 console.error('Quote creation error:', error);

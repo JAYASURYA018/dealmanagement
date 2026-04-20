@@ -8,6 +8,7 @@ import { ContextService } from '../../services/context.service';
 import { ToastService } from '../../services/toast.service';
 import { LoadingService } from '../../services/loading.service';
 import { DiscountIncentiveStateService } from '../../services/discount-incentive-state.service';
+import { QuoteDataService } from '../../services/quote-data.service';
 import { finalize, forkJoin, map, catchError, of, switchMap, lastValueFrom, Subject, Observable } from 'rxjs';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { FormsModule } from '@angular/forms';
@@ -26,6 +27,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
     @Input() quoteStartDate: string | null = null;
     @Input() quoteEndDate: string | null = null;
     @Input() isLookerSubscription: boolean = false;
+    @Input() quoteId: string | null = null;
     @Input() set existingLineItems(items: any[]) {
         if (items && items.length > 0) {
             this.loadFromExisting(items);
@@ -162,6 +164,14 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         return Math.max(0, this.totalCatalogProducts - this.usedQuotaCount);
     }
 
+    get activeQuoteId(): string | undefined {
+        return this.quoteId || this.contextService.currentContext?.quoteId || this.quoteDataService.getQuoteData()?.quoteId || undefined;
+    }
+
+    get activePricebookId(): string {
+        return this.contextService.currentContext?.pricebookId || this.quoteDataService.getQuoteData()?.pricebook2Id || '01sf4000003ZgtzAAC';
+    }
+
     // Live remaining = quota minus already-committed minus currently-selected-in-modal
     get liveQuotaRemaining(): number {
         const currentSelection = this.selectorCalledFrom === 'incentives'
@@ -277,6 +287,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         private loadingService: LoadingService,
         private quoteRefreshService: QuoteRefreshService,
         private discountIncentiveStateService: DiscountIncentiveStateService,
+        private quoteDataService: QuoteDataService,
         private el: ElementRef,
         private router: Router
     ) {
@@ -335,7 +346,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         }
 
         // Load persisted state for tab switches
-        const quoteId = this.contextService.currentContext?.quoteId;
+        const quoteId = this.activeQuoteId;
         const state = this.discountIncentiveStateService.loadState(quoteId);
 
         // Only restore if state has meaningful data (not just defaults)
@@ -384,7 +395,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
     }
 
     private saveCurrentState() {
-        const quoteId = this.contextService.currentContext?.quoteId;
+        const quoteId = this.activeQuoteId;
         this.discountIncentiveStateService.saveState({
             discountForm: this.discountForm,
             incentiveForm: this.incentiveForm,
@@ -884,7 +895,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         const body: any = {
             "limit": this.individualPageSize,
             "productClassificationId": targetClassId,
-            "priceBookId": this.contextService.currentContext?.pricebookId || '01sf4000003ZgtzAAC',
+            "priceBookId": this.activePricebookId,
             "additionalFields": {
                 "Product2": {
                     "fields": ["RCA_Sort_order__c"]
@@ -1981,7 +1992,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
     handleBulkUpload(csvData: any[]) {
         if (!csvData || csvData.length === 0) return;
 
-        const quoteId = this.contextService.currentContext?.quoteId;
+        const quoteId = this.activeQuoteId;
         if (!quoteId) {
             this.toastService.show('No active quote found for upload', 'error');
             return;
@@ -2006,7 +2017,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
     }
 
     private processBulkDiscount(selectedItems: any[], startTime: number) {
-        const quoteId = this.contextService.currentContext?.quoteId;
+        const quoteId = this.activeQuoteId;
         const DEFAULT_PBE_ID = '01uDz00000dqLY8IAM';
 
         if (!quoteId) {
@@ -2087,7 +2098,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
                 this.saveCurrentState(); // Persist bulk IDs
                 this.dataFetched = false;
                 this.showProductSelector = false;
-                this.router.navigate(['/configure-quote']);
+                this.router.navigate(['/quote-configuration']);
                 console.log('✅ Bulk Upload complete. Redirecting to Configure Quote.');
             },
             error: (err) => {
@@ -2098,7 +2109,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
     }
 
     handleGranularDiscount(selectedItems: any[]) {
-        const quoteId = this.contextService.currentContext?.quoteId;
+        const quoteId = this.activeQuoteId;
         const DEFAULT_PBE_ID = '01uDz00000dqLY8IAM';
 
         if (!quoteId) {
@@ -2213,7 +2224,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
                     this.quoteRefreshService.setRefreshNeeded(true);
 
                     this.showProductSelector = false;
-                    this.router.navigate(['/configure-quote']);
+                    this.router.navigate(['/quote-configuration']);
                 },
                 error: (err: any) => {
                     console.error('Failed to update quote', err);
@@ -2270,7 +2281,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
             return;
         }
 
-        const quoteId = this.contextService.currentContext?.quoteId;
+        const quoteId = this.activeQuoteId;
         if (!quoteId) {
             this.toastService.show('No active quote found in context', 'error');
             return;
@@ -2280,7 +2291,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         this.loadingService.show();
         const startTime = performance.now();
 
-        const contextPricebookId = this.contextService.currentContext?.pricebookId || '01sf4000003ZgtzAAC';
+        const contextPricebookId = this.activePricebookId;
         const resolvedItems: any[] = [];
         for (const group of selectedGroups) {
             // Find match in dropdownOptions for the group (Call 2 results)

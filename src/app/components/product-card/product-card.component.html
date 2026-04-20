@@ -26,7 +26,7 @@
         <!-- Action Button -->
         <div class="flex-shrink-0">
             <ng-container *ngIf="!(isAdded$ | async); else addedBtn">
-                <button (click)="toggleCart()" [disabled]="cartHasOtherItems$ | async"
+                <button (click)="toggleCart()"
                     class="flex items-center px-6 py-2 text-[#3c4043] text-[13px] font-medium rounded-full transition-colors border border-gray-300 enabled:bg-white enabled:hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-gray-50">
                     <span class="mr-2 text-lg font-light leading-none">+</span>
                     Add
