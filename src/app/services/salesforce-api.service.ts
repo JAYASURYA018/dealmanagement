@@ -1044,4 +1044,69 @@ export class SalesforceApiService {
             catchError(err => this.handleError(method, err))
         );
     }
+
+
+    getActiveQuotesCount(oppId: string): Observable<any> {
+        const method = 'SalesforceApiService.getActiveQuotesCount';
+        const token = this.contextService.accessToken;
+        const baseUrl = this.contextService.apiBaseUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com';
+
+        const url = `${baseUrl}/services/data/v60.0/query/?q=SELECT COUNT() FROM Quote WHERE OpportunityId = '${oppId}'`;
+
+
+        console.log(`[API Request] ${method}`, { url });
+
+        const headers = new HttpHeaders({
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        });
+
+        return this.http.get(url, { headers }).pipe(
+            tap(response => console.log(`[API Response] ${method}`, response)),
+            catchError(err => this.handleError(method, err))
+        );
+    }
+
+    getActiveQuotes(oppId: string, srt: string, pageSize: number = 100, offset: number = 0): Observable<any> {
+        const method = 'SalesforceApiService.getActiveQuotes';
+        const token = this.contextService.accessToken;
+        const baseUrl = this.contextService.apiBaseUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com';
+
+        const url = `${baseUrl}/services/data/v60.0/query/?q=SELECT Id, Name, QuoteNumber, Status, IsSyncing, GrandTotal, Account.Name, Contact.Name, Contact.Email, Quote.CreatedBy.Name, 
+                Quote.Account.briefingedge__Primary_Contact__c, ExpirationDate, CreatedDate FROM Quote WHERE OpportunityId = '${oppId}' ORDER BY QuoteNumber ${srt} LIMIT ${pageSize} OFFSET ${offset}`;
+
+        console.log(`[API Request] ${method}`, { url });
+
+        const headers = new HttpHeaders({
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        });
+
+        return this.http.get(url, { headers }).pipe(
+            tap(response => console.log(`[API Response] ${method}`, response)),
+            catchError(err => this.handleError(method, err))
+        );
+    }
+
+    QuotesSearch(oppId: string, searchTerm: string, srt: string, pageSize: number, offset: number): Observable<any> {
+        const method = 'SalesforceApiService.QuotesSearch';
+        const token = this.contextService.accessToken;
+        const baseUrl = this.contextService.apiBaseUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com';
+
+        const url = `${baseUrl}/services/data/v66.0/search?q=FIND {${searchTerm}*} IN ALL FIELDS RETURNING Quote(Id, QuoteNumber, Name, Status, TotalPrice, Account.Name, 
+                Quote.Account.briefingedge__Primary_Contact__c, ExpirationDate, CreatedBy.Name WHERE OpportunityId = '${oppId}' ORDER BY QuoteNumber ${srt} LIMIT ${pageSize} OFFSET ${offset})`;
+
+        console.log(`[API Request] ${method}`, { url });
+
+        const headers = new HttpHeaders({
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        });
+
+        return this.http.get(url, { headers }).pipe(
+            tap(response => console.log(`[API Response] ${method}`, response)),
+            catchError(err => this.handleError(method, err))
+        );
+    }
+
 }

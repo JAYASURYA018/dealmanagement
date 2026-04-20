@@ -22,6 +22,7 @@ import { TopNavComponent } from '../../components/top-nav/top-nav.component';
 
 import { TwAuthService } from '../../services/tw-auth.service';
 import { ContextService } from '../../services/context.service';
+import { OpportunityService } from '../../services/opportunity.service';
 
 @Component({
     selector: 'app-opportunities',
@@ -66,6 +67,7 @@ export class OpportunitiesComponent implements OnInit {
     private contextService = inject(ContextService);
     private rcaApi = inject(RcaApiService);
     private quoteService = inject(QuoteDataService);
+    private oppService = inject(OpportunityService);
     protected Math = Math;
 
     opportunities: Opportunity[] = [];
@@ -152,6 +154,11 @@ export class OpportunitiesComponent implements OnInit {
                 console.error('Error fetching opportunity details:', err);
             }
         });
+    }
+
+    viewQuotes(opp: any): void {
+        this.oppService.setOpportunity(opp.id, opp.name);
+        this.router.navigate(['/quotes']);
     }
 
     toggleSort(): void {
