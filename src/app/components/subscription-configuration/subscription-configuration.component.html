@@ -42,23 +42,6 @@
                         </div>
                     </div>
 
-                    <!-- Operation Type -->
-                    <div (click)="toggleOperationType(); $event.stopPropagation()"
-                        class="bg-slate-50 p-3 rounded-xl border border-transparent transition-all relative group h-[60px] flex flex-col justify-center shadow-sm">
-                        <label class="block text-[10px] text-gray-500 mb-0.5 uppercase tracking-wide font-medium">Operation Type</label>
-                        <div class="flex justify-between items-center">
-                            <div class="text-sm font-medium text-gray-900 truncate">{{ operationType || 'Select' }}</div>
-                            <span class="material-icons-outlined text-sm text-gray-400">arrow_drop_down</span>
-                        </div>
-                        <div *ngIf="operationTypeOpen" (click)="$event.stopPropagation()"
-                            class="absolute left-0 top-[60px] w-full bg-white rounded-lg shadow-xl border border-gray-100 z-[100] py-2">
-                            <button *ngFor="let type of operationTypeOptions" (click)="selectOperationType(type)"
-                                class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 transition-colors">
-                                {{ type }}
-                            </button>
-                        </div>
-                    </div>
-
                     <!-- Term Starts on -->
                     <div (click)="toggleTermStartsOn(); $event.stopPropagation()"
                         class="bg-slate-50 p-3 rounded-xl border border-transparent transition-all relative group h-[60px] flex flex-col justify-center shadow-sm">

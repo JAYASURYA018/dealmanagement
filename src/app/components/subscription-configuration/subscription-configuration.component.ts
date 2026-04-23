@@ -58,9 +58,139 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
   // Quote Data Properties
   opportunityName: string = '';
   @Input() accountName: string = '';
-  quoteId: string = '';
+  @Input() quoteId: string = '';
   primaryContactName: string = '';
   salesChannel: string = '';
+  get totalContractValue(): number {
+    let total = 0;
+    if (!this.subscriptionPeriods) return total;
+    
+    this.subscriptionPeriods.forEach((period: any) => {
+      const term = this.calculateSubscriptionTerm(period.startDate, period.endDate);
+      
+      if (period.productName) {
+         const pTotal = ((period.unitPrice || 0) * term) * (1 - (period.discount || 0) / 100);
+         total += pTotal;
+      }
+      
+      if (period.userRows && period.userRows.length > 0) {
+         period.userRows.forEach((row: any) => {
+             const qty = row.quantity || 0;
+             if (qty > 0) {
+                 let price = row.price || 0;
+                 if (row.type === 'Non-prod' && period.nonProdPrice) {
+                     price = period.nonProdPrice;
+                 }
+                 const rowTotal = (price * qty * term) * (1 - (row.discount || 0) / 100);
+                 total += rowTotal;
+             }
+         });
+      }
+    });
+    return total;
+  }
+
+  getPreviewData(previewData: any) {
+    const commitments = this.buildSubscriptionPreview();
+    const productsWithoutDiscounts = this.buildProductsWithoutDiscounts(previewData);
+    
+    return {
+      previewData: previewData,
+      previewCommitments: commitments,
+      previewProductsWithoutDiscounts: productsWithoutDiscounts,
+      isLookerSubscription: true,
+      totalContractValue: this.totalContractValue,
+      totalIncentivesValue: 0,
+      totalTerms: this.calculateSubscriptionTerm(this.termStartInput, this.termEndDate),
+      startDate: this.termStartInput,
+      expirationDate: this.termEndDate
+    };
+  }
+
+  private buildSubscriptionPreview(): any[] {
+    const previews: any[] = [];
+    this.subscriptionPeriods.forEach((period: any, index: number) => {
+        const items: any[] = [];
+        if (period.productName) {
+            const term = this.calculateSubscriptionTerm(period.startDate, period.endDate);
+            const total = (period.unitPrice * term) * (1 - (period.discount || 0) / 100);
+
+            items.push({
+                name: period.productName,
+                operationType: this.operationType || 'New',
+                quantity: 1,
+                startDate: this.formatDateForDisplay(period.startDate),
+                endDate: period.endDate ? this.formatDateForDisplay(period.endDate) : '-',
+                orderTerm: this.formatTermDisplay(period.startDate, period.endDate),
+                listPrice: period.unitPrice,
+                discount: period.discount || 0,
+                total: total
+            });
+        }
+
+        period.userRows.forEach((userRow: any) => {
+            const qty = userRow.quantity || 0;
+            if (qty > 0) {
+                const term = this.calculateSubscriptionTerm(period.startDate, period.endDate);
+                let price = userRow.price || 0;
+                if (userRow.type === 'Non-prod' && period.nonProdPrice) price = period.nonProdPrice;
+                
+                const total = (price * qty * term) * (1 - (userRow.discount || 0) / 100);
+                const baseName = userRow.name || period.productName || 'Looker';
+                const displayName = baseName.includes(userRow.type) ? baseName : `${baseName} ${userRow.type}`;
+
+                items.push({
+                    name: displayName,
+                    operationType: this.operationType || 'New',
+                    quantity: qty,
+                    startDate: this.formatDateForDisplay(period.startDate),
+                    endDate: period.endDate ? this.formatDateForDisplay(period.endDate) : '-',
+                    orderTerm: this.formatTermDisplay(period.startDate, period.endDate),
+                    listPrice: price,
+                    discount: userRow.discount || 0,
+                    total: total
+                });
+            }
+        });
+
+        const periodTotal = items.reduce((sum, item) => sum + (item.total || 0), 0);
+        if (items.length > 0) {
+            previews.push({
+                name: `Year ${index + 1}`,
+                startDate: this.formatDateForDisplay(period.startDate),
+                endDate: this.formatDateForDisplay(period.endDate),
+                months: this.calculateSubscriptionTerm(period.startDate, period.endDate),
+                amount: periodTotal,
+                items
+            });
+        }
+    });
+    return previews;
+  }
+
+  private buildProductsWithoutDiscounts(previewData: any): any[] {
+    const products: any[] = [];
+    if (!previewData?.QuoteLineItems?.records) return [];
+
+    const bundle = previewData.QuoteLineItems.records.find((item: any) => item.Product2Id === this.productId);
+    if (bundle) {
+        products.push({
+            ...bundle,
+            Product_Name_Display: bundle.Product2?.Name || this.productName || 'Looker',
+            Quantity: 1
+        });
+    }
+    return products;
+  }
+
+  formatDateForDisplay(dateString: any): string {
+    if (!dateString) return '-';
+    // Use UTC to avoid off-by-one errors from local timezone
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return dateString;
+    return `${date.getUTCMonth() + 1}/${date.getUTCDate()}/${date.getUTCFullYear()}`;
+  }
+
   @Input() productName: string = 'No Products';
   @Input() productId: string | null = null;
   @Input() bundleQuoteLineId: string | null = null;
@@ -224,11 +354,12 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
               const pid = c.productId || c.id;
               const pbe = priceObj?.priceBookEntryId;
 
-              if (c.name.includes('Developer')) {
+              const nameLower = (c.name || '').toLowerCase();
+              if (nameLower.includes('developer')) {
                 this.developerUserPrice = price; this.developerUserProductId = pid; this.developerUserPBEId = pbe; this.developerUserName = c.name;
-              } else if (c.name.includes('Standard')) {
+              } else if (nameLower.includes('standard')) {
                 this.standardUserPrice = price; this.standardUserProductId = pid; this.standardUserPBEId = pbe; this.standardUserName = c.name;
-              } else if (c.name.includes('Viewer')) {
+              } else if (nameLower.includes('viewer')) {
                 this.viewerUserPrice = price; this.viewerUserProductId = pid; this.viewerUserPBEId = pbe; this.viewerUserName = c.name;
               }
             });
@@ -834,6 +965,40 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
       return (months + (diffDays / daysInMonth));
   }
 
+  formatTermDisplay(startDate: string, endDate: string): string {
+    if (!startDate || !endDate) return '-';
+    const totalMonths = this.calculateSubscriptionTerm(startDate, endDate);
+    const wholeMonths = Math.floor(totalMonths);
+    const years = Math.floor(wholeMonths / 12);
+    const months = wholeMonths % 12;
+    
+    // Calculate remaining days
+    const start = this.parseDate(startDate);
+    const end = this.parseDate(endDate);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) return '-';
+
+    const endAdjusted = new Date(end);
+    endAdjusted.setDate(endAdjusted.getDate() + 1);
+    
+    const temp = new Date(start);
+    temp.setMonth(temp.getMonth() + wholeMonths);
+    const diffTime = endAdjusted.getTime() - temp.getTime();
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+    let result = "";
+    if (years > 0) result += `${years} year${years > 1 ? 's' : ''}`;
+    if (months > 0) {
+        if (result) result += " ";
+        result += `${months} month${months > 1 ? 's' : ''}`;
+    }
+    if (diffDays > 0) {
+        if (result) result += " ";
+        result += `${diffDays} day${diffDays > 1 ? 's' : ''}`;
+    }
+
+    return result || "0 days";
+  }
+
   private extractRelationshipId(response: any) {
       if (!response) return;
       const relTypes = response.records || response.recentItems || [];
@@ -859,9 +1024,21 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
   private syncAllPeriodUserProducts() {
     this.subscriptionPeriods.forEach(p => {
       p.userRows.forEach(r => {
-        if (r.type === 'Viewer') { r.productId = this.viewerUserProductId; r.pricebookEntryId = this.viewerUserPBEId; }
-        else if (r.type === 'Standard') { r.productId = this.standardUserProductId; r.pricebookEntryId = this.standardUserPBEId; }
-        else if (r.type === 'Developer') { r.productId = this.developerUserProductId; r.pricebookEntryId = this.developerUserPBEId; }
+        if (r.type === 'Viewer') { 
+          r.productId = this.viewerUserProductId; 
+          r.pricebookEntryId = this.viewerUserPBEId;
+          r.name = this.viewerUserName;
+        }
+        else if (r.type === 'Standard') { 
+          r.productId = this.standardUserProductId; 
+          r.pricebookEntryId = this.standardUserPBEId;
+          r.name = this.standardUserName;
+        }
+        else if (r.type === 'Developer') { 
+          r.productId = this.developerUserProductId; 
+          r.pricebookEntryId = this.developerUserPBEId;
+          r.name = this.developerUserName;
+        }
       });
     });
   }
@@ -974,6 +1151,5 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
   removeSubscriptionPeriod(i: number) { this.subscriptionPeriods.splice(i, 1); this.onSubscriptionProductChanged(); }
   get isLookerSubscription() { return true; }
   get totalTermLabel() { return this.subscriptionPeriods.length + ' periods'; }
-  get totalContractValue() { return 0; }
   closeSuccessPopup() { this.showSuccessPopup = false; }
 }

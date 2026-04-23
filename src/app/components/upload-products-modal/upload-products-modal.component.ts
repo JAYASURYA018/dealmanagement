@@ -13,7 +13,7 @@ export class UploadProductsModalComponent {
     @Input() selectedPeriodName: string = '';
     @Input() selectedStartDate: string = '';
     @Input() selectedEndDate: string = '';
-    @Input() remainingQuota: number = 999;
+    @Input() remainingQuota: number = 1000;
     @Output() close = new EventEmitter<void>();
     @Output() finish = new EventEmitter<any[]>();
 

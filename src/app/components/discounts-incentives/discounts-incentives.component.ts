@@ -156,7 +156,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
 
     // Product Quota Tracking
     // Fixed business limit: max 976 products can receive discounts/incentives per quote
-    totalCatalogProducts: number = 999;
+    totalCatalogProducts: number = 1000;
     // Running total of product line items committed in all applied discounts/incentives
     usedQuotaCount: number = 0;
 
@@ -1683,10 +1683,10 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
     }
 
     toggleItem(item: any) {
-        // Validation: Limit to 999 products
+        // Validation: Limit to 1000 products
         if (!item.selected) {
             if (this.liveQuotaRemaining <= 0) {
-                this.toastService.show('Maximum limit of 999 products reached.', 'warning');
+                this.toastService.show('Maximum limit of 1000 products reached.', 'warning');
                 return;
             }
         }
@@ -1857,7 +1857,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         });
 
         if (blockedByLimit) {
-            this.toastService.show('Selection partially blocked: Maximum limit of 999 products reached.', 'warning');
+            this.toastService.show('Selection partially blocked: Maximum limit of 1000 products reached.', 'warning');
         }
     }
 

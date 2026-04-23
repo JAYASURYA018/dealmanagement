@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, ViewChild } from '@angular/core';
+import { Component, OnInit, inject, ViewChild, ViewChildren, QueryList } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -7,6 +7,13 @@ import { TopNavComponent } from '../../components/top-nav/top-nav.component';
 import { DetailsOfQuoteComponent } from '../../components/details-of-quote/details-of-quote.component';
 import { CommitConfigurationComponent } from '../../components/commit-configuration/commit-configuration.component';
 import { SubscriptionConfigurationComponent } from '../../components/subscription-configuration/subscription-configuration.component';
+import { QuotePreviewComponent } from '../../components/quote-preview/quote-preview.component';
+import { SalesforceApiService } from '../../services/salesforce-api.service';
+import { LoadingService } from '../../services/loading.service';
+import { ToastService } from '../../services/toast.service';
+import { ContextService } from '../../services/context.service';
+import { finalize } from 'rxjs/operators';
+
 @Component({
   selector: 'app-quote-configuration',
   standalone: true,
@@ -16,7 +23,8 @@ import { SubscriptionConfigurationComponent } from '../../components/subscriptio
     TopNavComponent,
     DetailsOfQuoteComponent,
     CommitConfigurationComponent,
-    SubscriptionConfigurationComponent
+    SubscriptionConfigurationComponent,
+    QuotePreviewComponent
   ],
   templateUrl: './quote-configuration.component.html',
   styles: [`
@@ -42,40 +50,195 @@ import { SubscriptionConfigurationComponent } from '../../components/subscriptio
 })
 export class QuoteConfigurationComponent implements OnInit {
   @ViewChild(DetailsOfQuoteComponent) detailsComp?: DetailsOfQuoteComponent;
-  @ViewChild(CommitConfigurationComponent) commitComp?: CommitConfigurationComponent;
-  @ViewChild(SubscriptionConfigurationComponent) subComp?: SubscriptionConfigurationComponent;
+  @ViewChildren(CommitConfigurationComponent) commitComps!: QueryList<CommitConfigurationComponent>;
+  @ViewChildren(SubscriptionConfigurationComponent) subComps!: QueryList<SubscriptionConfigurationComponent>;
+  @ViewChild(QuotePreviewComponent) previewComp?: QuotePreviewComponent;
 
   private quoteDataService = inject(QuoteDataService);
   private router = inject(Router);
+  private sfApi = inject(SalesforceApiService);
+  private loadingService = inject(LoadingService);
+  private toastService = inject(ToastService);
+  private contextService = inject(ContextService);
   
   isLoading = true;
   accountName = '';
   opportunityName = '';
   quoteNumber = '';
+  quoteId = '';
   
   products: any[] = [];
   selectedItemId = 'quote_details';
   annualContractValue = 0;
-  totalContractValue = 0;
+
+  get totalContractValue(): number {
+    let sum = 0;
+    if (this.commitComps) {
+        this.commitComps.forEach(c => sum += c.totalContractValue || 0);
+    }
+    if (this.subComps) {
+        this.subComps.forEach(s => sum += s.totalContractValue || 0);
+    }
+    return sum;
+  }
+
+  totalCatalogProducts: number = 1000;
+  
+  get usedQuotaCount(): number {
+    // 1. Initial count includes every main product added to the cart
+    let count = this.products ? this.products.length : 0;
+    
+    // 2. Extra products selected in Commit (via Discounts/Incentives selections)
+    if (this.commitComps) {
+      this.commitComps.forEach(commit => {
+        if (commit.discountsIncentives) {
+          count += (commit.discountsIncentives.persistentSelectedGroups?.size || 0);
+          count += (commit.discountsIncentives.persistentSelectedIndividuals?.size || 0);
+        }
+      });
+    }
+    
+    // 3. Subscription selections (Platform product + User quantities)
+    if (this.subComps) {
+      this.subComps.forEach(sub => {
+        if (sub.subscriptionPeriods && sub.subscriptionPeriods.length > 0) {
+          const firstPeriod = sub.subscriptionPeriods[0];
+          
+          // 3a. Count the Platform selection from the picklist if it's set
+          if (firstPeriod.productName) {
+            // Check if this specific product ID is already in our main products list to avoid double counting
+            const isMainProduct = this.products.some(p => p.id === firstPeriod.productId || p.name === firstPeriod.productName);
+            if (!isMainProduct) {
+              count++;
+            }
+          }
+
+          // 3b. Count each active user category
+          if (firstPeriod.userRows) {
+            firstPeriod.userRows.forEach((row: any) => {
+              if ((row.quantity || 0) > 0) {
+                count++;
+              }
+            });
+          }
+        }
+      });
+    }
+    
+    return count;
+  }
+
+  get remainingProductsQuota(): number {
+    return Math.max(0, this.totalCatalogProducts - this.usedQuotaCount);
+  }
 
   activeTab = 'details';
 
   get isSaveDisabled(): boolean {
     const type = this.getProductType(this.selectedItemId);
-    if (type === 'commitment') return this.commitComp?.activeTab !== 'discounts';
-    if (type === 'subscription') return this.subComp?.activeTab !== 'plans';
+    if (type === 'commitment') {
+      const comp = this.commitComps?.find(c => c.productId === this.selectedItemId);
+      return comp?.activeTab !== 'discounts';
+    }
+    if (type === 'subscription') {
+      const comp = this.subComps?.find(c => c.productId === this.selectedItemId);
+      return comp?.activeTab !== 'plans';
+    }
     return false; // Quote details
   }
 
   get isSubmitDisabled(): boolean {
     const type = this.getProductType(this.selectedItemId);
-    if (type === 'commitment') return this.commitComp?.activeTab !== 'discounts';
-    if (type === 'subscription') return this.subComp?.activeTab !== 'plans';
+    if (type === 'commitment') {
+      const comp = this.commitComps?.find(c => c.productId === this.selectedItemId);
+      return comp?.activeTab !== 'discounts';
+    }
+    if (type === 'subscription') {
+      const comp = this.subComps?.find(c => c.productId === this.selectedItemId);
+      return comp?.activeTab !== 'plans';
+    }
     return true; // Quote details
   }
 
+  previewState: any = {
+    show: false,
+    data: null,
+    commitments: [],
+    products: [],
+    isLooker: false,
+    tcv: 0,
+    incentives: 0,
+    terms: 0,
+    startDate: '',
+    expirationDate: ''
+  };
+
   openPreview() {
-    console.log('Opening preview...');
+    if (this.selectedItemId === 'quote_details') {
+        this.toastService.show('Please select a product to preview.', 'warning');
+        return;
+    }
+
+    const qid = this.quoteId || this.contextService.currentContext?.quoteId;
+    if (!qid) {
+        this.toastService.show('Quote ID not found.', 'error');
+        return;
+    }
+
+    this.loadingService.show();
+    this.sfApi.getQuotePreview(qid).pipe(
+        finalize(() => this.loadingService.hide())
+    ).subscribe({
+        next: (previewData: any) => {
+            console.log('Preview data received:', previewData);
+            if (previewData && previewData.records && previewData.records.length > 0) {
+                const quote = previewData.records[0];
+                const type = this.getProductType(this.selectedItemId);
+                
+                let pData: any = null;
+                try {
+                    if (type === 'commitment') {
+                        const comp = this.commitComps?.find(c => c.productId === this.selectedItemId);
+                        if (comp) pData = comp.getPreviewData(quote);
+                    } else if (type === 'subscription') {
+                        const comp = this.subComps?.find(c => c.productId === this.selectedItemId);
+                        if (comp) pData = comp.getPreviewData(quote);
+                    }
+                } catch (e) {
+                    console.error('Error building preview data:', e);
+                    this.toastService.show('Error preparing preview details.', 'error');
+                }
+
+                if (pData) {
+                    this.previewState = {
+                        show: true,
+                        data: quote,
+                        previewCommitments: pData.previewCommitments,
+                        commitmentDetailsOnly: pData.commitmentDetailsOnly || pData.commitmentDetailsSummary || [],
+                        previewProductsWithoutDiscounts: pData.previewProductsWithoutDiscounts,
+                        isLooker: pData.isLookerSubscription,
+                        tcv: pData.totalContractValue,
+                        incentives: pData.totalIncentivesValue,
+                        terms: pData.totalTerms,
+                        startDate: pData.startDate,
+                        expirationDate: pData.expirationDate
+                    };
+                } else {
+                    this.toastService.show('No preview data available for this selection.', 'warning');
+                }
+            } else {
+                this.toastService.show('No quote records found.', 'warning');
+            }
+        },
+        error: (err: any) => {
+            this.toastService.show('Failed to load quote preview.', 'error');
+            console.error('Preview error:', err);
+        }
+    });
+  }
+
+  closePreview() {
+    this.previewState.show = false;
   }
 
   resetForm() {
@@ -98,18 +261,29 @@ export class QuoteConfigurationComponent implements OnInit {
     } else {
       const type = this.getProductType(this.selectedItemId);
       if (type === 'commitment') {
-        this.commitComp?.onSave(onSuccess);
+        const comp = this.commitComps?.find(c => c.productId === this.selectedItemId);
+        comp?.onSave(onSuccess);
       } else if (type === 'subscription') {
-        this.subComp?.onSave(onSuccess);
+        const comp = this.subComps?.find(c => c.productId === this.selectedItemId);
+        comp?.onSave(onSuccess);
       }
     }
   }
 
   ngOnInit() {
+    this.quoteId = this.contextService.currentContext?.quoteId || '';
+
+    this.contextService.context$.subscribe(ctx => {
+      if (ctx.quoteId && (!this.quoteId || this.quoteId.startsWith('0Q0'))) {
+        this.quoteId = ctx.quoteId;
+      }
+    });
+
     this.quoteDataService.quoteData$.subscribe(data => {
       this.accountName = data.accountName || 'Acme Corp';
       this.opportunityName = data.opportunityName || 'Expansion Deal';
       this.quoteNumber = data.quoteNumber || 'Q-DRAFT';
+      if (data.quoteId) this.quoteId = data.quoteId;
       
       // Map products from QuoteData
       if (data.products && data.products.length > 0) {
@@ -159,6 +333,10 @@ export class QuoteConfigurationComponent implements OnInit {
     } else {
       this.activeTab = 'configuration';
     }
+  }
+
+  onAddProduct() {
+     this.router.navigate(['/products']);
   }
 
   formatCurrency(val: number) {

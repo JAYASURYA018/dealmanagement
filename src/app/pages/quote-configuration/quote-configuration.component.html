@@ -31,6 +31,22 @@
             </div>
 
             <div class="flex items-center gap-6">
+                <!-- Product Quota Badge -->
+                <div class="flex items-center gap-2 bg-white border border-gray-200 rounded-full px-3 py-1 shadow-sm h-8">
+                    <span class="material-icons-outlined text-[14px] text-blue-500">inventory_2</span>
+                    <span class="text-[11px] font-semibold text-gray-600">
+                        <span class="text-blue-600 font-bold">{{ remainingProductsQuota | number }}</span>
+                        / {{ totalCatalogProducts | number }} Products Remaining
+                    </span>
+                    <!-- Progress bar -->
+                    <div class="w-20 h-1.5 bg-gray-200 rounded-full overflow-hidden ml-1">
+                        <div class="h-full rounded-full transition-all duration-500"
+                            [style.width.%]="(usedQuotaCount / totalCatalogProducts) * 100"
+                            [ngClass]="remainingProductsQuota === 0 ? 'bg-red-500' : (usedQuotaCount / totalCatalogProducts > 0.75 ? 'bg-orange-400' : 'bg-blue-500')">
+                        </div>
+                    </div>
+                </div>
+
                 <div class="flex items-center gap-3 pr-4 border-r border-gray-100 h-8">
                     <label class="relative inline-flex items-center cursor-pointer">
                         <input type="checkbox" class="sr-only peer">
@@ -85,7 +101,7 @@
                         </span>
                     </div>
 
-                    <div class="flex items-center gap-2 px-4 py-3 text-blue-600 hover:text-blue-700 cursor-pointer group transition-all mt-2">
+                    <div (click)="onAddProduct()" class="flex items-center gap-2 px-4 py-3 text-blue-600 hover:text-blue-700 cursor-pointer group transition-all mt-2">
                         <span class="material-icons text-[20px]">add</span>
                         <span class="text-[14px] font-bold">Add Product</span>
                     </div>
@@ -110,24 +126,29 @@
         <main class="flex-1 bg-white rounded-xl shadow-sm border border-gray-200 overflow-y-auto custom-scrollbar animate-in fade-in slide-in-from-right duration-700">
             
             <!-- Conditional View Switching -->
-            <ng-container *ngIf="selectedItemId === 'quote_details'">
+            <div [hidden]="selectedItemId !== 'quote_details'">
                 <app-details-of-quote></app-details-of-quote>
-            </ng-container>
+            </div>
 
-            <!-- Commitment Configuration -->
-            <ng-container *ngIf="selectedItemId !== 'quote_details' && getProductType(selectedItemId) === 'commitment'">
-                <app-commit-configuration [productId]="selectedItemId" [quoteLineId]="getSelectedProduct()?.quoteLineId" [accountName]="accountName"></app-commit-configuration>
-            </ng-container>
- 
-            <!-- Subscription Configuration -->
-            <ng-container *ngIf="selectedItemId !== 'quote_details' && getProductType(selectedItemId) === 'subscription'">
-                <app-subscription-configuration 
-                    [productId]="selectedItemId" 
-                    [productName]="getSelectedProduct()?.name || ''"
-                    [categoryId]="getSelectedProduct()?.categoryId || ''"
-                    [bundleQuoteLineId]="getSelectedProduct()?.quoteLineId" 
-                    [accountName]="accountName">
-                </app-subscription-configuration>
+            <!-- Dynamic Configurations via ngFor to preserve state across tabs -->
+            <ng-container *ngFor="let product of products">
+                <div [hidden]="selectedItemId !== product.id">
+                    <app-commit-configuration *ngIf="product.type === 'commitment'" 
+                        [productId]="product.id" 
+                        [quoteLineId]="product.quoteLineId" 
+                        [accountName]="accountName"
+                        [quoteId]="quoteId">
+                    </app-commit-configuration>
+
+                    <app-subscription-configuration *ngIf="product.type === 'subscription'"
+                        [productId]="product.id" 
+                        [productName]="product.name"
+                        [categoryId]="product.categoryId"
+                        [bundleQuoteLineId]="product.quoteLineId" 
+                        [accountName]="accountName"
+                        [quoteId]="quoteId">
+                    </app-subscription-configuration>
+                </div>
             </ng-container>
         </main>
     </div>
@@ -164,4 +185,22 @@
             </div>
         </div>
     </footer>
+
+    <!-- Quote Preview Modal -->
+    <app-quote-preview 
+        [showPreviewPopup]="previewState.show"
+        [previewData]="previewState.data"
+        [previewCommitments]="previewState.previewCommitments"
+        [commitmentDetailsOnly]="previewState.commitmentDetailsOnly"
+        [previewProductsWithoutDiscounts]="previewState.previewProductsWithoutDiscounts"
+        [isLookerSubscription]="previewState.isLooker"
+        [totalContractValue]="previewState.tcv"
+        [totalIncentivesValue]="previewState.incentives"
+        [totalTerms]="previewState.terms"
+        [startDate]="previewState.startDate"
+        [expirationDate]="previewState.expirationDate"
+        [accountName]="accountName"
+        [opportunityName]="opportunityName"
+        (close)="closePreview()">
+    </app-quote-preview>
 </div>

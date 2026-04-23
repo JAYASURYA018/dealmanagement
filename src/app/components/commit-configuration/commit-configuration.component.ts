@@ -1,4 +1,4 @@
-import { Component, Input, OnInit, inject, HostListener } from '@angular/core';
+import { Component, Input, OnInit, inject, HostListener, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DiscountsIncentivesComponent } from '../discounts-incentives/discounts-incentives.component';
@@ -37,16 +37,18 @@ export class CommitConfigurationComponent implements OnInit {
   private loadingService = inject(LoadingService);
   private discountIncentiveStateService = inject(DiscountIncentiveStateService);
 
+  @ViewChild(DiscountsIncentivesComponent) discountsIncentives?: DiscountsIncentivesComponent;
+
   @Input() productId: string = '';
   @Input() quoteLineId: string = '';
   @Input() accountName: string = '';
+  @Input() quoteId: string = '';
   
   activeTab: 'details' | 'discounts' = 'details';
   commitmentPeriods: any[] = [{ months: null, amount: null, isCollapsed: false }];
   activeMenuIndex: number | null = null;
   
   opportunityName: string = '';
-  quoteId: string = '';
   startDate: string = new Date().toLocaleDateString('en-CA');
   expirationDate: string = '';
   minDate: string = new Date().toLocaleDateString('en-CA');
@@ -59,6 +61,163 @@ export class CommitConfigurationComponent implements OnInit {
 
   get totalContractValue(): number {
     return this.commitmentPeriods.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
+  }
+
+  getPreviewData(previewData: any) {
+    const commitments = this.buildPreviewCommitments(previewData);
+    const productsWithoutDiscounts = this.buildProductsWithoutDiscounts(previewData);
+    
+    return {
+      previewData: previewData,
+      previewCommitments: commitments,
+      previewProductsWithoutDiscounts: productsWithoutDiscounts,
+      commitmentDetailsOnly: this.getCommitmentDetailsOnly(),
+      isLookerSubscription: false,
+      totalContractValue: this.totalContractValue,
+      totalIncentivesValue: this.getTotalIncentivesValue(previewData),
+      totalTerms: this.totalTerms,
+      startDate: this.startDate,
+      expirationDate: this.expirationDate
+    };
+  }
+
+  private buildPreviewCommitments(previewData: any): any[] {
+    const previews: any[] = [];
+    if (!previewData?.QuoteLineItems?.records) return [];
+
+    const matchedIds = new Set<string>();
+
+    // 1. Process Discount Periods from child component or state service
+    const state = this.discountIncentiveStateService.getCurrentState();
+    const discountPeriods = this.discountsIncentives?.discountPeriods || state.discountPeriods || [];
+    discountPeriods.forEach((period: any, index: number) => {
+        const startDateStr = period.startDate;
+        const endDateStr = period.endDate;
+        const individualItems: any[] = [];
+        const groupItems: any[] = [];
+
+        if (startDateStr) {
+            const pStart = new Date(startDateStr).getTime();
+            let pEnd: number | null = null;
+            if (endDateStr) pEnd = new Date(endDateStr).setHours(23, 59, 59, 999);
+
+            previewData.QuoteLineItems.records.forEach((item: any) => {
+                if (item.Id && matchedIds.has(item.Id)) return;
+                if (item.Product2Id === this.productId) return; // Skip bundle
+
+                const discount = item.Discount != null ? parseFloat(item.Discount) : 0;
+                if (discount === 0) return;
+
+                const itemStartStr = item.StartDate;
+                if (itemStartStr) {
+                    const itemStart = new Date(itemStartStr).getTime();
+                    const dateMatches = pEnd ? (itemStart >= pStart && itemStart <= pEnd) : (itemStart >= pStart);
+                    
+                    if (dateMatches) {
+                        if (item.Id) matchedIds.add(item.Id);
+                        if (this.isGroupProduct(item)) {
+                            groupItems.push(item);
+                        } else {
+                            individualItems.push(item);
+                        }
+                    }
+                }
+            });
+        }
+
+        previews.push({
+            type: 'discount',
+            name: `Discount Period ${index + 1}`,
+            displayName: `Discount Period ${index + 1}`,
+            startDate: startDateStr ? this.formatDateForDisplay(startDateStr) : '',
+            endDate: endDateStr ? this.formatDateForDisplay(endDateStr) : '',
+            months: period.months,
+            amount: period.amount,
+            bulkIndividualItems: individualItems,
+            groupItems,
+        });
+    });
+
+    // 2. Process Incentive Periods
+    const incentivePeriods = this.discountsIncentives?.incentivePeriods || [];
+    incentivePeriods.forEach((period: any, index: number) => {
+        const startDateStr = period.startDate;
+        const endDateStr = period.endDate;
+        const individualItems: any[] = [];
+        const groupItems: any[] = [];
+
+        if (startDateStr) {
+            const pStart = new Date(startDateStr).getTime();
+            let pEnd: number | null = null;
+            if (endDateStr) pEnd = new Date(endDateStr).setHours(23, 59, 59, 999);
+
+            previewData.QuoteLineItems.records.forEach((item: any) => {
+                if (item.Id && matchedIds.has(item.Id)) return;
+                const incentive = item.Incentive__c ? parseFloat(item.Incentive__c) : 0;
+                if (incentive === 0) return;
+
+                const itemStartStr = item.StartDate;
+                if (itemStartStr) {
+                    const itemStart = new Date(itemStartStr).getTime();
+                    if (itemStart >= pStart && (pEnd ? itemStart <= pEnd : true)) {
+                        if (item.Id) matchedIds.add(item.Id);
+                        if (this.isGroupProduct(item)) {
+                            groupItems.push(item);
+                        } else {
+                            individualItems.push(item);
+                        }
+                    }
+                }
+            });
+        }
+
+        previews.push({
+            type: 'incentive',
+            name: `Incentive Period`,
+            displayName: `Incentive Period`,
+            startDate: startDateStr ? this.formatDateForDisplay(startDateStr) : '',
+            endDate: endDateStr ? this.formatDateForDisplay(endDateStr) : '',
+            months: period.months,
+            amount: period.amount,
+            bulkIndividualItems: individualItems,
+            groupItems,
+        });
+    });
+
+    return previews;
+  }
+
+  private buildProductsWithoutDiscounts(previewData: any): any[] {
+    const products: any[] = [];
+    if (!previewData?.QuoteLineItems?.records) return [];
+
+    const bundle = previewData.QuoteLineItems.records.find((item: any) => item.Product2Id === this.productId);
+    if (bundle) {
+        products.push({
+            ...bundle,
+            Product_Name_Display: bundle.Product2?.Name || 'Product',
+            Quantity: 1
+        });
+    }
+    return products;
+  }
+
+  private getTotalIncentivesValue(previewData: any): number {
+    if (!previewData?.QuoteLineItems?.records) return 0;
+    return previewData.QuoteLineItems.records.reduce((acc: number, item: any) => acc + (Number(item.Incentive__c) || 0), 0);
+  }
+
+  private isGroupProduct(item: any): boolean {
+    const family = item.Product2?.Family;
+    return family === 'Product Group' || !family || family === 'Compute' || family === 'Storage';
+  }
+
+  formatDateForDisplay(dateString: any): string {
+    if (!dateString) return '-';
+    // Use UTC to avoid off-by-one errors from local timezone
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return dateString;
+    return `${date.getUTCMonth() + 1}/${date.getUTCDate()}/${date.getUTCFullYear()}`;
   }
 
   ngOnInit() {
@@ -127,6 +286,60 @@ export class CommitConfigurationComponent implements OnInit {
   @HostListener('document:click')
   closeMenu() {
     this.activeMenuIndex = null;
+  }
+
+  getCommitmentDetailsOnly(): any[] {
+    const details: any[] = [];
+    const quoteStartDateStr = this.startDate || new Date().toISOString().split('T')[0];
+    
+    // Robust date parsing (handles YYYY-MM-DD or MM/DD/YYYY)
+    let currentStartDate: Date;
+    if (quoteStartDateStr.includes('-')) {
+        const parts = quoteStartDateStr.split('-');
+        currentStartDate = new Date(Date.UTC(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])));
+    } else if (quoteStartDateStr.includes('/')) {
+        const parts = quoteStartDateStr.split('/');
+        // Assuming MM/DD/YYYY if it starts with a small number, else YYYY/MM/DD
+        if (parseInt(parts[0]) <= 12) {
+            currentStartDate = new Date(Date.UTC(parseInt(parts[2]), parseInt(parts[0]) - 1, parseInt(parts[1])));
+        } else {
+            currentStartDate = new Date(Date.UTC(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])));
+        }
+    } else {
+        currentStartDate = new Date(quoteStartDateStr);
+    }
+
+    if (isNaN(currentStartDate.getTime())) {
+        currentStartDate = new Date();
+        currentStartDate.setUTCHours(0, 0, 0, 0);
+    }
+
+    this.commitmentPeriods.forEach((period, index) => {
+        const months = parseInt(String(period.months || '0')) || 0;
+        const amount = Number(period.amount || 0) || 0;
+
+        if (months > 0) {
+            const endDate = new Date(currentStartDate);
+            endDate.setUTCMonth(endDate.getUTCMonth() + months);
+            endDate.setUTCDate(endDate.getUTCDate() - 1);
+
+            details.push({
+                name: `Period ${index + 1}`,
+                startDate: this.formatUTCDateForDisplay(currentStartDate),
+                endDate: this.formatUTCDateForDisplay(endDate),
+                months: months,
+                amount: amount
+            });
+
+            currentStartDate = new Date(endDate);
+            currentStartDate.setUTCDate(currentStartDate.getUTCDate() + 1);
+        }
+    });
+    return details;
+  }
+
+  private formatUTCDateForDisplay(date: Date): string {
+    return `${date.getUTCMonth() + 1}/${date.getUTCDate()}/${date.getUTCFullYear()}`;
   }
 
   restrictNumeric(event: KeyboardEvent) {
