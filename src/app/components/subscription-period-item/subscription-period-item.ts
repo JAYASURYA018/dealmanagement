@@ -106,6 +106,14 @@ export class SubscriptionPeriodItemComponent implements OnInit {
     private toastService = inject(ToastService);
     activeRegionIndex: number | null = null;
 
+    private _remainingQuota: number = 1000;
+    @Input()
+    set remainingQuota(value: number) {
+        this._remainingQuota = value;
+    }
+    get remainingQuota(): number {
+        return this._remainingQuota;
+    }
     @Input() subscriptionStartDate: string = '';
     @Input() subscriptionEndDate: string = '';
     @Input() frequency: string = 'Yearly';
@@ -273,6 +281,11 @@ export class SubscriptionPeriodItemComponent implements OnInit {
     }
 
     selectPlatformProduct(product: ProductItem) {
+        if (this.remainingQuota <= 0 && !this.period.productName) {
+            this.toastService.show('Product catalog limit reached. Cannot select platform.', 'error');
+            this.platformDropdownOpen = false;
+            return;
+        }
         this.period.productName = product.name;
         this.onProductChange();
         this.platformDropdownOpen = false;
@@ -431,7 +444,17 @@ export class SubscriptionPeriodItemComponent implements OnInit {
 
     validateQuantity(event: any, row: UserTypeRow) {
         let value = event.target.value;
-        if (value < 0) {
+        const numValue = Number(value) || 0;
+        
+        // If quota is exhausted and we are trying to add a NEW product (quantity was 0 or null)
+        if (this.remainingQuota <= 0 && numValue > (row.quantity || 0)) {
+            this.toastService.show('Product catalog limit reached. Cannot add more products.', 'error');
+            row.quantity = row.quantity || 0;
+            event.target.value = row.quantity;
+            return;
+        }
+
+        if (numValue < 0) {
             row.quantity = 0;
             event.target.value = 0;
         }

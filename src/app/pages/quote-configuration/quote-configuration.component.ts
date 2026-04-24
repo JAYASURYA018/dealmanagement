@@ -92,8 +92,23 @@ export class QuoteConfigurationComponent implements OnInit {
     if (this.commitComps) {
       this.commitComps.forEach(commit => {
         if (commit.discountsIncentives) {
+          // Count current selections (in progress)
           count += (commit.discountsIncentives.persistentSelectedGroups?.size || 0);
           count += (commit.discountsIncentives.persistentSelectedIndividuals?.size || 0);
+
+          // Count already applied discounts
+          commit.discountsIncentives.discountPeriods.forEach((p: any) => {
+            if (p.activeDiscounts) {
+              p.activeDiscounts.forEach((d: any) => count += (d.itemCount || 0));
+            }
+          });
+
+          // Count already applied incentives
+          commit.discountsIncentives.incentivePeriods.forEach((p: any) => {
+            if (p.activeIncentives) {
+              p.activeIncentives.forEach((i: any) => count += (i.itemCount || 0));
+            }
+          });
         }
       });
     }
@@ -280,8 +295,8 @@ export class QuoteConfigurationComponent implements OnInit {
     });
 
     this.quoteDataService.quoteData$.subscribe(data => {
-      this.accountName = data.accountName || 'Acme Corp';
-      this.opportunityName = data.opportunityName || 'Expansion Deal';
+      this.accountName = data.accountName || 'Account Name';
+      this.opportunityName = data.opportunityName || 'Opportunity Name';
       this.quoteNumber = data.quoteNumber || 'Q-DRAFT';
       if (data.quoteId) this.quoteId = data.quoteId;
       

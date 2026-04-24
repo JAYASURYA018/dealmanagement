@@ -2251,6 +2251,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
             value: value,
             type: 'discount',
             granularity: granularity,
+            itemCount: committedProductCount,
             responseTime: responseTimeSecs
         };
         if (!this.activeDiscountPeriod) return;
@@ -2378,6 +2379,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
                     subtext: `${groupCount} Product Group${groupCount !== 1 ? 's' : ''} (${responseTimeSecs}s)`,
                     value: displayValue,
                     type: 'incentive',
+                    itemCount: groupCount,
                     responseTime: responseTimeSecs
                 });
                 this.incentiveForm.amount = '';

@@ -37,7 +37,7 @@ import { SubscriptionPeriodItemComponent, SubscriptionPeriod, ProductItem } from
 })
 export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
   
-  public lastSavedLookerState: string | null = null;
+  public lastSavedLookerState: string | null = null; // State tracking
   static lastInitTime = 0;
   
   private router = inject(Router);
@@ -59,6 +59,7 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
   opportunityName: string = '';
   @Input() accountName: string = '';
   @Input() quoteId: string = '';
+  @Input() remainingQuota: number = 1000;
   primaryContactName: string = '';
   salesChannel: string = '';
   get totalContractValue(): number {
