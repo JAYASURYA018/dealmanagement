@@ -28,7 +28,6 @@ export class ProductListComponent implements OnInit {
     currentTitle: string = 'Recommended products';
 
     ngOnInit() {
-        this.cartService.clearCart();
         const rcaProducts$ = this.rcaApiService.products$.pipe(
             map(rcaProducts => {
                 return rcaProducts.map(rp => {

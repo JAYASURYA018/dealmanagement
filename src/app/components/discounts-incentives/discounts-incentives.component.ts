@@ -328,19 +328,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
     }
 
     private loadPersistedState() {
-        // Check if this is a page refresh by looking at navigation type
-        const isPageRefresh = (performance.navigation && performance.navigation.type === 1) ||
-            (performance.getEntriesByType &&
-                (performance.getEntriesByType('navigation')[0] as any)?.type === 'reload');
-
-        if (isPageRefresh) {
-            // Clear state on page refresh and start fresh
-            this.discountIncentiveStateService.clearState();
-            console.log('🔄 Page refresh detected - clearing discount/incentive state');
-            return;
-        }
-
-        // Load persisted state for tab switches
+        // Load persisted state (now survives page refresh via sessionStorage)
         const quoteId = this.activeQuoteId;
         const state = this.discountIncentiveStateService.loadState(quoteId);
 
@@ -351,7 +339,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
             state.incentiveForm.type !== 'Select';
 
         if (hasData) {
-            console.log('📋 Restoring discount/incentive state from tab switch');
+            console.log('📋 Restoring discount/incentive state from session');
 
             // Restore form data
             this.discountForm = { ...state.discountForm };
@@ -2223,6 +2211,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
                     this.dataFetched = false;
                     // Signal that quote line items need refresh due to discount changes
                     this.quoteRefreshService.setRefreshNeeded(true);
+                    this.saveCurrentState(); // Persist discounts locally
 
                     this.showProductSelector = false;
                     this.router.navigate(['/quote-configuration']);
@@ -2385,6 +2374,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
                 this.productGroups.forEach(g => { g.selected = false; });
                 this.dataFetched = false;
                 this.quoteRefreshService.setRefreshNeeded(true);
+                this.saveCurrentState(); // Persist incentives locally
             }
         });
     }
@@ -2403,6 +2393,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         }
         this.openActionMenuId = null;
         this.toastService.show('Item duplicated', 'success');
+        this.saveCurrentState();
     }
 
     deleteItem(item: any, period: any) {
@@ -2413,6 +2404,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         }
         this.openActionMenuId = null;
         this.toastService.show('Item deleted', 'success');
+        this.saveCurrentState();
     }
 
     toggleActionMenu(id: string) {

@@ -7,21 +7,38 @@ import { Product } from '../models/mock-data';
 })
 export class CartService {
 
-    private cartItemsSubject = new BehaviorSubject<Product[]>([]);
+    private readonly SESSION_KEY = 'cart_items';
+
+    private cartItemsSubject = new BehaviorSubject<Product[]>(this.loadFromSession());
     cartItems$ = this.cartItemsSubject.asObservable();
+
+    /** Load persisted cart from sessionStorage on app boot / page refresh */
+    private loadFromSession(): Product[] {
+        try {
+            const raw = sessionStorage.getItem(this.SESSION_KEY);
+            return raw ? JSON.parse(raw) : [];
+        } catch {
+            return [];
+        }
+    }
+
+    private saveToSession(items: Product[]): void {
+        sessionStorage.setItem(this.SESSION_KEY, JSON.stringify(items));
+    }
 
     addToCart(product: Product) {
         const currentItems = this.cartItemsSubject.value;
-        // Check if already in cart to avoid duplicates if needed, or allow multiples.
-        // Assuming unique products for now based on ID.
         if (!currentItems.find(p => p.id === product.id)) {
-            this.cartItemsSubject.next([...currentItems, product]);
+            const updated = [...currentItems, product];
+            this.cartItemsSubject.next(updated);
+            this.saveToSession(updated);
         }
     }
 
     removeFromCart(productId: string) {
-        const currentItems = this.cartItemsSubject.value;
-        this.cartItemsSubject.next(currentItems.filter(p => p.id !== productId));
+        const updated = this.cartItemsSubject.value.filter(p => p.id !== productId);
+        this.cartItemsSubject.next(updated);
+        this.saveToSession(updated);
     }
 
     getCartItems(): Product[] {
@@ -30,5 +47,6 @@ export class CartService {
 
     clearCart() {
         this.cartItemsSubject.next([]);
+        sessionStorage.removeItem(this.SESSION_KEY);
     }
 }

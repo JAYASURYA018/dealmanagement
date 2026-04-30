@@ -331,6 +331,23 @@ export class RcaApiService {
     getProducts(): void {
         const method = 'RcaApiService.getProducts';
 
+        // 1. Check session storage cache first
+        const cachedProducts = sessionStorage.getItem('rca_products');
+        const cachedFamilies = sessionStorage.getItem('rca_families');
+        if (cachedProducts && cachedFamilies) {
+            try {
+                this.productsSubject.next(JSON.parse(cachedProducts));
+                this.familiesSubject.next(JSON.parse(cachedFamilies));
+                console.log(`[API Response Cache] ${method} loaded from session storage`);
+                return; // Skip API call
+            } catch (e) {
+                console.warn('Failed to parse cached RCA products, fetching from API...', e);
+                sessionStorage.removeItem('rca_products');
+                sessionStorage.removeItem('rca_families');
+            }
+        }
+
+
         this.contextService.context$.pipe(take(1)).subscribe(context => {
             // TEMPORARY: Use hardcoded token if dynamic one is missing
             const providedToken = '00DDz000001qvYA!ARQAQE2ut._CySv0HuqzA58fQg2KQLcac4Eomg4keHeHi6SaaLi8m3e5R6_XFyXbm217O5tEzWvSRR82lg7htONLvNqSzO5g';
@@ -401,6 +418,11 @@ export class RcaApiService {
                     });
 
                     const families = Array.from(new Set(products.map((p: any) => p.additionalFields?.Family).filter((f: any) => !!f)));
+                    
+                    // Store in sessionStorage to persist across refreshes
+                    sessionStorage.setItem('rca_products', JSON.stringify(products));
+                    sessionStorage.setItem('rca_families', JSON.stringify(families));
+
                     this.productsSubject.next(products);
                     this.familiesSubject.next(families as string[]);
                 },

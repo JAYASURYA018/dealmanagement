@@ -23,6 +23,9 @@ export class DetailsOfQuoteComponent implements OnInit {
   private toastService = inject(ToastService);
   private quoteDataService = inject(QuoteDataService);
 
+  // Session key for this form
+  private readonly SESSION_KEY = 'quote_details_form';
+
   accountId: string | null = null;
   accountName = '';
   // Primary Contact State
@@ -44,16 +47,42 @@ export class DetailsOfQuoteComponent implements OnInit {
   expirationDate = '';
   minDate = new Date().toISOString().split('T')[0];
 
+  /** Persist current field values to sessionStorage */
+  private saveFormToSession() {
+    sessionStorage.setItem(this.SESSION_KEY, JSON.stringify({
+      primaryContactName: this.primaryContactName,
+      salesChannel: this.salesChannel,
+      operationType: this.operationType,
+      expirationDate: this.expirationDate
+    }));
+  }
+
+  /** Load previously saved field values */
+  private loadFormFromSession() {
+    try {
+      const raw = sessionStorage.getItem(this.SESSION_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw);
+        if (saved.primaryContactName) this.primaryContactName = saved.primaryContactName;
+        if (saved.salesChannel) this.salesChannel = saved.salesChannel;
+        if (saved.operationType) this.operationType = saved.operationType;
+        if (saved.expirationDate) this.expirationDate = saved.expirationDate;
+      }
+    } catch { /* ignore */ }
+  }
+
   ngOnInit() {
     this.setInitialExpirationDate();
+    this.loadFormFromSession(); // Restore any previously saved form values
     this.quoteDataService.quoteData$.subscribe(data => {
       if (data.accountName) this.accountName = data.accountName;
       if (data.accountId) {
         this.accountId = data.accountId;
         this.loadContacts(data.accountId);
       }
-      if (data.primaryContactName) this.primaryContactName = data.primaryContactName;
-      if (data.salesChannel) this.salesChannel = data.salesChannel;
+      // Only pre-fill from quoteData if session has no value
+      if (!this.primaryContactName && data.primaryContactName) this.primaryContactName = data.primaryContactName;
+      if (!this.salesChannel && data.salesChannel) this.salesChannel = data.salesChannel;
       
       this.loadAllPicklists();
     });
@@ -121,6 +150,7 @@ export class DetailsOfQuoteComponent implements OnInit {
   selectOperationType(type: string) {
     this.operationType = type;
     this.operationTypeOpen = false;
+    this.saveFormToSession();
   }
 
   togglePrimaryContact() {
@@ -132,6 +162,7 @@ export class DetailsOfQuoteComponent implements OnInit {
   selectContact(contact: string) {
     this.primaryContactName = contact;
     this.primaryContactOpen = false;
+    this.saveFormToSession();
   }
 
   toggleSalesChannel() {
@@ -143,6 +174,7 @@ export class DetailsOfQuoteComponent implements OnInit {
   selectChannel(channel: string) {
     this.salesChannel = channel;
     this.salesChannelOpen = false;
+    this.saveFormToSession();
   }
 
   formatDate(dateStr: string): string {
@@ -159,9 +191,15 @@ export class DetailsOfQuoteComponent implements OnInit {
   }
 
   private setInitialExpirationDate() {
-    const expiry = new Date();
-    expiry.setDate(expiry.getDate() + 45);
-    this.expirationDate = expiry.toISOString().split('T')[0];
+    if (!this.expirationDate) {
+      const expiry = new Date();
+      expiry.setDate(expiry.getDate() + 45);
+      this.expirationDate = expiry.toISOString().split('T')[0];
+    }
+  }
+
+  onExpirationDateChange() {
+    this.saveFormToSession();
   }
 
   onSave(onSuccess?: () => void) {

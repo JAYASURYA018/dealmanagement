@@ -44,7 +44,7 @@ export interface DiscountIncentiveState {
   // Active tab
   activeTab: 'discounts' | 'incentives';
 
-  // Selection state
+  // Selection state (serialised as plain arrays for JSON)
   persistentSelectedGroups: Map<string, any>;
   persistentSelectedIndividuals: Map<string, any>;
   persistentIncentiveGroups: Map<string, any>;
@@ -58,15 +58,14 @@ export interface DiscountIncentiveState {
   quoteId?: string;
 }
 
+const SESSION_KEY = 'discount_incentive_state';
+
 @Injectable({
   providedIn: 'root'
 })
 export class DiscountIncentiveStateService {
   private stateSubject = new BehaviorSubject<DiscountIncentiveState | null>(null);
   public state$ = this.stateSubject.asObservable();
-
-  // In-memory storage - gets cleared on page refresh
-  private inMemoryState: DiscountIncentiveState | null = null;
 
   private getDefaultState(): DiscountIncentiveState {
     return {
@@ -117,55 +116,99 @@ export class DiscountIncentiveStateService {
     };
   }
 
+  /** Serialise state to JSON-safe object (Maps → arrays, Sets → arrays) */
+  private serialise(state: DiscountIncentiveState): object {
+    return {
+      ...state,
+      persistentSelectedGroups: Array.from(state.persistentSelectedGroups?.entries() || []),
+      persistentSelectedIndividuals: Array.from(state.persistentSelectedIndividuals?.entries() || []),
+      persistentIncentiveGroups: Array.from(state.persistentIncentiveGroups?.entries() || []),
+      bulkUploadedProductIds: Array.from(state.bulkUploadedProductIds || [])
+    };
+  }
+
+  /** Deserialise JSON-safe object back to state with Maps/Sets */
+  private deserialise(raw: any): DiscountIncentiveState {
+    return {
+      ...this.getDefaultState(),
+      ...raw,
+      persistentSelectedGroups: new Map(raw.persistentSelectedGroups || []),
+      persistentSelectedIndividuals: new Map(raw.persistentSelectedIndividuals || []),
+      persistentIncentiveGroups: new Map(raw.persistentIncentiveGroups || []),
+      bulkUploadedProductIds: new Set(raw.bulkUploadedProductIds || [])
+    };
+  }
+
+  private loadFromSession(): DiscountIncentiveState | null {
+    try {
+      const raw = sessionStorage.getItem(SESSION_KEY);
+      if (raw) {
+        return this.deserialise(JSON.parse(raw));
+      }
+    } catch (e) {
+      console.warn('Failed to load discount/incentive state from session', e);
+      sessionStorage.removeItem(SESSION_KEY);
+    }
+    return null;
+  }
+
+  private saveToSession(state: DiscountIncentiveState) {
+    try {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(this.serialise(state)));
+    } catch (e) {
+      console.warn('Failed to save discount/incentive state to session', e);
+    }
+  }
+
   saveState(state: Partial<DiscountIncentiveState>, quoteId?: string) {
-    const currentState = this.inMemoryState || this.getDefaultState();
-    
+    const currentState = this.loadFromSession() || this.getDefaultState();
+
     // If quoteId changes, clear state first
     if (quoteId && currentState.quoteId && currentState.quoteId !== quoteId) {
-       this.clearState();
-       const freshState = this.getDefaultState();
-       const newState = { ...freshState, ...state, quoteId };
-       this.inMemoryState = newState;
-       this.stateSubject.next(newState);
-       return;
+      this.clearState();
+      const newState = { ...this.getDefaultState(), ...state, quoteId } as DiscountIncentiveState;
+      this.saveToSession(newState);
+      this.stateSubject.next(newState);
+      return;
     }
 
-    const newState = { ...currentState, ...state };
+    const newState = { ...currentState, ...state } as DiscountIncentiveState;
     if (quoteId) newState.quoteId = quoteId;
-    
-    // Store in memory only - will be lost on page refresh
-    this.inMemoryState = newState;
+
+    this.saveToSession(newState);
     this.stateSubject.next(newState);
   }
 
   loadState(quoteId?: string): DiscountIncentiveState {
-    // If quoteId changes, clear state
-    if (quoteId && this.inMemoryState && this.inMemoryState.quoteId && this.inMemoryState.quoteId !== quoteId) {
+    const fromSession = this.loadFromSession();
+
+    // If quoteId changed, clear and return default
+    if (quoteId && fromSession?.quoteId && fromSession.quoteId !== quoteId) {
       this.clearState();
+      const defaultState = this.getDefaultState();
+      defaultState.quoteId = quoteId;
+      return defaultState;
     }
 
-    // Return in-memory state if available, otherwise return default
-    if (this.inMemoryState) {
-      if (quoteId && !this.inMemoryState.quoteId) this.inMemoryState.quoteId = quoteId;
-      this.stateSubject.next(this.inMemoryState);
-      return this.inMemoryState;
+    if (fromSession) {
+      if (quoteId && !fromSession.quoteId) fromSession.quoteId = quoteId;
+      this.stateSubject.next(fromSession);
+      return fromSession;
     }
 
     const defaultState = this.getDefaultState();
     if (quoteId) defaultState.quoteId = quoteId;
     this.stateSubject.next(defaultState);
-    this.inMemoryState = defaultState;
     return defaultState;
   }
 
   clearState() {
-    // Clear in-memory state
-    this.inMemoryState = null;
+    sessionStorage.removeItem(SESSION_KEY);
     const defaultState = this.getDefaultState();
     this.stateSubject.next(defaultState);
   }
 
   getCurrentState(): DiscountIncentiveState {
-    return this.inMemoryState || this.loadState();
+    return this.loadFromSession() || this.loadState();
   }
 }

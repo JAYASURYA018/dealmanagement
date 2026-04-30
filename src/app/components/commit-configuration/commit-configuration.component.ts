@@ -56,6 +56,33 @@ export class CommitConfigurationComponent implements OnInit {
   primaryContactName: string = '';
   salesChannel: string = '';
 
+  /** Key is per-product so multiple products don't collide */
+  private get sessionKey(): string {
+    return `commit_config_${this.productId}`;
+  }
+
+  private saveToSession() {
+    sessionStorage.setItem(this.sessionKey, JSON.stringify({
+      commitmentPeriods: this.commitmentPeriods,
+      startDate: this.startDate,
+      activeTab: this.activeTab
+    }));
+  }
+
+  private loadFromSession() {
+    try {
+      const raw = sessionStorage.getItem(this.sessionKey);
+      if (raw) {
+        const saved = JSON.parse(raw);
+        if (saved.commitmentPeriods && saved.commitmentPeriods.length > 0) {
+          this.commitmentPeriods = saved.commitmentPeriods;
+        }
+        if (saved.startDate) this.startDate = saved.startDate;
+        if (saved.activeTab) this.activeTab = saved.activeTab;
+      }
+    } catch { /* ignore */ }
+  }
+
   get totalTerms(): number {
     return this.commitmentPeriods.reduce((acc, curr) => acc + (parseInt(curr.months || '0') || 0), 0);
   }
@@ -238,6 +265,7 @@ export class CommitConfigurationComponent implements OnInit {
       if (data.salesChannel) this.salesChannel = data.salesChannel;
     });
 
+    this.loadFromSession(); // Restore commitment periods and start date
     this.updateExpirationDate();
   }
 
@@ -250,6 +278,7 @@ export class CommitConfigurationComponent implements OnInit {
         }
     }
     this.activeTab = tab;
+    this.saveToSession();
   }
 
   addPeriod() {
@@ -263,11 +292,13 @@ export class CommitConfigurationComponent implements OnInit {
       return;
     }
     this.commitmentPeriods.push({ months: null, amount: null, isCollapsed: false });
+    this.saveToSession();
   }
 
   removePeriod() {
     if (this.commitmentPeriods.length <= 1) return;
     this.commitmentPeriods.pop();
+    this.saveToSession();
   }
 
   toggleEdit(index: number) {
@@ -284,12 +315,14 @@ export class CommitConfigurationComponent implements OnInit {
     const period = { ...this.commitmentPeriods[index], isCollapsed: true, isDuplicated: true };
     this.commitmentPeriods.splice(index + 1, 0, period);
     this.activeMenuIndex = null;
+    this.saveToSession();
   }
 
   deletePeriod(index: number) {
     if (this.commitmentPeriods.length <= 1) return;
     this.commitmentPeriods.splice(index, 1);
     this.activeMenuIndex = null;
+    this.saveToSession();
   }
 
   @HostListener('document:click')
@@ -383,12 +416,14 @@ export class CommitConfigurationComponent implements OnInit {
     const val = input.value;
     this.commitmentPeriods[index].months = val.replace(/[^0-9]/g, '');
     this.updateExpirationDate();
+    this.saveToSession();
   }
 
   onMonthInput(index: number, val: string) { }
 
   onAmountBlur(index: number, val: string) {
     this.commitmentPeriods[index].amount = this.parseShorthandValue(val);
+    this.saveToSession();
   }
 
   parseShorthandValue(val: string): number {

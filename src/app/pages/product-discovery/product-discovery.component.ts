@@ -37,6 +37,9 @@ export class ProductDiscoveryComponent implements OnInit, AfterViewInit {
     ngOnInit(): void {
         // Clear search query on init
         this.searchFilterService.setSearchQuery('');
+        
+        // Fetch products so they populate the list even on a hard page refresh
+        this.rcaApiService.getProducts();
 
         // Read opportunity ID from query params
         this.route.queryParams.subscribe(params => {

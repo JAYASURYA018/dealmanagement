@@ -69,7 +69,7 @@ export class QuoteConfigurationComponent implements OnInit {
   opportunityId = '';
   
   products: any[] = [];
-  selectedItemId = 'quote_details';
+  selectedItemId = sessionStorage.getItem('qc_selected_item') || 'quote_details';
   annualContractValue = 0;
   isPrimary = false;
 
@@ -379,6 +379,7 @@ export class QuoteConfigurationComponent implements OnInit {
 
   selectItem(id: string) {
     this.selectedItemId = id;
+    sessionStorage.setItem('qc_selected_item', id);
     if (id === 'quote_details') {
       this.activeTab = 'details';
     } else {

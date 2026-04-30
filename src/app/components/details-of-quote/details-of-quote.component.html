@@ -81,6 +81,7 @@
                 <label class="block text-[10px] text-gray-500 mb-0.5 uppercase tracking-wide font-medium">Quote Expiration Date</label>
                 <div class="flex justify-between items-center w-full relative">
                     <input type="date" [(ngModel)]="expirationDate" [min]="minDate"
+                        (ngModelChange)="onExpirationDateChange()"
                         class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                         placeholder="Select">
                     <div class="text-sm font-bold text-slate-700 leading-tight">
