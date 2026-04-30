@@ -257,14 +257,20 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
     this.quoteDataService.quoteData$.subscribe(quoteData => {
       if (quoteData.opportunityName) this.opportunityName = quoteData.opportunityName;
       if (quoteData.accountName) this.accountName = quoteData.accountName;
-      if (quoteData.quoteId) this.quoteId = quoteData.quoteId;
+      if (quoteData.quoteId) {
+        this.quoteId = quoteData.quoteId;
+        this.loadStateFromSession();
+      }
     });
 
     this.contextService.context$.subscribe(ctx => {
       if (ctx.quoteId && (!this.quoteId || this.quoteId.startsWith('0Q0'))) {
         this.quoteId = ctx.quoteId;
+        this.loadStateFromSession();
       }
     });
+
+    this.loadStateFromSession();
 
     setTimeout(() => {
       this.initializeLookerDataIfNeeded();
@@ -1141,15 +1147,51 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
     this.closeAllDropdowns();
     this.termStartsOnOpen = !wasOpen; 
   }
-  selectOperationType(v: string) { this.operationType = v; this.operationTypeOpen = false; }
-  selectBillingFrequency(v: string) { this.billingFrequency = v; this.billingFrequencyOpen = false; }
-  selectTermStartsOn(v: string) { this.termStartsOn = v; this.termStartsOnOpen = false; }
+  get sessionKey() {
+    return 'subscription_config_' + (this.quoteId || 'draft') + '_' + (this.productId || '');
+  }
+
+  saveStateToSession() {
+    try {
+      const state = {
+        operationType: this.operationType,
+        billingFrequency: this.billingFrequency,
+        termStartsOn: this.termStartsOn,
+        termStartInput: this.termStartInput,
+        termEndDate: this.termEndDate
+      };
+      sessionStorage.setItem(this.sessionKey, JSON.stringify(state));
+    } catch (e) {
+      console.warn('Could not save to session', e);
+    }
+  }
+
+  loadStateFromSession() {
+    try {
+      if (!this.sessionKey) return;
+      const raw = sessionStorage.getItem(this.sessionKey);
+      if (raw) {
+        const state = JSON.parse(raw);
+        if (state.operationType) this.operationType = state.operationType;
+        if (state.billingFrequency) this.billingFrequency = state.billingFrequency;
+        if (state.termStartsOn) this.termStartsOn = state.termStartsOn;
+        if (state.termStartInput) this.termStartInput = state.termStartInput;
+        if (state.termEndDate) this.termEndDate = state.termEndDate;
+      }
+    } catch (e) {
+      console.warn('Could not load from session', e);
+    }
+  }
+
+  selectOperationType(v: string) { this.operationType = v; this.operationTypeOpen = false; this.saveStateToSession(); }
+  selectBillingFrequency(v: string) { this.billingFrequency = v; this.billingFrequencyOpen = false; this.saveStateToSession(); }
+  selectTermStartsOn(v: string) { this.termStartsOn = v; this.termStartsOnOpen = false; this.saveStateToSession(); }
   formatDate(s: string) { if (!s) return ''; return new Date(s).toLocaleDateString(); }
-  updateTermFromDates() { this.onSubscriptionProductChanged(); }
+  updateTermFromDates() { this.onSubscriptionProductChanged(); this.saveStateToSession(); }
   updateExpirationDate() { this.updateTermFromDates(); }
   openSubscriptionModal() { this.isSubscriptionModalOpen = true; }
   closeSubscriptionModal() { this.isSubscriptionModalOpen = false; }
-  removeSubscriptionPeriod(i: number) { this.subscriptionPeriods.splice(i, 1); this.onSubscriptionProductChanged(); }
+  removeSubscriptionPeriod(i: number) { this.subscriptionPeriods.splice(i, 1); this.onSubscriptionProductChanged(); this.saveStateToSession(); }
   get isLookerSubscription() { return true; }
   get totalTermLabel() { return this.subscriptionPeriods.length + ' periods'; }
   closeSuccessPopup() { this.showSuccessPopup = false; }
