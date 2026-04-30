@@ -396,6 +396,35 @@ export class SalesforceApiService {
     }
 
     /**
+     * Syncs a Quote to an Opportunity by updating the SyncedQuoteId field.
+     * @param opportunityId The Salesforce Opportunity ID
+     * @param quoteId The Salesforce Quote ID to sync
+     * @returns Observable of the update result
+     */
+    syncQuoteToOpportunity(opportunityId: string, quoteId: string | null): Observable<any> {
+        const method = 'SalesforceApiService.syncQuoteToOpportunity';
+        const token = this.contextService.accessToken;
+        const baseUrl = this.contextService.apiBaseUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com';
+        const url = `${baseUrl}/services/data/v60.0/sobjects/Opportunity/${opportunityId}`;
+
+        const body = {
+            SyncedQuoteId: quoteId
+        };
+
+        console.log(`[API Request] ${method}`, { url, body });
+
+        const headers = new HttpHeaders({
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        });
+
+        return this.http.patch(url, body, { headers }).pipe(
+            tap(response => console.log(`[API Response] ${method}`, response)),
+            catchError(err => this.handleError(method, err))
+        );
+    }
+
+    /**
      * Fetches QuoteLineItems for a given Quote ID
      * @param quoteId The Salesforce Quote ID
      * @returns Observable containing recentItems with QuoteLineItem IDs

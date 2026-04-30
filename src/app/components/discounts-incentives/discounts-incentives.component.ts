@@ -155,13 +155,11 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
     }
 
     // Product Quota Tracking
-    // Fixed business limit: max 976 products can receive discounts/incentives per quote
+    @Input() remainingQuota: number = 1000;
     totalCatalogProducts: number = 1000;
-    // Running total of product line items committed in all applied discounts/incentives
-    usedQuotaCount: number = 0;
 
-    get remainingProductsQuota(): number {
-        return Math.max(0, this.totalCatalogProducts - this.usedQuotaCount);
+    get usedQuotaCount(): number {
+        return Math.max(0, this.totalCatalogProducts - this.remainingQuota);
     }
 
     get activeQuoteId(): string | undefined {
@@ -172,12 +170,9 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         return this.contextService.currentContext?.pricebookId || this.quoteDataService.getQuoteData()?.pricebook2Id || '01sf4000003ZgtzAAC';
     }
 
-    // Live remaining = quota minus already-committed minus currently-selected-in-modal
+    // Live remaining = global quota (which already factors in current selections via the parent component)
     get liveQuotaRemaining(): number {
-        const currentSelection = this.selectorCalledFrom === 'incentives'
-            ? this.persistentIncentiveGroups.size
-            : this.persistentSelectedGroups.size + this.persistentSelectedIndividuals.size;
-        return Math.max(0, this.totalCatalogProducts - this.usedQuotaCount - currentSelection);
+        return this.remainingQuota;
     }
 
     // Dropdown Options
@@ -1683,10 +1678,10 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
     }
 
     toggleItem(item: any) {
-        // Validation: Limit to 1000 products
+        // Validation: Limit products
         if (!item.selected) {
             if (this.liveQuotaRemaining <= 0) {
-                this.toastService.show('Maximum limit of 1000 products reached.', 'warning');
+                this.toastService.show(`Maximum product limit reached. Check the remaining quota in the header.`, 'warning');
                 return;
             }
         }
@@ -1837,15 +1832,21 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
             map = this.productTab === 'groups' ? this.persistentSelectedGroups : this.persistentSelectedIndividuals;
         }
 
+        // remainingQuota is the number of items we can still select RIGHT NOW
+        let availableQuota = this.remainingQuota;
+
         this.filteredItems.forEach(item => {
             const becomingSelected = !allSelected;
 
             // Check limit when selecting
             if (becomingSelected && !item.selected) {
-                if (this.liveQuotaRemaining <= 0) {
+                if (availableQuota <= 0) {
                     blockedByLimit = true;
                     return; // Skip this one
                 }
+                availableQuota--;
+            } else if (!becomingSelected && item.selected) {
+                availableQuota++;
             }
 
             item.selected = becomingSelected;
@@ -1857,7 +1858,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         });
 
         if (blockedByLimit) {
-            this.toastService.show('Selection partially blocked: Maximum limit of 1000 products reached.', 'warning');
+            this.toastService.show(`Selection partially blocked: Maximum product limit reached. Check the remaining quota in the header.`, 'warning');
         }
     }
 
@@ -2233,8 +2234,6 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
     }
 
     private addDiscountToUI(granularity: string, groupCount: number, individualCount: number, value: string, committedProductCount: number = 0, responseTimeSecs?: string) {
-        // Update the running quota
-        this.usedQuotaCount += committedProductCount;
 
         let title = `${granularity} Discount - Flat Rate (%)`;
         let subtext = `${groupCount} Product Groups, ${individualCount} Products ${responseTimeSecs ? '(' + responseTimeSecs + 's)' : ''}`;
@@ -2371,7 +2370,6 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
                 const responseTimeSecs = ((endTime - startTime) / 1000).toFixed(2);
                 this.toastService.show(`Incentive added successfully (${responseTimeSecs}s)`, 'success');
                 const groupCount = selectedGroups.length;
-                this.usedQuotaCount += groupCount;
                 const displayValue = `${groupCount} group${groupCount !== 1 ? 's' : ''} with custom amounts`;
                 this.activeIncentivePeriod.activeIncentives.push({
                     id: 'i' + Date.now(),

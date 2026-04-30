@@ -43,6 +43,7 @@ export class CommitConfigurationComponent implements OnInit {
   @Input() quoteLineId: string = '';
   @Input() accountName: string = '';
   @Input() quoteId: string = '';
+  @Input() remainingQuota: number = 1000;
   
   activeTab: 'details' | 'discounts' = 'details';
   commitmentPeriods: any[] = [{ months: null, amount: null, isCollapsed: false }];
@@ -57,6 +58,14 @@ export class CommitConfigurationComponent implements OnInit {
 
   get totalTerms(): number {
     return this.commitmentPeriods.reduce((acc, curr) => acc + (parseInt(curr.months || '0') || 0), 0);
+  }
+
+  get contractEndDate(): string {
+    if (!this.startDate || !this.totalTerms) return '';
+    const parts = this.startDate.split('-');
+    const end = new Date(Number(parts[0]), Number(parts[1]) - 1 + this.totalTerms, Number(parts[2]));
+    end.setDate(end.getDate() - 1); // last day of the term
+    return this.toIsoDateString(end);
   }
 
   get totalContractValue(): number {

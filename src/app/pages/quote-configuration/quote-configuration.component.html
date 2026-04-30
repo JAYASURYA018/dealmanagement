@@ -49,7 +49,7 @@
 
                 <div class="flex items-center gap-3 pr-4 border-r border-gray-100 h-8">
                     <label class="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" class="sr-only peer">
+                        <input type="checkbox" class="sr-only peer" [checked]="isPrimary" (change)="togglePrimary($event)">
                         <div class="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-blue-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all"></div>
                     </label>
                     <span class="text-[12px] font-medium text-slate-500">Mark as Primary</span>
@@ -137,7 +137,8 @@
                         [productId]="product.id" 
                         [quoteLineId]="product.quoteLineId" 
                         [accountName]="accountName"
-                        [quoteId]="quoteId">
+                        [quoteId]="quoteId"
+                        [remainingQuota]="remainingProductsQuota">
                     </app-commit-configuration>
 
                     <app-subscription-configuration *ngIf="product.type === 'subscription'"

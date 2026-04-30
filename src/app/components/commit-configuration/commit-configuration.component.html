@@ -148,7 +148,10 @@
 
         <!-- Tab 2: Discounts -->
         <div *ngIf="activeTab === 'discounts'" class="animate-in fade-in duration-500">
-            <app-discounts-incentives [productId]="productId" [quoteId]="quoteId"></app-discounts-incentives>
+            <app-discounts-incentives [productId]="productId" [quoteId]="quoteId"
+                [quoteStartDate]="startDate" [quoteEndDate]="contractEndDate"
+                [remainingQuota]="remainingQuota">
+            </app-discounts-incentives>
         </div>
 
     </div>

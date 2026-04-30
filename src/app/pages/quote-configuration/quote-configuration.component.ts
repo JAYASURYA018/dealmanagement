@@ -66,10 +66,40 @@ export class QuoteConfigurationComponent implements OnInit {
   opportunityName = '';
   quoteNumber = '';
   quoteId = '';
+  opportunityId = '';
   
   products: any[] = [];
   selectedItemId = 'quote_details';
   annualContractValue = 0;
+  isPrimary = false;
+
+  togglePrimary(event: any) {
+    const isChecked = event.target.checked;
+    this.isPrimary = isChecked;
+
+    const opportunityId = this.opportunityId;
+    const quoteId = isChecked ? this.quoteId : null;
+
+    if (!opportunityId || (isChecked && !quoteId)) {
+      this.toastService.show('Opportunity ID or Quote ID missing.', 'error');
+      this.isPrimary = !isChecked;
+      return;
+    }
+
+    this.loadingService.show();
+    this.sfApi.syncQuoteToOpportunity(opportunityId, quoteId).pipe(
+      finalize(() => this.loadingService.hide())
+    ).subscribe({
+      next: (res) => {
+        const action = isChecked ? 'synced to' : 'unsynced from';
+        this.toastService.show(`Quote ${action} Opportunity successfully.`, 'success');
+      },
+      error: (err) => {
+        console.error('Sync Error:', err);
+        this.isPrimary = !isChecked;
+      }
+    });
+  }
 
   get totalContractValue(): number {
     let sum = 0;
@@ -95,6 +125,7 @@ export class QuoteConfigurationComponent implements OnInit {
           // Count current selections (in progress)
           count += (commit.discountsIncentives.persistentSelectedGroups?.size || 0);
           count += (commit.discountsIncentives.persistentSelectedIndividuals?.size || 0);
+          count += (commit.discountsIncentives.persistentIncentiveGroups?.size || 0);
 
           // Count already applied discounts
           commit.discountsIncentives.discountPeriods.forEach((p: any) => {
@@ -287,10 +318,14 @@ export class QuoteConfigurationComponent implements OnInit {
 
   ngOnInit() {
     this.quoteId = this.contextService.currentContext?.quoteId || '';
+    this.opportunityId = this.contextService.currentContext?.opportunityId || '';
 
     this.contextService.context$.subscribe(ctx => {
       if (ctx.quoteId && (!this.quoteId || this.quoteId.startsWith('0Q0'))) {
         this.quoteId = ctx.quoteId;
+      }
+      if (ctx.opportunityId) {
+        this.opportunityId = ctx.opportunityId;
       }
     });
 
@@ -299,6 +334,7 @@ export class QuoteConfigurationComponent implements OnInit {
       this.opportunityName = data.opportunityName || 'Opportunity Name';
       this.quoteNumber = data.quoteNumber || 'Q-DRAFT';
       if (data.quoteId) this.quoteId = data.quoteId;
+      if (data.opportunityId) this.opportunityId = data.opportunityId;
       
       // Map products from QuoteData
       if (data.products && data.products.length > 0) {
