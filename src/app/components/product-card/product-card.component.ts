@@ -2,6 +2,8 @@ import { Component, Input, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Product } from '../../models/mock-data';
 import { CartService } from '../../services/cart.service';
+import { QuoteDataService } from '../../services/quote-data.service';
+import { combineLatest } from 'rxjs';
 import { map } from 'rxjs/operators';
 
 @Component({
@@ -12,16 +14,27 @@ import { map } from 'rxjs/operators';
 })
 export class ProductCardComponent {
     @Input() product!: Product;
+    private quoteDataService = inject(QuoteDataService);
     cartService = inject(CartService);
-    isAdded$ = this.cartService.cartItems$.pipe(
-        map(items => !!items.find(item => item.id === this.product.id))
+
+    isAdded$ = combineLatest([
+        this.cartService.cartItems$,
+        this.quoteDataService.quoteData$
+    ]).pipe(
+        map(([cartItems, quoteData]) => {
+            const inCart = !!cartItems.find(item => item.id === this.product.id);
+            const inQuote = !!quoteData.products?.find(p => p.id === this.product.id);
+            return inCart || inQuote;
+        })
     );
 
-    cartHasOtherItems$ = this.cartService.cartItems$.pipe(
-        map(items => items.length > 0 && !items.find(item => item.id === this.product.id))
-    );
 
     toggleCart() {
+        // Prevent toggling if already in quote
+        const quoteData = this.quoteDataService.getQuoteData();
+        const isInQuote = !!quoteData.products?.find(p => p.id === this.product.id);
+        if (isInQuote) return;
+
         const currentItems = this.cartService.getCartItems();
         const isAlreadyAdded = currentItems.find(item => item.id === this.product.id);
 

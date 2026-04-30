@@ -25,22 +25,7 @@
                         title="Remove Period">
                         <span class="material-icons-outlined text-[18px]">delete</span>
                     </button>
-                    <!-- Product Quota Badge -->
-                    <div *ngIf="i === 0"
-                        class="flex items-center gap-2 bg-white border border-gray-200 rounded-full px-3 py-1 shadow-sm">
-                        <span class="material-icons-outlined text-[14px] text-blue-500">inventory_2</span>
-                        <span class="text-[11px] font-semibold text-gray-600">
-                            <span class="text-blue-600 font-bold">{{ remainingProductsQuota | number }}</span>
-                            / {{ totalCatalogProducts | number }} Products Remaining
-                        </span>
-                        <!-- Progress bar -->
-                        <div class="w-20 h-1.5 bg-gray-200 rounded-full overflow-hidden ml-1">
-                            <div class="h-full rounded-full transition-all duration-500"
-                                [style.width.%]="(usedQuotaCount / totalCatalogProducts) * 100"
-                                [ngClass]="remainingProductsQuota === 0 ? 'bg-red-500' : (usedQuotaCount / totalCatalogProducts > 0.75 ? 'bg-orange-400' : 'bg-blue-500')">
-                            </div>
-                        </div>
-                    </div>
+
                 </div>
             </div>
 
@@ -779,20 +764,19 @@
         <!-- Footer -->
         <div class="px-6 py-2.5 border-t border-gray-200 bg-white flex justify-between items-center gap-3 rounded-b-xl">
 
-            <!-- Left: Quota Counter -->
+            <!-- Left: Quota Bar -->
             <div class="flex items-center gap-3">
-                <div class="flex flex-col gap-1">
-                    <span class="text-[11px] text-gray-500">
-                        <span class="font-bold"
-                            [ngClass]="liveQuotaRemaining === 0 ? 'text-red-500' : ((totalCatalogProducts - liveQuotaRemaining) / totalCatalogProducts > 0.75 ? 'text-orange-500' : 'text-blue-600')">
-                            {{ liveQuotaRemaining | number }}
-                        </span>
-                        of {{ totalCatalogProducts | number }} Products Remaining
+                <div class="flex items-center gap-2 bg-white border border-gray-200 rounded-full px-3 py-1 shadow-sm h-8">
+                    <span class="material-icons-outlined text-[14px] text-blue-500">inventory_2</span>
+                    <span class="text-[11px] font-semibold text-gray-600">
+                        <span class="text-blue-600 font-bold">{{ remainingQuota | number }}</span>
+                        / {{ totalCatalogProducts | number }} Products Remaining
                     </span>
-                    <div class="w-48 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                    <!-- Progress bar -->
+                    <div class="w-20 h-1.5 bg-gray-200 rounded-full overflow-hidden ml-1">
                         <div class="h-full rounded-full transition-all duration-500"
-                            [style.width.%]="((totalCatalogProducts - liveQuotaRemaining) / totalCatalogProducts) * 100"
-                            [ngClass]="liveQuotaRemaining === 0 ? 'bg-red-500' : ((totalCatalogProducts - liveQuotaRemaining) / totalCatalogProducts > 0.75 ? 'bg-orange-400' : 'bg-blue-500')">
+                            [style.width.%]="(usedQuotaCount / totalCatalogProducts) * 100"
+                            [ngClass]="remainingQuota <= 0 ? 'bg-red-500' : (usedQuotaCount / totalCatalogProducts > 0.75 ? 'bg-orange-400' : 'bg-blue-500')">
                         </div>
                     </div>
                 </div>
@@ -847,5 +831,5 @@
 <!-- Upload Products Modal at root level to avoid clipping -->
 <app-upload-products-modal [isOpen]="showUploadModal" [selectedPeriodName]="activeDiscountPeriod?.name || ''"
     [selectedStartDate]="activeDiscountPeriod?.startDate || ''" [selectedEndDate]="activeDiscountPeriod?.endDate || ''"
-    [remainingQuota]="remainingProductsQuota" (close)="closeUploadModal()" (finish)="handleBulkUpload($event)">
+    [remainingQuota]="remainingQuota" (close)="closeUploadModal()" (finish)="handleBulkUpload($event)">
 </app-upload-products-modal>

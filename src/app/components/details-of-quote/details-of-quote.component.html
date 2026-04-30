@@ -1,0 +1,158 @@
+<div class="p-8 animate-in fade-in slide-in-from-right duration-700">
+    
+    <!-- 1. Header Information -->
+    <div class="flex items-center gap-4 mb-8">
+        
+        <div>
+            <h2 class="text-xl font-bold text-slate-800 tracking-tight">Quote Details</h2>
+        </div>
+    </div>
+
+    <!-- 2. Form Section -->
+    <div class="col-span-12 lg:col-span-9 mb-8">
+
+        <!-- Form Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <!-- Primary Contact -->
+            <div (click)="togglePrimaryContact(); $event.stopPropagation()"
+                class="bg-slate-50 p-3 rounded-xl border border-transparent hover:border-blue-100 transition-all cursor-pointer relative group h-[60px] flex items-center shadow-sm">
+                <div class="w-8 h-8 rounded-full bg-white flex-shrink-0 mr-3 shadow-sm flex items-center justify-center">
+                    <span class="material-icons text-gray-400 text-lg">person</span>
+                </div>
+                <div class="flex-1 flex flex-col justify-center">
+                    <label class="block text-[10px] text-gray-500 mb-0.5 uppercase tracking-wide font-medium">Primary contact</label>
+                    <div class="text-sm font-bold text-slate-700 leading-tight truncate">{{ primaryContactName || 'Select' }}</div>
+                </div>
+                <span class="material-icons text-slate-300 text-base">expand_more</span>
+
+                <!-- Dropdown -->
+                <div *ngIf="primaryContactOpen" (click)="$event.stopPropagation()"
+                    class="absolute left-0 top-[65px] w-full bg-white rounded-xl shadow-xl border border-gray-100 z-[100] py-2 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                    <button *ngFor="let contact of primaryContactOptions"
+                        (click)="selectContact(contact)"
+                        class="w-full text-left px-4 py-2.5 text-sm text-slate-600 hover:bg-blue-50 hover:text-blue-700 transition-colors">
+                        {{ contact }}
+                    </button>
+                </div>
+            </div>
+
+            <!-- Sales Channel -->
+            <div (click)="toggleSalesChannel(); $event.stopPropagation()"
+                class="bg-slate-50 p-3 rounded-xl border border-transparent hover:border-blue-100 transition-all cursor-pointer relative group h-[60px] flex flex-col justify-center shadow-sm">
+                <label class="block text-[10px] text-gray-500 mb-0.5 uppercase tracking-wide font-medium">Sales Channel</label>
+                <div class="flex justify-between items-center">
+                    <div class="text-sm font-bold text-slate-700">{{ salesChannel || 'Select' }}</div>
+                    <span class="material-icons text-slate-300 text-sm">expand_more</span>
+                </div>
+
+                <!-- Dropdown -->
+                <div *ngIf="salesChannelOpen" (click)="$event.stopPropagation()"
+                    class="absolute left-0 top-[65px] w-full bg-white rounded-xl shadow-xl border border-gray-100 z-[100] py-2 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                    <button *ngFor="let channel of salesChannelOptions"
+                        (click)="selectChannel(channel)"
+                        class="w-full text-left px-4 py-2.5 text-sm text-slate-600 hover:bg-blue-50 hover:text-blue-700 transition-colors">
+                        {{ channel }}
+                    </button>
+                </div>
+            </div>
+
+            <!-- Operation Type -->
+            <div (click)="toggleOperationType(); $event.stopPropagation()"
+                class="bg-slate-50 p-3 rounded-xl border border-transparent hover:border-blue-100 transition-all cursor-pointer relative group h-[60px] flex flex-col justify-center shadow-sm">
+                <label class="block text-[10px] text-gray-500 mb-0.5 uppercase tracking-wide font-medium">Operation Type</label>
+                <div class="flex justify-between items-center">
+                    <div class="text-sm font-bold text-slate-700">{{ operationType || 'Select' }}</div>
+                    <span class="material-icons text-slate-300 text-sm">expand_more</span>
+                </div>
+
+                <!-- Dropdown -->
+                <div *ngIf="operationTypeOpen" (click)="$event.stopPropagation()"
+                    class="absolute left-0 top-[65px] w-full bg-white rounded-xl shadow-xl border border-gray-100 z-[100] py-2 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                    <button *ngFor="let type of operationTypeOptions"
+                        (click)="selectOperationType(type)"
+                        class="w-full text-left px-4 py-2.5 text-sm text-slate-600 hover:bg-blue-50 hover:text-blue-700 transition-colors">
+                        {{ type }}
+                    </button>
+                </div>
+            </div>
+
+            <!-- Expiration Date -->
+            <div class="bg-slate-50 p-3 rounded-xl border border-transparent transition-all relative group h-[60px] flex flex-col justify-center shadow-sm">
+                <label class="block text-[10px] text-gray-500 mb-0.5 uppercase tracking-wide font-medium">Quote Expiration Date</label>
+                <div class="flex justify-between items-center w-full relative">
+                    <input type="date" [(ngModel)]="expirationDate" [min]="minDate"
+                        class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                        placeholder="Select">
+                    <div class="text-sm font-bold text-slate-700 leading-tight">
+                        {{ formatDate(expirationDate) || 'Select' }}
+                    </div>
+                    <span class="material-icons text-slate-300 text-base ml-auto pointer-events-none">calendar_today</span>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- 3. Contracting Profile Section -->
+    <div class="mt-8">
+        <div class="flex items-center gap-3 mb-6 rounded-sm">
+            <h3 class="text-xl font-bold text-slate-800 tracking-tight">Contracting profile</h3>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 animate-in fade-in zoom-in-95 duration-1000">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-12">
+                
+                <!-- Account Selection/Info -->
+                <div class="flex flex-col">
+                    <h4 class="text-md font-bold text-slate-800 mb-2 tracking-tight">{{ accountName }}</h4>
+                    <div class="flex">
+                        <span class="px-2 py-0.5 bg-green-50 text-green-600 text-[9px] font-bold rounded-md border border-green-100 uppercase tracking-widest">
+                            Verified
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Legal Contact -->
+                <div class="flex flex-col gap-3">
+                    <label class="text-[10px] text-slate-400 uppercase font-black tracking-widest leading-none">Legal Contact</label>
+                    <div class="text-[12px] font-bold text-slate-700 leading-tight">
+                        Mr.Bunny <br/>
+                        <span class="text-slate-400 font-medium">fake-payments-uat-account&#64;google.com</span>
+                    </div>
+                </div>
+
+                <!-- Legal Address -->
+                <div class="flex flex-col gap-3">
+                    <label class="text-[10px] text-slate-400 uppercase font-black tracking-widest leading-none">Legal Address</label>
+                    <div class="text-[12px] font-bold text-slate-700 leading-relaxed max-w-[150px]">
+                        100 Canal Pointe Blvd Princeton NJ 08540 US
+                    </div>
+                </div>
+
+                <!-- Active Entitlements -->
+                <div class="flex flex-col gap-3">
+                    <label class="text-[10px] text-slate-400 uppercase font-black tracking-widest leading-none">Active Entitlements</label>
+                    <div class="space-y-2">
+                        <div class="h-2.5 w-full bg-slate-50 rounded-full"></div>
+                        <div class="h-2.5 w-2/3 bg-slate-50 rounded-full"></div>
+                    </div>
+                </div>
+
+                <!-- Billing & Shipping Profiles -->
+                <div class="flex flex-col gap-3">
+                    <div class="flex flex-col gap-1">
+                        <label class="text-[10px] text-slate-400 uppercase font-black tracking-widest leading-none">Billing & Shipping</label>
+                        <label class="text-[10px] text-slate-400 uppercase font-black tracking-widest leading-none">Profiles</label>
+                    </div>
+                    <div class="flex flex-col gap-2">
+                        <span class="text-[13px] font-bold text-blue-600 underline cursor-pointer">16 Accounts</span>
+                        <div class="p-2 bg-slate-50 border border-slate-100 rounded-lg">
+                            <p class="text-[10px] text-slate-600 font-bold leading-snug">Spend-based CUD migration required (GCP Commit Only)</p>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>

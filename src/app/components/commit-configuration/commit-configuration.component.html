@@ -1,0 +1,158 @@
+<div class="flex flex-col h-full bg-[#eff2f9]">
+    <!-- Tab Navigation -->
+    <div class="px-8 pt-6 border-b border-gray-200 flex-shrink-0 bg-white">
+        <div class="flex gap-8">
+            <button (click)="switchTab('details')"
+                    [ngClass]="activeTab === 'details' ? 'text-blue-600 border-b-2 border-blue-600 font-bold' : 'text-slate-400 font-medium hover:text-slate-600'"
+                    class="pb-4 text-sm transition-all focus:outline-none">
+                Details
+            </button>
+            <button (click)="switchTab('discounts')"
+                    [ngClass]="activeTab === 'discounts' ? 'text-blue-600 border-b-2 border-blue-600 font-bold' : 'text-slate-400 font-medium hover:text-slate-600'"
+                    class="pb-4 text-sm transition-all focus:outline-none">
+                Discounts & Incentives
+            </button>
+        </div>
+    </div>
+
+    <!-- Scrollable Content Area -->
+    <div class="flex-1 overflow-y-auto custom-scrollbar bg-white p-8">
+        
+        <!-- Tab 1: Details -->
+        <div *ngIf="activeTab === 'details'" class="animate-in fade-in duration-500">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                
+                <!-- Main Content: Forms & Periods (Span 12) -->
+                <div class="col-span-12 space-y-8 bg-white">
+
+                    <!-- Commitment Periods Section -->
+                    <div>
+                        <div class="flex justify-between items-center mb-6">
+                            <h4 class="text-gray-800 text-lg font-medium">Total Commitment Period</h4>
+                            <div class="flex items-center space-x-4">
+                                <button (click)="removePeriod()" [disabled]="commitmentPeriods.length <= 1"
+                                    [class.opacity-50]="commitmentPeriods.length <= 1"
+                                    class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center hover:bg-blue-200 transition-colors">
+                                    <span class="material-icons-outlined text-base">remove</span>
+                                </button>
+                                <span class="text-lg font-medium text-gray-900 w-4 text-center">{{ commitmentPeriods.length }}</span>
+                                <button (click)="addPeriod()" [disabled]="commitmentPeriods.length >= 5"
+                                    [class.opacity-50]="commitmentPeriods.length >= 5"
+                                    class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center hover:bg-blue-200 transition-colors">
+                                    <span class="material-icons-outlined text-base">add</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Dynamic Cards Loop -->
+                        <div class="space-y-4">
+                            <div *ngFor="let period of commitmentPeriods; let i = index">
+                                <!-- VIEW MODE (Collapsed) -->
+                                <div *ngIf="period.isCollapsed" (click)="toggleEdit(i)"
+                                    class="bg-slate-50 border border-transparent hover:border-gray-200 rounded-xl p-4 flex justify-between items-center cursor-pointer transition-colors mb-2">
+                                    <h5 class="text-sm font-bold text-gray-800 flex items-center">
+                                        Commit Period {{ i + 1 }}
+                                        <span *ngIf="period.isDuplicated" class="ml-2 bg-gray-200 text-gray-600 text-[10px] px-2 py-0.5 rounded-full font-bold">Duplicated</span>
+                                    </h5>
+                                    <div class="flex items-center space-x-3">
+                                        <span class="bg-sky-200 text-sky-900 w-24 px-3 py-1.5 rounded-md text-xs font-bold text-center inline-block">
+                                            {{ period.months || 0 }} Months</span>
+                                        <span class="bg-sky-200 text-sky-900 min-w-[140px] px-3 py-1.5 rounded-md text-xs font-bold text-center inline-block">
+                                            {{ formatCurrency(period.amount) }}</span>
+                                        
+                                        <!-- Configuration Menu -->
+                                        <div class="relative">
+                                            <button (click)="toggleMenu(i, $event)"
+                                                class="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-200 transition-colors">
+                                                <span class="material-icons-outlined text-base">more_vert</span>
+                                            </button>
+                                            <div *ngIf="activeMenuIndex === i" (click)="$event.stopPropagation()"
+                                                class="absolute right-0 top-8 w-40 bg-white rounded-lg shadow-xl border border-gray-100 z-50 py-2">
+                                                <button (click)="duplicatePeriod(i)" class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-2 transition-colors">
+                                                    <span class="material-icons-outlined text-gray-400 text-[18px]">content_copy</span>
+                                                    <span>Duplicate</span>
+                                                </button>
+                                                <button (click)="deletePeriod(i)" class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-2 transition-colors">
+                                                    <span class="material-icons-outlined text-gray-400 text-[18px]">delete</span>
+                                                    <span>Delete</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- EDIT MODE (Expanded) -->
+                                <div *ngIf="!period.isCollapsed" (focusout)="checkCollapse(i, $event)"
+                                    class="bg-gray-50 border border-gray-200 rounded-xl p-6" tabindex="-1">
+                                    <div class="flex justify-between items-center mb-4">
+                                        <h5 class="text-sm font-bold text-gray-800">Commit Period {{ i + 1 }}</h5>
+                                        <div class="relative">
+                                            <button (click)="toggleMenu(i, $event)"
+                                                class="text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 p-1 transition-colors">
+                                                <span class="material-icons-outlined text-base">more_vert</span>
+                                            </button>
+                                            <div *ngIf="activeMenuIndex === i" (click)="$event.stopPropagation()"
+                                                class="absolute right-0 top-8 w-40 bg-white rounded-lg shadow-xl border border-gray-100 z-50 py-2">
+                                                <button (click)="duplicatePeriod(i)" class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-2 transition-colors">
+                                                    <span class="material-icons-outlined text-gray-400 text-[18px]">content_copy</span>
+                                                    <span>Duplicate</span>
+                                                </button>
+                                                <button (click)="deletePeriod(i)" class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-2 transition-colors">
+                                                    <span class="material-icons-outlined text-gray-400 text-[18px]">delete</span>
+                                                    <span>Delete</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="grid grid-cols-2 gap-4">
+                                        <div class="bg-gray-100 p-2 rounded-lg border-b-2 border-transparent hover:bg-gray-200 transition-colors relative group h-[52px] flex flex-col justify-center focus-within:ring-1 focus-within:ring-blue-500">
+                                            <label class="block text-[11px] text-gray-600 mb-0.5">Period (Months)</label>
+                                            <input #monthsInput type="text" placeholder="Enter"
+                                                (keydown)="restrictNumeric($event)"
+                                                [value]="period.months ? period.months + ' months' : ''"
+                                                (focus)="onMonthFocus(i, monthsInput)"
+                                                (blur)="onMonthBlur(i, monthsInput)"
+                                                (input)="onMonthInput(i, monthsInput.value)"
+                                                (keydown.enter)="handleInputEnter(i, 'months', $event, monthsInput, amountInput)"
+                                                class="w-full bg-transparent text-sm text-gray-800 outline-none font-medium -mt-0.5 placeholder-gray-400">
+                                        </div>
+                                        <div class="bg-gray-100 p-2 rounded-lg border-b-2 border-transparent hover:bg-gray-200 transition-colors relative group h-[52px] flex flex-col justify-center focus-within:ring-1 focus-within:ring-blue-500">
+                                            <label class="block text-[11px] text-gray-600 mb-0.5">Amount</label>
+                                            <input #amountInput type="text" placeholder="Enter"
+                                                (keydown)="restrictNumeric($event)"
+                                                [value]="period.amount ? formatCurrency(period.amount).replace('$', '') : ''"
+                                                (blur)="onAmountBlur(i, amountInput.value)"
+                                                (keydown.enter)="handleInputEnter(i, 'amount', $event, monthsInput, amountInput)"
+                                                class="w-full bg-transparent text-sm text-gray-800 outline-none font-medium -mt-0.5 placeholder-gray-400">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Add Button -->
+                        <div class="mt-4">
+                            <button (click)="addPeriod()" [disabled]="commitmentPeriods.length >= 5"
+                                [class.opacity-50]="commitmentPeriods.length >= 5"
+                                class="flex items-center text-blue-600 hover:text-blue-700 font-semibold text-sm transition-colors">
+                                <span class="material-icons-outlined mr-2">add</span>
+                                Add Commit Period
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Tab 2: Discounts -->
+        <div *ngIf="activeTab === 'discounts'" class="animate-in fade-in duration-500">
+            <app-discounts-incentives [productId]="productId" [quoteId]="quoteId"
+                [quoteStartDate]="startDate" [quoteEndDate]="contractEndDate"
+                [remainingQuota]="remainingQuota">
+            </app-discounts-incentives>
+        </div>
+
+    </div>
+</div>

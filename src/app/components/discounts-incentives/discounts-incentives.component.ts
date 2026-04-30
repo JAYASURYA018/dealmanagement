@@ -8,6 +8,7 @@ import { ContextService } from '../../services/context.service';
 import { ToastService } from '../../services/toast.service';
 import { LoadingService } from '../../services/loading.service';
 import { DiscountIncentiveStateService } from '../../services/discount-incentive-state.service';
+import { QuoteDataService } from '../../services/quote-data.service';
 import { finalize, forkJoin, map, catchError, of, switchMap, lastValueFrom, Subject, Observable } from 'rxjs';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { FormsModule } from '@angular/forms';
@@ -26,6 +27,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
     @Input() quoteStartDate: string | null = null;
     @Input() quoteEndDate: string | null = null;
     @Input() isLookerSubscription: boolean = false;
+    @Input() quoteId: string | null = null;
     @Input() set existingLineItems(items: any[]) {
         if (items && items.length > 0) {
             this.loadFromExisting(items);
@@ -153,21 +155,24 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
     }
 
     // Product Quota Tracking
-    // Fixed business limit: max 976 products can receive discounts/incentives per quote
-    totalCatalogProducts: number = 999;
-    // Running total of product line items committed in all applied discounts/incentives
-    usedQuotaCount: number = 0;
+    @Input() remainingQuota: number = 1000;
+    totalCatalogProducts: number = 1000;
 
-    get remainingProductsQuota(): number {
-        return Math.max(0, this.totalCatalogProducts - this.usedQuotaCount);
+    get usedQuotaCount(): number {
+        return Math.max(0, this.totalCatalogProducts - this.remainingQuota);
     }
 
-    // Live remaining = quota minus already-committed minus currently-selected-in-modal
+    get activeQuoteId(): string | undefined {
+        return this.quoteId || this.contextService.currentContext?.quoteId || this.quoteDataService.getQuoteData()?.quoteId || undefined;
+    }
+
+    get activePricebookId(): string {
+        return this.contextService.currentContext?.pricebookId || this.quoteDataService.getQuoteData()?.pricebook2Id || '01sf4000003ZgtzAAC';
+    }
+
+    // Live remaining = global quota (which already factors in current selections via the parent component)
     get liveQuotaRemaining(): number {
-        const currentSelection = this.selectorCalledFrom === 'incentives'
-            ? this.persistentIncentiveGroups.size
-            : this.persistentSelectedGroups.size + this.persistentSelectedIndividuals.size;
-        return Math.max(0, this.totalCatalogProducts - this.usedQuotaCount - currentSelection);
+        return this.remainingQuota;
     }
 
     // Dropdown Options
@@ -277,6 +282,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         private loadingService: LoadingService,
         private quoteRefreshService: QuoteRefreshService,
         private discountIncentiveStateService: DiscountIncentiveStateService,
+        private quoteDataService: QuoteDataService,
         private el: ElementRef,
         private router: Router
     ) {
@@ -335,7 +341,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         }
 
         // Load persisted state for tab switches
-        const quoteId = this.contextService.currentContext?.quoteId;
+        const quoteId = this.activeQuoteId;
         const state = this.discountIncentiveStateService.loadState(quoteId);
 
         // Only restore if state has meaningful data (not just defaults)
@@ -384,7 +390,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
     }
 
     private saveCurrentState() {
-        const quoteId = this.contextService.currentContext?.quoteId;
+        const quoteId = this.activeQuoteId;
         this.discountIncentiveStateService.saveState({
             discountForm: this.discountForm,
             incentiveForm: this.incentiveForm,
@@ -596,6 +602,16 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
     setActiveTab(tab: 'discounts' | 'incentives') {
         this.activeTab = tab;
         this.periodDropdownOpen = false;
+        this.viewMode = 'all'; // Reset view mode when switching tabs
+        
+        // Reset selections and forms when switching tabs to satisfy "fresh tab" requirement
+        this.resetSelections();
+        this.persistentIncentiveGroups.clear();
+        this.incentiveForm.amount = '';
+        this.incentiveForm.type = 'Select';
+        this.discountForm.granularity = 'Select';
+        this.discountForm.priceReference = 'Select';
+
         this.saveCurrentState(); // Auto-save on tab change
     }
 
@@ -694,6 +710,8 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         this.snapshotIncentiveGroups = new Map(this.persistentIncentiveGroups);
 
         this.showProductSelector = true;
+        // Always reset view mode to 'all' for a fresh start as requested
+        this.viewMode = 'all'; 
         // Always start on Product Groups tab
         this.productTab = 'groups';
         // Redundant call removed - picklists only needed for individual tab if subscription
@@ -872,7 +890,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         const body: any = {
             "limit": this.individualPageSize,
             "productClassificationId": targetClassId,
-            "priceBookId": this.contextService.currentContext?.pricebookId || '01sf4000003ZgtzAAC',
+            "priceBookId": this.activePricebookId,
             "additionalFields": {
                 "Product2": {
                     "fields": ["RCA_Sort_order__c"]
@@ -1634,6 +1652,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         }
 
         this.showProductSelector = false;
+        this.viewMode = 'all'; // Always reset view mode back to "Show All" on close
         // Reset search/filters when closing
         this.productSearchTerm = '';
         this.bundleSearchTerm = '';
@@ -1659,10 +1678,10 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
     }
 
     toggleItem(item: any) {
-        // Validation: Limit to 999 products
+        // Validation: Limit products
         if (!item.selected) {
             if (this.liveQuotaRemaining <= 0) {
-                this.toastService.show('Maximum limit of 999 products reached.', 'warning');
+                this.toastService.show(`Maximum product limit reached. Check the remaining quota in the header.`, 'warning');
                 return;
             }
         }
@@ -1813,15 +1832,21 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
             map = this.productTab === 'groups' ? this.persistentSelectedGroups : this.persistentSelectedIndividuals;
         }
 
+        // remainingQuota is the number of items we can still select RIGHT NOW
+        let availableQuota = this.remainingQuota;
+
         this.filteredItems.forEach(item => {
             const becomingSelected = !allSelected;
 
             // Check limit when selecting
             if (becomingSelected && !item.selected) {
-                if (this.liveQuotaRemaining <= 0) {
+                if (availableQuota <= 0) {
                     blockedByLimit = true;
                     return; // Skip this one
                 }
+                availableQuota--;
+            } else if (!becomingSelected && item.selected) {
+                availableQuota++;
             }
 
             item.selected = becomingSelected;
@@ -1833,7 +1858,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         });
 
         if (blockedByLimit) {
-            this.toastService.show('Selection partially blocked: Maximum limit of 999 products reached.', 'warning');
+            this.toastService.show(`Selection partially blocked: Maximum product limit reached. Check the remaining quota in the header.`, 'warning');
         }
     }
 
@@ -1968,7 +1993,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
     handleBulkUpload(csvData: any[]) {
         if (!csvData || csvData.length === 0) return;
 
-        const quoteId = this.contextService.currentContext?.quoteId;
+        const quoteId = this.activeQuoteId;
         if (!quoteId) {
             this.toastService.show('No active quote found for upload', 'error');
             return;
@@ -1993,7 +2018,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
     }
 
     private processBulkDiscount(selectedItems: any[], startTime: number) {
-        const quoteId = this.contextService.currentContext?.quoteId;
+        const quoteId = this.activeQuoteId;
         const DEFAULT_PBE_ID = '01uDz00000dqLY8IAM';
 
         if (!quoteId) {
@@ -2074,7 +2099,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
                 this.saveCurrentState(); // Persist bulk IDs
                 this.dataFetched = false;
                 this.showProductSelector = false;
-                this.router.navigate(['/configure-quote']);
+                this.router.navigate(['/quote-configuration']);
                 console.log('✅ Bulk Upload complete. Redirecting to Configure Quote.');
             },
             error: (err) => {
@@ -2085,7 +2110,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
     }
 
     handleGranularDiscount(selectedItems: any[]) {
-        const quoteId = this.contextService.currentContext?.quoteId;
+        const quoteId = this.activeQuoteId;
         const DEFAULT_PBE_ID = '01uDz00000dqLY8IAM';
 
         if (!quoteId) {
@@ -2200,7 +2225,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
                     this.quoteRefreshService.setRefreshNeeded(true);
 
                     this.showProductSelector = false;
-                    this.router.navigate(['/configure-quote']);
+                    this.router.navigate(['/quote-configuration']);
                 },
                 error: (err: any) => {
                     console.error('Failed to update quote', err);
@@ -2209,8 +2234,6 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
     }
 
     private addDiscountToUI(granularity: string, groupCount: number, individualCount: number, value: string, committedProductCount: number = 0, responseTimeSecs?: string) {
-        // Update the running quota
-        this.usedQuotaCount += committedProductCount;
 
         let title = `${granularity} Discount - Flat Rate (%)`;
         let subtext = `${groupCount} Product Groups, ${individualCount} Products ${responseTimeSecs ? '(' + responseTimeSecs + 's)' : ''}`;
@@ -2227,6 +2250,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
             value: value,
             type: 'discount',
             granularity: granularity,
+            itemCount: committedProductCount,
             responseTime: responseTimeSecs
         };
         if (!this.activeDiscountPeriod) return;
@@ -2257,7 +2281,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
             return;
         }
 
-        const quoteId = this.contextService.currentContext?.quoteId;
+        const quoteId = this.activeQuoteId;
         if (!quoteId) {
             this.toastService.show('No active quote found in context', 'error');
             return;
@@ -2267,7 +2291,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         this.loadingService.show();
         const startTime = performance.now();
 
-        const contextPricebookId = this.contextService.currentContext?.pricebookId || '01sf4000003ZgtzAAC';
+        const contextPricebookId = this.activePricebookId;
         const resolvedItems: any[] = [];
         for (const group of selectedGroups) {
             // Find match in dropdownOptions for the group (Call 2 results)
@@ -2346,7 +2370,6 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
                 const responseTimeSecs = ((endTime - startTime) / 1000).toFixed(2);
                 this.toastService.show(`Incentive added successfully (${responseTimeSecs}s)`, 'success');
                 const groupCount = selectedGroups.length;
-                this.usedQuotaCount += groupCount;
                 const displayValue = `${groupCount} group${groupCount !== 1 ? 's' : ''} with custom amounts`;
                 this.activeIncentivePeriod.activeIncentives.push({
                     id: 'i' + Date.now(),
@@ -2354,6 +2377,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
                     subtext: `${groupCount} Product Group${groupCount !== 1 ? 's' : ''} (${responseTimeSecs}s)`,
                     value: displayValue,
                     type: 'incentive',
+                    itemCount: groupCount,
                     responseTime: responseTimeSecs
                 });
                 this.incentiveForm.amount = '';
@@ -2399,6 +2423,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         this.productGroups.forEach(g => {
             g.selected = false;
             g.discount = 0;
+            g.incentiveAmount = 0;
         });
         this.individualProducts.forEach(p => {
             p.selected = false;
@@ -2406,7 +2431,11 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         });
         this.persistentSelectedGroups.clear();
         this.persistentSelectedIndividuals.clear();
+        this.persistentIncentiveGroups.clear();
         this.discountForm.value = '';
+        this.discountForm.granularity = 'Select';
+        this.discountForm.priceReference = 'Select';
+        this.incentiveForm.type = 'Select';
     }
     restrictNumeric(event: KeyboardEvent) {
         const allowedKeys = ['Backspace', 'Tab', 'Enter', 'ArrowLeft', 'ArrowRight', 'Delete', 'End', 'Home'];
