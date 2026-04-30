@@ -140,7 +140,7 @@
                 <div
                     class="bg-white p-2 px-3 rounded-lg border border-gray-300 hover:border-gray-400 transition-colors flex flex-col justify-center h-[56px] shadow-sm">
                     <label class="block text-[11px] text-gray-500 font-medium leading-none mb-1">Discount (%)</label>
-                    <input type="number" [(ngModel)]="period.discount" placeholder="Enter"
+                    <input type="number" [(ngModel)]="period.discount" (ngModelChange)="productChanged.emit()" placeholder="Enter"
                         (keydown)="restrictNumeric($event)" (input)="validateDiscount($event)" min="0"
                         (focus)="$any($event.target).select()" (blur)="onBlurDiscount()"
                         class="w-full bg-transparent text-sm font-semibold text-gray-800 outline-none">
@@ -199,7 +199,7 @@
                 <div
                     class="bg-white p-2 px-3 rounded-md border border-gray-300 hover:border-gray-400 transition-colors flex flex-col justify-center h-[56px] shadow-sm">
                     <label class="block text-[11px] text-gray-500 font-medium leading-none mb-1">GCP Project ID</label>
-                    <input type="text" [(ngModel)]="row.gcpProjectId" placeholder="Enter"
+                    <input type="text" [(ngModel)]="row.gcpProjectId" (ngModelChange)="productChanged.emit()" placeholder="Enter"
                         class="w-full bg-transparent text-sm font-semibold text-gray-800 outline-none">
                 </div>
 
@@ -208,7 +208,7 @@
                     class="bg-white p-2 px-3 rounded-md border border-gray-300 hover:border-gray-400 transition-colors flex flex-col justify-center h-[56px] shadow-sm">
                     <label class="block text-[11px] text-gray-500 font-medium leading-none mb-1">Looker Instance
                         ID</label>
-                    <input type="text" [(ngModel)]="row.lookerInstanceId" placeholder="Enter"
+                    <input type="text" [(ngModel)]="row.lookerInstanceId" (ngModelChange)="productChanged.emit()" placeholder="Enter"
                         class="w-full bg-transparent text-sm font-semibold text-gray-800 outline-none">
                 </div>
 
@@ -216,7 +216,7 @@
                 <div
                     class="bg-white p-2 px-3 rounded-md border border-gray-300 hover:border-gray-400 transition-colors flex flex-col justify-center h-[56px] shadow-sm">
                     <label class="block text-[11px] text-gray-500 font-medium leading-none mb-1">Discount (%)</label>
-                    <input type="number" [(ngModel)]="row.discount" placeholder="Enter"
+                    <input type="number" [(ngModel)]="row.discount" (ngModelChange)="productChanged.emit()" placeholder="Enter"
                         (keydown)="restrictNumeric($event)" (input)="validateRowDiscount($event, row)" min="0"
                         (focus)="$any($event.target).select()" (blur)="onBlurRowDiscount(row)"
                         class="w-full bg-transparent text-sm font-semibold text-gray-800 outline-none">

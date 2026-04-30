@@ -303,6 +303,7 @@ export class SubscriptionPeriodItemComponent implements OnInit {
     selectRegion(index: number, region: string) {
         this.period.userRows[index].region = region;
         this.activeRegionIndex = null;
+        this.productChanged.emit();
     }
 
     formatDate(dateStr: string): string {
