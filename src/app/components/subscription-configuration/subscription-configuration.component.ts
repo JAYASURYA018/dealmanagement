@@ -291,6 +291,7 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
     if (this.isLookerSubscription && !this.lookerDataInitialized) {
       this.lookerDataInitialized = true;
       this.loadAllPicklists();
+      this.loadBundleDetails();
     }
   }
 
@@ -302,6 +303,7 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
       }
     }
     this.activeTab = tab;
+    this.saveStateToSession();
   }
 
   loadBundleDetails() {
@@ -606,6 +608,8 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
 
     this.lastValidTermStart = this.termStartInput;
     this.lastValidTermEnd = this.termEndDate;
+
+    this.saveStateToSession();
   }
 
   isTermStartDateDisabled(): boolean {
@@ -1087,9 +1091,9 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
     const data = picklists.Billing_Frequency__c;
     if (data?.values) {
       this.billingFrequencyOptions = data.values.map((v: any) => v.label);
-      if (data.defaultValue?.label) {
+      if (!this.billingFrequency && data.defaultValue?.label) {
         this.billingFrequency = data.defaultValue.label;
-      } else if (this.billingFrequencyOptions.length > 0) {
+      } else if (!this.billingFrequency && this.billingFrequencyOptions.length > 0) {
         this.billingFrequency = this.billingFrequencyOptions[0];
       }
     }
@@ -1099,9 +1103,9 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
     const data = picklists.Term_Starts_On__c;
     if (data?.values) {
       this.termStartsOnOptions = data.values.map((v: any) => v.label);
-      if (data.defaultValue?.label) {
+      if (!this.termStartsOn && data.defaultValue?.label) {
         this.termStartsOn = data.defaultValue.label;
-      } else if (this.termStartsOnOptions.length > 0) {
+      } else if (!this.termStartsOn && this.termStartsOnOptions.length > 0) {
         this.termStartsOn = this.termStartsOnOptions[0];
       }
     }
@@ -1158,7 +1162,10 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
         billingFrequency: this.billingFrequency,
         termStartsOn: this.termStartsOn,
         termStartInput: this.termStartInput,
-        termEndDate: this.termEndDate
+        termEndDate: this.termEndDate,
+        activeTab: this.activeTab,
+        subscriptionPeriods: this.subscriptionPeriods,
+        currentFrequency: this.currentFrequency
       };
       sessionStorage.setItem(this.sessionKey, JSON.stringify(state));
     } catch (e) {
@@ -1177,6 +1184,9 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
         if (state.termStartsOn) this.termStartsOn = state.termStartsOn;
         if (state.termStartInput) this.termStartInput = state.termStartInput;
         if (state.termEndDate) this.termEndDate = state.termEndDate;
+        if (state.activeTab) this.activeTab = state.activeTab;
+        if (state.subscriptionPeriods) this.subscriptionPeriods = state.subscriptionPeriods;
+        if (state.currentFrequency) this.currentFrequency = state.currentFrequency;
       }
     } catch (e) {
       console.warn('Could not load from session', e);
