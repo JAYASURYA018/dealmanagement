@@ -298,7 +298,50 @@ export class QuoteConfigurationComponent implements OnInit {
   }
 
   onSave() {
-    this.saveCurrentTab();
+    const saveQueue: ((next: () => void) => void)[] = [];
+
+    // 1. Details
+    if (this.detailsComp) {
+      saveQueue.push((next) => {
+        console.log('Initiating Quote Details Save');
+        this.detailsComp!.onSave(next);
+      });
+    }
+
+    // 2. Commitments (which includes its own sequential execution of Discounts & Incentives)
+    if (this.commitComps && this.commitComps.length > 0) {
+      this.commitComps.forEach((comp, index) => {
+        saveQueue.push((next) => {
+          console.log(`Initiating Commitment Save ${index + 1}`);
+          comp.onSave(next);
+        });
+      });
+    }
+
+    // 3. Subscriptions (Looker Product)
+    if (this.subComps && this.subComps.length > 0) {
+      this.subComps.forEach((comp, index) => {
+        saveQueue.push((next) => {
+          console.log(`Initiating Subscription Save ${index + 1}`);
+          // Skip the success feedback for intermediate steps to avoid too many toasts
+          comp.onSave(next, true); 
+        });
+      });
+    }
+
+    // Execute queue sequentially
+    const executeNext = (index: number) => {
+      if (index < saveQueue.length) {
+        saveQueue[index](() => executeNext(index + 1));
+      } else {
+        // Done
+        this.toastService.show('All configurations saved successfully!', 'success');
+      }
+    };
+
+    if (saveQueue.length > 0) {
+      executeNext(0);
+    }
   }
 
   private saveCurrentTab(onSuccess?: () => void) {
@@ -311,7 +354,7 @@ export class QuoteConfigurationComponent implements OnInit {
         comp?.onSave(onSuccess);
       } else if (type === 'subscription') {
         const comp = this.subComps?.find(c => c.productId === this.selectedItemId);
-        comp?.onSave(onSuccess);
+        comp?.onSave(onSuccess, false);
       }
     }
   }

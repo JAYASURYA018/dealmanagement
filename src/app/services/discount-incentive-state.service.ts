@@ -56,6 +56,9 @@ export interface DiscountIncentiveState {
   dropdownOptions: any[];
   selectedDropdownOption: any;
   quoteId?: string;
+  
+  // Pending API calls to execute on Save
+  pendingTransactions: any[];
 }
 
 const SESSION_KEY = 'discount_incentive_state';
@@ -112,7 +115,8 @@ export class DiscountIncentiveStateService {
       productGroups: [],
       individualProducts: [],
       dropdownOptions: [],
-      selectedDropdownOption: null
+      selectedDropdownOption: null,
+      pendingTransactions: []
     };
   }
 
@@ -210,5 +214,23 @@ export class DiscountIncentiveStateService {
 
   getCurrentState(): DiscountIncentiveState {
     return this.loadFromSession() || this.loadState();
+  }
+
+  public addPendingTransaction(transactionPayload: any, quoteId?: string) {
+    const currentState = this.getCurrentState();
+    currentState.pendingTransactions = currentState.pendingTransactions || [];
+    currentState.pendingTransactions.push(transactionPayload);
+    this.saveState(currentState, quoteId);
+  }
+
+  public getPendingTransactions(quoteId?: string): any[] {
+    const currentState = this.loadState(quoteId);
+    return currentState.pendingTransactions || [];
+  }
+
+  public clearPendingTransactions(quoteId?: string) {
+    const currentState = this.loadState(quoteId);
+    currentState.pendingTransactions = [];
+    this.saveState(currentState, quoteId);
   }
 }

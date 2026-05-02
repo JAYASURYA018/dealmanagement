@@ -8,8 +8,8 @@ import { ContextService } from '../../services/context.service';
 import { SalesforceApiService } from '../../services/salesforce-api.service';
 import { LoadingService } from '../../services/loading.service';
 import { DiscountIncentiveStateService } from '../../services/discount-incentive-state.service';
-import { Observable, of } from 'rxjs';
-import { switchMap, map } from 'rxjs/operators';
+import { Observable, of, from } from 'rxjs';
+import { switchMap, map, concatMap, toArray } from 'rxjs/operators';
 
 @Component({
   selector: 'app-commit-configuration',
@@ -534,9 +534,23 @@ export class CommitConfigurationComponent implements OnInit {
         } else {
           return of({ success: true, message: 'No commitments to create' });
         }
+      }),
+      switchMap(() => {
+        // Execute pending discounts, incentives, and bulk uploads sequentially
+        const pendingTransactions = this.discountIncentiveStateService.getPendingTransactions(fullQuoteId);
+        if (pendingTransactions.length > 0) {
+          return from(pendingTransactions).pipe(
+            concatMap(payload => this.sfApi.placeSalesTransaction(payload)),
+            toArray()
+          );
+        } else {
+          return of([]);
+        }
       })
     ).subscribe({
       next: (res: any) => {
+        // Clear queue upon success
+        this.discountIncentiveStateService.clearPendingTransactions(fullQuoteId);
         this.loadingService.hide();
         this.toastService.show('Quote Data Saved Successfully!', 'success');
         if (onSuccess) onSuccess();
@@ -544,7 +558,7 @@ export class CommitConfigurationComponent implements OnInit {
       error: (err) => {
         this.loadingService.hide();
         console.error('[CommitConfiguration] Save Error:', err);
-        this.toastService.show(err.message || 'Failed to save commitment data.', 'error');
+        this.toastService.show(err.message || 'Failed to save configuration data.', 'error');
       }
     });
   }

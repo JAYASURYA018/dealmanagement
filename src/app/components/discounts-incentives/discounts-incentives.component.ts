@@ -2064,37 +2064,29 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
             }
         };
 
-        this.salesforceApiService.placeSalesTransaction(transactionPayload).pipe(
-            finalize(() => {
-                this.isLoading = false;
-                this.loadingService.hide();
-            })
-        ).subscribe({
-            next: (res: any) => {
-                const endTime = performance.now();
-                const responseTimeSecs = ((endTime - startTime) / 1000).toFixed(2);
-                this.toastService.show(`${selectedItems.length} products uploaded successfully (${responseTimeSecs}s)`, 'success');
+        // Staging locally instead of immediate API call
+        this.discountIncentiveStateService.addPendingTransaction(transactionPayload, quoteId);
+        
+        const endTime = performance.now();
+        const responseTimeSecs = ((endTime - startTime) / 1000).toFixed(2);
+        this.toastService.show(`${selectedItems.length} products staged locally (${responseTimeSecs}s)`, 'success');
 
-                // Track bulk uploaded Product2 IDs for preview classification
-                selectedItems.forEach(item => {
-                    if (item.id) this.bulkUploadedProductIds.add(item.id);
-                });
-
-                // Add to UI summary
-                this.addDiscountToUI('Bulk Upload', 0, selectedItems.length, 'CSV Data', selectedItems.length, responseTimeSecs);
-
-                this.quoteRefreshService.setRefreshNeeded(true);
-                this.saveCurrentState(); // Persist bulk IDs
-                this.dataFetched = false;
-                this.showProductSelector = false;
-                this.router.navigate(['/quote-configuration']);
-                console.log('✅ Bulk Upload complete. Redirecting to Configure Quote.');
-            },
-            error: (err) => {
-                console.error('Bulk upload failed', err);
-                this.toastService.show('Failed to upload bulk products', 'error');
-            }
+        // Track bulk uploaded Product2 IDs for preview classification
+        selectedItems.forEach(item => {
+            if (item.id) this.bulkUploadedProductIds.add(item.id);
         });
+
+        // Add to UI summary
+        this.addDiscountToUI('Bulk Upload', 0, selectedItems.length, 'CSV Data', selectedItems.length, responseTimeSecs);
+
+        this.saveCurrentState(); // Persist bulk IDs
+        this.dataFetched = false;
+        this.showProductSelector = false;
+        this.router.navigate(['/quote-configuration']);
+        console.log('✅ Bulk Upload staged locally. Redirecting to Configure Quote.');
+        
+        this.isLoading = false;
+        this.loadingService.hide();
     }
 
     handleGranularDiscount(selectedItems: any[]) {
@@ -2110,9 +2102,6 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         this.loadingService.show();
         const startTime = performance.now();
 
-        // No more API calls (getCpqProducts) here as requested. Use passed data directly.
-        of(null).pipe(
-            switchMap(() => {
                 const records: any[] = [];
 
                 // A. Add Quote PATCH record
@@ -2157,7 +2146,10 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
                 });
 
                 if (records.length <= 1) {
-                    return of({ status: 'skip', message: 'No valid products to add' });
+                    this.toastService.show('No valid products to add', 'warning');
+                    this.isLoading = false;
+                    this.loadingService.hide();
+                    return;
                 }
 
                 const transactionPayload = {
@@ -2180,46 +2172,30 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
                     }
                 };
 
-                return this.salesforceApiService.placeSalesTransaction(transactionPayload).pipe(
-                    map(res => ({ status: 'success', res, count: selectedItems.length }))
-                );
-            }),
-            finalize(() => {
+                // Stage locally instead of immediate API call
+                this.discountIncentiveStateService.addPendingTransaction(transactionPayload, quoteId);
+
+                const endTime = performance.now();
+                const responseTimeSecs = ((endTime - startTime) / 1000).toFixed(2);
+                this.toastService.show(`Changes staged locally. Click Save to confirm. (${responseTimeSecs}s)`, 'success');
+                const selectedGroupCount = this.persistentSelectedGroups.size;
+                const selectedIndividualCount = this.persistentSelectedIndividuals.size;
+                const discValue = this.discountForm.value ? this.discountForm.value + '%' : 'Updated';
+
+                // Count committed items = selected groups + selected individuals (line items added)
+                const committedCount = this.persistentSelectedGroups.size + selectedIndividualCount;
+
+                this.addDiscountToUI(this.discountForm.granularity, selectedGroupCount, selectedIndividualCount, discValue, committedCount, responseTimeSecs);
+                this.resetSelections();
+                // Reset dataFetched so that next time the component is opened it can refresh data if needed
+                this.dataFetched = false;
+                this.saveCurrentState(); // Persist discounts locally
+
+                this.showProductSelector = false;
+                this.router.navigate(['/quote-configuration']);
+                
                 this.isLoading = false;
                 this.loadingService.hide();
-            })
-        )
-            .subscribe({
-                next: (result: any) => {
-                    if (result.status === 'skip') {
-                        this.toastService.show(result.message, 'warning');
-                        return;
-                    }
-                    const endTime = performance.now();
-                    const responseTimeSecs = ((endTime - startTime) / 1000).toFixed(2);
-                    this.toastService.show(`Quote updated successfully with discounts (${responseTimeSecs}s)`, 'success');
-                    const selectedGroupCount = this.persistentSelectedGroups.size;
-                    const selectedIndividualCount = this.persistentSelectedIndividuals.size;
-                    const discValue = this.discountForm.value ? this.discountForm.value + '%' : 'Updated';
-
-                    // Count committed items = selected groups + selected individuals (line items added)
-                    const committedCount = this.persistentSelectedGroups.size + selectedIndividualCount;
-
-                    this.addDiscountToUI(this.discountForm.granularity, selectedGroupCount, selectedIndividualCount, discValue, committedCount, responseTimeSecs);
-                    this.resetSelections();
-                    // Reset dataFetched so that next time the component is opened it can refresh data if needed
-                    this.dataFetched = false;
-                    // Signal that quote line items need refresh due to discount changes
-                    this.quoteRefreshService.setRefreshNeeded(true);
-                    this.saveCurrentState(); // Persist discounts locally
-
-                    this.showProductSelector = false;
-                    this.router.navigate(['/quote-configuration']);
-                },
-                error: (err: any) => {
-                    console.error('Failed to update quote', err);
-                }
-            });
     }
 
     private addDiscountToUI(granularity: string, groupCount: number, individualCount: number, value: string, committedProductCount: number = 0, responseTimeSecs?: string) {
@@ -2295,9 +2271,6 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
             });
         }
 
-        // No more API calls (getCpqProducts) here as requested. Use passed data directly.
-        of(null).pipe(
-            switchMap(() => {
                 const records: any[] = [
                     {
                         "referenceId": "refQuote",
@@ -2347,17 +2320,13 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
                         "records": records
                     }
                 };
-                return this.salesforceApiService.placeSalesTransaction(payload);
-            }),
-            finalize(() => {
-                this.isLoading = false;
-                this.loadingService.hide();
-            })
-        ).subscribe({
-            next: () => {
+
+                // Stage locally instead of API call
+                this.discountIncentiveStateService.addPendingTransaction(payload, quoteId);
+
                 const endTime = performance.now();
                 const responseTimeSecs = ((endTime - startTime) / 1000).toFixed(2);
-                this.toastService.show(`Incentive added successfully (${responseTimeSecs}s)`, 'success');
+                this.toastService.show(`Changes staged locally. Click Save to confirm. (${responseTimeSecs}s)`, 'success');
                 const groupCount = selectedGroups.length;
                 const displayValue = `${groupCount} group${groupCount !== 1 ? 's' : ''} with custom amounts`;
                 this.activeIncentivePeriod.activeIncentives.push({
@@ -2373,10 +2342,10 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
                 this.persistentIncentiveGroups.clear();
                 this.productGroups.forEach(g => { g.selected = false; });
                 this.dataFetched = false;
-                this.quoteRefreshService.setRefreshNeeded(true);
                 this.saveCurrentState(); // Persist incentives locally
-            }
-        });
+                
+                this.isLoading = false;
+                this.loadingService.hide();
     }
 
     get totalProductsCount(): number {
