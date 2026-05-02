@@ -428,6 +428,7 @@ export class SubscriptionPeriodItemComponent implements OnInit {
             this.period.discount = null;
             event.target.value = '';
         }
+        this.productChanged.emit();
     }
 
     validateRowDiscount(event: any, row: UserTypeRow) {
@@ -441,6 +442,7 @@ export class SubscriptionPeriodItemComponent implements OnInit {
             row.discount = null;
             event.target.value = '';
         }
+        this.productChanged.emit();
     }
 
     validateQuantity(event: any, row: UserTypeRow) {
@@ -466,12 +468,14 @@ export class SubscriptionPeriodItemComponent implements OnInit {
         if (this.period.discount === null || this.period.discount === undefined) {
             this.period.discount = 0;
         }
+        this.productChanged.emit();
     }
 
     onBlurRowDiscount(row: UserTypeRow) {
         if (row.discount === null || row.discount === undefined) {
             row.discount = 0;
         }
+        this.productChanged.emit();
     }
 
     onBlurQuantity(row: UserTypeRow) {
