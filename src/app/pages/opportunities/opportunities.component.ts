@@ -78,7 +78,25 @@ export class OpportunitiesComponent implements OnInit {
     private rawDetailedRecords: any[] = [];
 
     ngOnInit(): void {
+        this.clearSessionData();
         this.fetchOpportunities();
+    }
+
+    private clearSessionData(): void {
+        const keysToRemove = [];
+        for (let i = 0; i < sessionStorage.length; i++) {
+            const key = sessionStorage.key(i);
+            if (key) {
+                // Keep access token and related auth keys safely
+                const kLower = key.toLowerCase();
+                if (kLower.includes('token') || kLower.includes('auth') || kLower.includes('expire')) {
+                    continue;
+                }
+                keysToRemove.push(key);
+            }
+        }
+        
+        keysToRemove.forEach(key => sessionStorage.removeItem(key));
     }
 
     debugTokenStatus(): void {
