@@ -1,0 +1,227 @@
+<div class="flex flex-col h-screen bg-[#eff3f8] overflow-hidden text-[#3c4043] font-sans" (click)="closeMenu()">
+
+    <app-top-nav class="flex-shrink-0"></app-top-nav>
+
+    <!-- Main Content Area -->
+    <div class="flex-1 overflow-hidden p-6">
+        <div class="w-full h-full bg-white rounded-[24px] shadow-sm flex flex-col overflow-hidden">
+
+            <div class="flex-1 flex flex-col overflow-hidden px-8">
+
+                <!-- Header -->
+
+                <div class="pt-5 pb-5">
+                    <div class="flex items-center pt-1">
+
+                        <div class="flex items-center space-x-3">
+                            <button (click)="goBack()"
+                                class="p-1 hover:bg-gray-100 rounded-full transition-colors flex items-center">
+                                <span class="material-icons text-gray-700 text-[24px] leading-none">arrow_back</span>
+                            </button>
+
+                            <span class="text-[16px] font-medium text-gray-700 leading-none">{{ opportunityName
+                                }}</span>
+
+                            <span class="material-icons text-blue-600 text-[20px] leading-none">chevron_right</span>
+
+                            <span class="text-[22px] font-semibold text-[#1a1b1e] leading-none">Quotes</span>
+                        </div>
+
+                        <div class="relative w-[400px] ml-auto flex items-center">
+                            <input type="text" placeholder="Search quotes" [(ngModel)]="searchText"
+                                (keyup.enter)="searchQuotes()" class="w-full pl-4 pr-10 py-2 text-[14px] 
+                                    bg-gray-100 
+                                    border border-gray-200 
+                                    rounded-full 
+                                    outline-none 
+                                    focus:bg-white
+                                    focus:border-blue-600 
+                                    focus:ring-1 focus:ring-blue-100 
+                                    transition-all duration-200" />
+
+                            <span (click)="searchQuotes()" class="material-icons absolute right-3 top-1/2 -translate-y-1/2 
+                                text-gray-400 text-[20px] cursor-pointer 
+                                transition-all duration-200 
+                                hover:text-blue-600 
+                                hover:scale-110 
+                                hover:bg-blue-50 
+                                p-1 rounded-full">
+                                search
+                            </span>
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- Table Container -->
+                <div class="flex-1 overflow-hidden pb-10">
+                    <div class="h-full border-2 border-gray-100 rounded-xl flex flex-col overflow-hidden">
+
+                        <div class="overflow-x-auto flex flex-col h-full">
+
+                            <!-- Table Header -->
+                            <div
+                                class="min-w-[1100px] grid grid-cols-[60px_1.2fr_2fr_1.5fr_1fr_1fr_1fr_1.5fr_60px] gap-x-3 border-b bg-white sticky top-0 z-10">
+
+                                <div class="flex items-center justify-center h-[56px]">
+                                    <input type="checkbox" class="w-4 h-4 rounded border-gray-300">
+                                </div>
+
+                                <div (click)="toggleSort()"
+                                    class="px-3 flex items-center gap-2 text-[14px] font-bold text-gray-700 cursor-pointer hover:bg-gray-50">
+                                    Quote Number
+                                    <span class="material-icons text-xl text-gray-400">arrow_upward</span>
+                                </div>
+
+                                <div class="px-3 flex items-center text-[14px] font-bold text-gray-700">Quote Name</div>
+                                <div class="px-3 flex items-center text-[14px] font-bold text-gray-700">Primary Contact
+                                </div>
+                                <div class="px-3 flex items-center text-[14px] font-bold text-gray-700">Status</div>
+                                <div class="px-3 flex items-center text-[14px] font-bold text-gray-700">Primary</div>
+                                <div class="px-3 flex items-center text-[14px] font-bold text-gray-700">Close Date</div>
+                                <div class="px-3 flex items-center text-[14px] font-bold text-gray-700">Created By</div>
+
+                                <div></div>
+                            </div>
+
+                            <!-- Scrollable Content  -->
+                            <div class="flex-1 overflow-y-auto bg-white min-w-[1100px]">
+
+                                <div *ngIf="isLoading" class="flex flex-col items-center justify-center py-16">
+                                    <div class="relative">
+                                        <div class="w-10 h-10 rounded-full border-2 border-gray-200"></div>
+                                        <div
+                                            class="absolute inset-0 w-10 h-10 rounded-full border-2 border-transparent border-t-blue-600 border-r-blue-600 border-b-blue-600 animate-spin [animation-duration:0.8s]">
+                                        </div>
+                                    </div>
+                                    <span class="mt-4 text-sm text-gray-500 tracking-wide">Loading...</span>
+                                </div>
+
+                                <ng-container *ngIf="!isLoading">
+                                    <!-- Empty state -->
+                                    <div *ngIf="paginatedQuotes.length === 0"
+                                        class="flex flex-col items-center justify-center py-16 text-gray-400 gap-2">
+                                        <span class="material-icons text-[48px]">description</span>
+                                        <p class="text-[14px]">No quotes found</p>
+                                    </div>
+
+                                    <div *ngFor="let quote of paginatedQuotes"
+                                        class="grid grid-cols-[60px_1.2fr_2fr_1.5fr_1fr_1fr_1fr_1.5fr_60px] gap-x-3 border-b border-gray-100 hover:bg-gray-50 items-center">
+
+                                        <div class="flex items-center justify-center py-4">
+                                            <input type="checkbox" class="w-4 h-4 rounded border-gray-300">
+                                        </div>
+
+                                        <div class="px-3 text-[14px] text-blue-600 font-medium truncate">
+                                            Q-{{ quote.number }}
+                                        </div>
+
+                                        <div class="px-3 text-[14px] text-gray-800 truncate">
+                                            {{ quote.name }}
+                                        </div>
+
+                                        <div class="px-3 text-[14px] text-gray-700 truncate">
+                                            {{ quote.primaryContact }}
+                                        </div>
+
+                                        <div class="px-3 text-[14px] text-gray-700">
+                                            {{ quote.status }}
+                                        </div>
+
+                                        <div class="px-3 text-[14px] text-gray-700">
+                                            {{ quote.primary }}
+                                        </div>
+
+                                        <div class="px-3 text-[14px] text-gray-700">
+                                            {{ quote.closeDate }}
+                                        </div>
+
+                                        <div class="px-3 text-[14px] text-gray-700">
+                                            {{ quote.createdBy }}
+                                        </div>
+
+                                        <div class="flex items-center justify-center py-4">
+
+                                            <ng-container
+                                                *ngIf="quote.status.toLowerCase() === 'approved'; else editable">
+                                                <div class="group relative">
+                                                    <div
+                                                        class="p-1 rounded-full flex items-center justify-center cursor-not-allowed transition-colors">
+                                                        <span
+                                                            class="material-icons-outlined text-[18px] text-gray-600">lock</span>
+                                                    </div>
+                                                    <div
+                                                        class="absolute -top-6 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition bg-gray-200 text-black text-[10px] px-1.5 py-[2px] rounded-sm whitespace-nowrap shadow-sm">
+                                                        Not allowed
+                                                    </div>
+                                                </div>
+                                            </ng-container>
+
+                                            <ng-template #editable>
+                                                <button (click)="editQuote(quote, $event)"
+                                                    class="p-1 hover:bg-gray-200 rounded-full transition-colors flex items-center justify-center">
+                                                    <span
+                                                        class="material-icons-outlined text-[18px] text-gray-600">edit</span>
+                                                </button>
+                                            </ng-template>
+                                        </div>
+                                    </div>
+                                </ng-container>
+                            </div>
+
+                            <!-- Footer -->
+                            <div
+                                class="h-16 px-8 border-t-2 border-gray-100 bg-white flex items-center justify-end gap-10 ">
+                                <div class="flex items-center gap-3 text-[13px] text-gray-600">
+                                    Rows per page
+                                    <div class="relative flex items-center ml-1">
+                                        <select (change)="onPageSizeChange($event)"
+                                            class="appearance-none border border-gray-300 rounded px-3 pr-9 py-1.5 outline-none bg-white text-[13px] hover:border-gray-400 transition-colors cursor-pointer">
+                                            <option [value]="10" [selected]="pageSize === 10">10</option>
+                                            <option [value]="25" [selected]="pageSize === 25">25</option>
+                                            <option [value]="50" [selected]="pageSize === 50">50</option>
+                                        </select>
+                                        <span
+                                            class="material-icons absolute right-2 text-[20px] pointer-events-none text-gray-400">expand_more</span>
+                                    </div>
+                                </div>
+
+                                <div *ngIf="!searchModeEnabled" class="text-[13px] text-gray-600 font-medium">
+                                    {{ (currentPage - 1) * pageSize + 1 }}-{{ Math.min(currentPage * pageSize,
+                                    quotesCount) }} of {{ quotesCount }}
+                                </div>
+                                <div *ngIf="searchModeEnabled" class="text-[13px] text-gray-600 font-medium">
+                                    {{ (currentPage - 1) * pageSize + 1 }}-{{ Math.min(currentPage * pageSize,
+                                    quotesCount) }}
+                                </div>
+
+                                <div class="flex items-center gap-2">
+                                    <button (click)="firstPage()" [disabled]="currentPage === 1"
+                                        class="p-1.5 hover:bg-gray-100 rounded-full disabled:opacity-30 transition-colors">
+                                        <span class="material-icons text-[22px]">first_page</span>
+                                    </button>
+                                    <button (click)="prevPage()" [disabled]="currentPage === 1"
+                                        class="p-1.5 hover:bg-gray-100 rounded-full disabled:opacity-30 transition-colors">
+                                        <span class="material-icons text-[22px]">chevron_left</span>
+                                    </button>
+                                    <button (click)="nextPage()"
+                                        [disabled]="currentPage * pageSize >= quotesCount || (searchModeEnabled && paginatedQuotes.length < pageSize)"
+                                        class="p-1.5 hover:bg-gray-100 rounded-full disabled:opacity-30 transition-colors">
+                                        <span class="material-icons text-[22px]">chevron_right</span>
+                                    </button>
+                                    <button (click)="lastPage()"
+                                        [disabled]="currentPage * pageSize >= quotesCount || (searchModeEnabled && paginatedQuotes.length < pageSize)"
+                                        class="p-1.5 hover:bg-gray-100 rounded-full disabled:opacity-30 transition-colors">
+                                        <span class="material-icons text-[22px]">last_page</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

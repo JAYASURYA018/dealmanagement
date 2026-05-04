@@ -1,7 +1,7 @@
 import { Component, OnInit, inject, ViewChild, ViewChildren, QueryList } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { Router, ActivatedRoute } from '@angular/router';
 import { QuoteDataService } from '../../services/quote-data.service';
 import { TopNavComponent } from '../../components/top-nav/top-nav.component';
 import { DetailsOfQuoteComponent } from '../../components/details-of-quote/details-of-quote.component';
@@ -12,7 +12,7 @@ import { SalesforceApiService } from '../../services/salesforce-api.service';
 import { LoadingService } from '../../services/loading.service';
 import { ToastService } from '../../services/toast.service';
 import { ContextService } from '../../services/context.service';
-import { finalize } from 'rxjs/operators';
+import { finalize, take, map, tap } from 'rxjs/operators';
 
 @Component({
   selector: 'app-quote-configuration',
@@ -60,14 +60,15 @@ export class QuoteConfigurationComponent implements OnInit {
   private loadingService = inject(LoadingService);
   private toastService = inject(ToastService);
   private contextService = inject(ContextService);
-  
+  private activatedRoute = inject(ActivatedRoute);
+
   isLoading = true;
   accountName = '';
   opportunityName = '';
   quoteNumber = '';
   quoteId = '';
   opportunityId = '';
-  
+
   products: any[] = [];
   selectedItemId = sessionStorage.getItem('qc_selected_item') || 'quote_details';
   annualContractValue = 0;
@@ -104,20 +105,20 @@ export class QuoteConfigurationComponent implements OnInit {
   get totalContractValue(): number {
     let sum = 0;
     if (this.commitComps) {
-        this.commitComps.forEach(c => sum += c.totalContractValue || 0);
+      this.commitComps.forEach(c => sum += c.totalContractValue || 0);
     }
     if (this.subComps) {
-        this.subComps.forEach(s => sum += s.totalContractValue || 0);
+      this.subComps.forEach(s => sum += s.totalContractValue || 0);
     }
     return sum;
   }
 
   totalCatalogProducts: number = 1000;
-  
+
   get usedQuotaCount(): number {
     // 1. Initial count includes every main product added to the cart
     let count = this.products ? this.products.length : 0;
-    
+
     // 2. Extra products selected in Commit (via Discounts/Incentives selections)
     if (this.commitComps) {
       this.commitComps.forEach(commit => {
@@ -143,13 +144,13 @@ export class QuoteConfigurationComponent implements OnInit {
         }
       });
     }
-    
+
     // 3. Subscription selections (Platform product + User quantities)
     if (this.subComps) {
       this.subComps.forEach(sub => {
         if (sub.subscriptionPeriods && sub.subscriptionPeriods.length > 0) {
           const firstPeriod = sub.subscriptionPeriods[0];
-          
+
           // 3a. Count the Platform selection from the picklist if it's set
           if (firstPeriod.productName) {
             // Check if this specific product ID is already in our main products list to avoid double counting
@@ -170,7 +171,7 @@ export class QuoteConfigurationComponent implements OnInit {
         }
       });
     }
-    
+
     return count;
   }
 
@@ -221,65 +222,65 @@ export class QuoteConfigurationComponent implements OnInit {
 
   openPreview() {
     if (this.selectedItemId === 'quote_details') {
-        this.toastService.show('Please select a product to preview.', 'warning');
-        return;
+      this.toastService.show('Please select a product to preview.', 'warning');
+      return;
     }
 
     const qid = this.quoteId || this.contextService.currentContext?.quoteId;
     if (!qid) {
-        this.toastService.show('Quote ID not found.', 'error');
-        return;
+      this.toastService.show('Quote ID not found.', 'error');
+      return;
     }
 
     this.loadingService.show();
     this.sfApi.getQuotePreview(qid).pipe(
-        finalize(() => this.loadingService.hide())
+      finalize(() => this.loadingService.hide())
     ).subscribe({
-        next: (previewData: any) => {
-            console.log('Preview data received:', previewData);
-            if (previewData && previewData.records && previewData.records.length > 0) {
-                const quote = previewData.records[0];
-                const type = this.getProductType(this.selectedItemId);
-                
-                let pData: any = null;
-                try {
-                    if (type === 'commitment') {
-                        const comp = this.commitComps?.find(c => c.productId === this.selectedItemId);
-                        if (comp) pData = comp.getPreviewData(quote);
-                    } else if (type === 'subscription') {
-                        const comp = this.subComps?.find(c => c.productId === this.selectedItemId);
-                        if (comp) pData = comp.getPreviewData(quote);
-                    }
-                } catch (e) {
-                    console.error('Error building preview data:', e);
-                    this.toastService.show('Error preparing preview details.', 'error');
-                }
+      next: (previewData: any) => {
+        console.log('Preview data received:', previewData);
+        if (previewData && previewData.records && previewData.records.length > 0) {
+          const quote = previewData.records[0];
+          const type = this.getProductType(this.selectedItemId);
 
-                if (pData) {
-                    this.previewState = {
-                        show: true,
-                        data: quote,
-                        previewCommitments: pData.previewCommitments,
-                        commitmentDetailsOnly: pData.commitmentDetailsOnly || pData.commitmentDetailsSummary || [],
-                        previewProductsWithoutDiscounts: pData.previewProductsWithoutDiscounts,
-                        isLooker: pData.isLookerSubscription,
-                        tcv: pData.totalContractValue,
-                        incentives: pData.totalIncentivesValue,
-                        terms: pData.totalTerms,
-                        startDate: pData.startDate,
-                        expirationDate: pData.expirationDate
-                    };
-                } else {
-                    this.toastService.show('No preview data available for this selection.', 'warning');
-                }
-            } else {
-                this.toastService.show('No quote records found.', 'warning');
+          let pData: any = null;
+          try {
+            if (type === 'commitment') {
+              const comp = this.commitComps?.find(c => c.productId === this.selectedItemId);
+              if (comp) pData = comp.getPreviewData(quote);
+            } else if (type === 'subscription') {
+              const comp = this.subComps?.find(c => c.productId === this.selectedItemId);
+              if (comp) pData = comp.getPreviewData(quote);
             }
-        },
-        error: (err: any) => {
-            this.toastService.show('Failed to load quote preview.', 'error');
-            console.error('Preview error:', err);
+          } catch (e) {
+            console.error('Error building preview data:', e);
+            this.toastService.show('Error preparing preview details.', 'error');
+          }
+
+          if (pData) {
+            this.previewState = {
+              show: true,
+              data: quote,
+              previewCommitments: pData.previewCommitments,
+              commitmentDetailsOnly: pData.commitmentDetailsOnly || pData.commitmentDetailsSummary || [],
+              previewProductsWithoutDiscounts: pData.previewProductsWithoutDiscounts,
+              isLooker: pData.isLookerSubscription,
+              tcv: pData.totalContractValue,
+              incentives: pData.totalIncentivesValue,
+              terms: pData.totalTerms,
+              startDate: pData.startDate,
+              expirationDate: pData.expirationDate
+            };
+          } else {
+            this.toastService.show('No preview data available for this selection.', 'warning');
+          }
+        } else {
+          this.toastService.show('No quote records found.', 'warning');
         }
+      },
+      error: (err: any) => {
+        this.toastService.show('Failed to load quote preview.', 'error');
+        console.error('Preview error:', err);
+      }
     });
   }
 
@@ -293,7 +294,7 @@ export class QuoteConfigurationComponent implements OnInit {
 
   onSkipAndSave() {
     this.saveCurrentTab(() => {
-        // Submit logic: show success or navigate
+      // Submit logic: show success or navigate
     });
   }
 
@@ -324,7 +325,7 @@ export class QuoteConfigurationComponent implements OnInit {
         saveQueue.push((next) => {
           console.log(`Initiating Subscription Save ${index + 1}`);
           // Skip the success feedback for intermediate steps to avoid too many toasts
-          comp.onSave(next, true); 
+          comp.onSave(next, true);
         });
       });
     }
@@ -360,55 +361,102 @@ export class QuoteConfigurationComponent implements OnInit {
   }
 
   ngOnInit() {
+    const mode = this.activatedRoute.snapshot.data['mode'] || 'configure';
+    mode === 'edit' ? this.modifyQuote() : this.configureQuote();
+  }
+
+  private configureQuote() {
+    this.isLoading = true;
     this.quoteId = this.contextService.currentContext?.quoteId || '';
-    this.opportunityId = this.contextService.currentContext?.opportunityId || '';
 
-    this.contextService.context$.subscribe(ctx => {
-      if (ctx.quoteId && (!this.quoteId || this.quoteId.startsWith('0Q0'))) {
-        this.quoteId = ctx.quoteId;
-      }
-      if (ctx.opportunityId) {
-        this.opportunityId = ctx.opportunityId;
-      }
-    });
+    this.quoteDataService.quoteData$
+      .pipe(
+        take(1),
+        finalize(() => (this.isLoading = false))
+      )
+      .subscribe({
+        next: (data) => this.applyQuoteData(data),
+        error: (err) => this.handleError('Error configuring quote', err)
+      });
+  }
 
-    this.quoteDataService.quoteData$.subscribe(data => {
-      this.accountName = data.accountName || 'Account Name';
-      this.opportunityName = data.opportunityName || 'Opportunity Name';
-      this.quoteNumber = data.quoteNumber || 'Q-DRAFT';
-      if (data.quoteId) this.quoteId = data.quoteId;
-      if (data.opportunityId) this.opportunityId = data.opportunityId;
-      
-      // Map products from QuoteData
-      if (data.products && data.products.length > 0) {
-        this.products = data.products.map(p => {
-          const isLooker = p.name ? p.name.toLowerCase().includes('looker') : false;
-          return {
-            id: p.id,
-            name: p.name,
-            icon: isLooker ? 'bar_chart' : 'cloud',
-            type: isLooker ? 'subscription' : 'commitment',
-            quoteLineId: p.quoteLineId,
-            categoryId: p.categoryId
-          };
-        });
-      } else if (data.productId || data.productName) {
-        const isLooker = data.productName?.toLowerCase().includes('looker');
-        this.products = [
-          { 
-            id: data.productId || 'p1', 
-            name: data.productName || 'Product', 
-            icon: isLooker ? 'bar_chart' : 'cloud',
-            type: isLooker ? 'subscription' : 'commitment',
-            categoryId: data.categoryId || ''
-          }
-        ];
-      }
-    });
+  private modifyQuote() {
+    this.quoteId =
+      this.contextService.currentContext?.quoteId ??
+      this.quoteDataService.getQuoteData()?.quoteId ?? '';
 
-    setTimeout(() => {
-      this.isLoading = false;
-    }, 1000);
+    if (!this.quoteId) {
+      this.handleError('Quote ID not found');
+      return;
+    }
+
+    this.isLoading = true;
+    this.loadingService.show();
+
+    this.sfApi.getQuoteProducts(this.quoteId)
+      .pipe(
+        take(1),
+        map((res: any) => ({
+          products: (res?.records ?? []).map((r: any) => ({
+            id: r.Product2Id,
+            name: r.Name,
+            quoteLineId: r.quoteLineItemId,
+            categoryId: r.categoryId ?? ''
+          }))
+        })),
+        tap((mappedData) => {
+          const existing = this.quoteDataService.getQuoteData();
+          this.quoteDataService.setQuoteData({ ...existing, ...mappedData });
+        }),
+        finalize(() => {
+          this.loadingService.hide();
+          this.isLoading = false;
+        })
+      )
+      .subscribe({
+        next: (mappedData) => this.applyQuoteData(mappedData),
+        error: (err) => this.handleError('Failed to load quote products', err)
+      });
+  }
+
+  applyQuoteData(data: any) {
+    if (!data) return;
+
+    this.accountName = data.accountName || 'Acme Corp';
+    this.opportunityName = data.opportunityName || 'Expansion Deal';
+    this.opportunityId = data.opportunityId || '';
+    this.quoteNumber = data.quoteNumber || 'Q-DRAFT';
+    if (data.quoteId) this.quoteId = data.quoteId;
+
+    if (data.products && data.products.length > 0) {
+      this.products = data.products.map((p: any) => {
+        const isLooker = p.name ? p.name.toLowerCase().includes('looker') : false;
+        return {
+          id: p.id,
+          name: p.name,
+          icon: isLooker ? 'bar_chart' : 'cloud',
+          type: isLooker ? 'subscription' : 'commitment',
+          quoteLineId: p.quoteLineId,
+          categoryId: p.categoryId
+        };
+      });
+    } else if (data.productId || data.productName) {
+      const isLooker = data.productName?.toLowerCase().includes('looker');
+      this.products = [{
+        id: data.productId || 'p1',
+        name: data.productName || 'Product',
+        icon: isLooker ? 'bar_chart' : 'cloud',
+        type: isLooker ? 'subscription' : 'commitment',
+        categoryId: data.categoryId || ''
+      }];
+    }
+  }
+
+  private handleError(message: string, error?: any) {
+    if (error) console.error(message, error);
+    this.toastService.show(message, 'error');
+    this.loadingService.hide();
+    this.isLoading = false;
   }
 
   getProductType(id: string) {
@@ -431,7 +479,7 @@ export class QuoteConfigurationComponent implements OnInit {
   }
 
   onAddProduct() {
-     this.router.navigate(['/products']);
+    this.router.navigate(['/products']);
   }
 
   formatCurrency(val: number) {

@@ -10,6 +10,7 @@ import { authGuard } from './guards/auth.guard';
 
 import { TwCallbackComponent } from './components/tw-callback/tw-callback.component';
 import { DebugComponent } from './pages/debug/debug.component';
+import { QuotesContainerComponent } from './pages/quotes-container/quotes-container.component';
 
 export const routes: Routes = [
     { path: 'login', component: LoginComponent },
@@ -19,5 +20,7 @@ export const routes: Routes = [
     { path: 'products', component: ProductDiscoveryComponent },
     { path: 'quote-configuration', component: QuoteConfigurationComponent },
     { path: 'configure-quote', component: QuoteDetailsComponent },
+    { path: 'quotes', component: QuotesContainerComponent },
+    { path: 'quote-edit/:quoteName', component: QuoteConfigurationComponent, data: { mode: 'edit' } },
     { path: '**', redirectTo: '' }
 ];
