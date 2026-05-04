@@ -95,7 +95,7 @@ export class OpportunitiesComponent implements OnInit {
                 keysToRemove.push(key);
             }
         }
-        
+
         keysToRemove.forEach(key => sessionStorage.removeItem(key));
     }
 
@@ -164,6 +164,41 @@ export class OpportunitiesComponent implements OnInit {
                     this.router.navigate(['/products'], {
                         queryParams: { opportunityId: rawOpp.Id }
                     });
+                }
+            },
+            error: (err) => {
+                console.error('Error fetching opportunity details:', err);
+            }
+        });
+    }
+
+    viewQuotes(opp: any): void {
+        this.loadingService.show();
+        this.sfApi.getOpportunityDetails(opp.id).pipe(
+            finalize(() => this.loadingService.hide())
+        ).subscribe({
+            next: (rawOpp: any) => {
+                if (rawOpp) {
+                    console.log('[Opportunities] Detailed Opportunity for Quote:', rawOpp);
+
+                    // Extract Primary Contact from subquery
+                    let contactName = null;
+                    if (rawOpp.OpportunityContactRoles && rawOpp.OpportunityContactRoles.records && rawOpp.OpportunityContactRoles.records.length > 0) {
+                        contactName = rawOpp.OpportunityContactRoles.records[0].Contact?.Name;
+                    }
+
+                    this.quoteService.setQuoteData({
+                        opportunityId: rawOpp.Id,
+                        opportunityName: rawOpp.Name,
+                        accountId: rawOpp.AccountId,
+                        accountName: rawOpp.Account?.Name,
+                        website: rawOpp.Account?.Website,
+                        pricebook2Id: rawOpp.Pricebook2Id,
+                        primaryContactName: contactName,
+                        salesChannel: rawOpp.Sales_Channel__c || 'Direct'
+                    });
+
+                    this.router.navigate(['/quotes']);
                 }
             },
             error: (err) => {
