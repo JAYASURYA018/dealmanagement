@@ -377,7 +377,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         }
     }
 
-    private saveCurrentState() {
+    saveCurrentState() {
         const quoteId = this.activeQuoteId;
         this.discountIncentiveStateService.saveState({
             discountForm: this.discountForm,
@@ -647,6 +647,8 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
             this.toastService.show(`End Date cannot be later than quote end date (${this.quoteEndDate}).`, 'warning');
             period.endDate = this.quoteEndDate;
         }
+
+        this.saveCurrentState();
     }
 
     validateIncentiveDates(period: any) {
@@ -666,6 +668,8 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
             this.toastService.show(`End Date cannot be later than quote end date (${this.quoteEndDate}).`, 'warning');
             period.endDate = this.quoteEndDate;
         }
+
+        this.saveCurrentState();
     }
     // Selector Actions
     openProductSelector(source: 'discounts' | 'incentives' = 'discounts') {
@@ -1554,6 +1558,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         this.snapshotIncentiveGroups.clear();
 
         this.closeProductSelector(false); // Close without rollback
+        this.saveCurrentState(); // Persist selections to session
     }
 
     // Picklist Filter Methods
