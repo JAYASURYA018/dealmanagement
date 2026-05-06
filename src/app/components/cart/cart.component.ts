@@ -196,6 +196,7 @@ export class CartComponent implements AfterViewInit, OnChanges {
                 }
 
                 this.searchFilterService.setSearchQuery('');
+                this.cartService.clearCart();
                 this.router.navigate(['/quote-configuration']);
             },
             error: (error: any) => {

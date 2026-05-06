@@ -249,7 +249,6 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
   set termStartDate(value: string) { this.termStartInput = value; }
 
   ngOnInit() {
-    this.startDate = this.toIsoDateString(new Date());
     this.checkAndDefaultExpirationDate();
     
     SubscriptionConfigurationComponent.lastInitTime = Date.now();

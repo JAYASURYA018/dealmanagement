@@ -8,6 +8,7 @@ import { DetailsOfQuoteComponent } from '../../components/details-of-quote/detai
 import { CommitConfigurationComponent } from '../../components/commit-configuration/commit-configuration.component';
 import { SubscriptionConfigurationComponent } from '../../components/subscription-configuration/subscription-configuration.component';
 import { QuotePreviewComponent } from '../../components/quote-preview/quote-preview.component';
+import { CartService } from '../../services/cart.service';
 import { SalesforceApiService } from '../../services/salesforce-api.service';
 import { LoadingService } from '../../services/loading.service';
 import { ToastService } from '../../services/toast.service';
@@ -61,6 +62,7 @@ export class QuoteConfigurationComponent implements OnInit {
   private toastService = inject(ToastService);
   private contextService = inject(ContextService);
   private activatedRoute = inject(ActivatedRoute);
+  private cartService = inject(CartService);
 
   isLoading = true;
   accountName = '';
@@ -479,6 +481,7 @@ export class QuoteConfigurationComponent implements OnInit {
   }
 
   onAddProduct() {
+    this.cartService.clearCart();
     this.router.navigate(['/products']);
   }
 

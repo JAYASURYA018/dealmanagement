@@ -48,7 +48,7 @@ export class ContextService {
 
         if (pkceToken) {
             return {
-                accessToken: pkceToken,
+                accessToken: pkceToken || '00DDz000001qvYA!ARQAQBDq3CCzAtA0mIfHNKDQ9y82fMwmaaqv105VLrXNDy5fz4aTXfRPbERxapOX2Q6ACyrOno3mJJjkGpMcSd5_X3RcwpLg',
                 apiBaseUrl: pkceInstanceUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com',
                 // Partial mock context still needed for other fields
                 opportunityId: '006Dz00000Q82nrIAB', // Defaulting to one of the valid IDs from user log
