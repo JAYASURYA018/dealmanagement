@@ -6,6 +6,7 @@ import { ContextService } from '../../services/context.service';
 import { SalesforceApiService } from '../../services/salesforce-api.service';
 import { QuoteDataService } from '../../services/quote-data.service';
 import { of, forkJoin } from 'rxjs';
+import { switchMap, map } from 'rxjs/operators';
 import { Router } from '@angular/router';
 import { LoadingService } from '../../services/loading.service';
 import { ToastService } from '../../services/toast.service';
@@ -345,9 +346,9 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
                 price: priceObj ? priceObj.price : 0,
                 nonProdPrice: npPriceObj ? npPriceObj.price : 0,
                 frequency: 'Months',
-                productId: c.id,
+                productId: c.productId || c.id,
                 pricebookEntryId: priceObj?.priceBookEntryId,
-                nonProdProductId: nonProdMatch?.id,
+                nonProdProductId: nonProdMatch?.productId || nonProdMatch?.id,
                 nonProdPricebookEntryId: npPriceObj?.priceBookEntryId,
                 nonProdProductName: nonProdMatch?.name
               };
@@ -630,6 +631,8 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
     this.loadingService.show();
 
     const targetQuoteId = this.quoteId || this.contextService.currentContext?.quoteId;
+    const mappingId = this.contextService.quoteEntitiesMappingId;
+
     if (!targetQuoteId) {
         this.toastService.show('Quote ID not found.', 'error');
         this.isSaving = false;
@@ -637,389 +640,228 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
         return;
     }
 
-    const relType$ = this.productRelationshipTypeId
-        ? of({ recentItems: [{ Id: this.productRelationshipTypeId, Name: 'Bundle to Bundle Component Relationship' }] })
-        : this.sfApi.getProductRelationshipType();
+    if (!mappingId) {
+        this.toastService.show('Context Mapping ID not found. Please reload the page.', 'error');
+        this.isSaving = false;
+        this.loadingService.hide();
+        return;
+    }
 
-    forkJoin({
-        lineItemRes: this.sfApi.getQuoteLineItems(targetQuoteId),
-        relTypeRes: relType$
-    }).subscribe({
-        next: (data) => {
-            const lineItems = data.lineItemRes.records || [];
-            this.extractRelationshipId(data.relTypeRes);
-            const relationshipTypeId = this.productRelationshipTypeId || '0yoKf0000010wFiIAI';
+    // 1. Set Instance
+    this.sfApi.setInstance(mappingId, targetQuoteId).pipe(
+        switchMap((setRes: any) => {
+            const contextId = setRes.contextId;
+            if (!contextId) throw new Error('Failed to initialize configurator instance');
 
-            const bundleProductId = this.productId;
-            const bundleLine = lineItems.find((item: any) => item.Product2Id === bundleProductId);
-            const bundlePBEId = bundleLine ? bundleLine.PricebookEntryId : this.bundlePricebookEntryId;
-            const mainLineId = this.bundleQuoteLineId || bundleLine?.Id || (lineItems.length > 0 ? lineItems[0].Id : null);
+            // 2. Build Looker Nodes
+            const addedNodes = this.buildLookerNodes(targetQuoteId);
 
-            const records: any[] = [];
-
-            // 1. Quote Update
-            const startToUse = (this.isLookerSubscription && this.termStartInput) ? this.termStartInput : (this.startDate || this.toIsoDateString(new Date()));
-            const quoteRec: any = {
-                "attributes": { "type": "Quote", "method": "PATCH", "id": targetQuoteId },
-                "StartDate": startToUse
-            };
-            if (this.expirationDate) quoteRec["ExpirationDate"] = this.expirationDate;
-
-            records.push({
-                "referenceId": "refQuote",
-                "record": quoteRec
-            });
-
-            if (this.subscriptionPeriods.length === 0) {
-                this.isSaving = false;
-                this.loadingService.hide();
-                this.toastService.show('Error: No subscription periods found to sync.', 'error');
-                return;
-            }
-
-            // --- Year 1 Implementation ---
-            const firstPeriod = this.subscriptionPeriods[0];
-            const isRamped = this.subscriptionPeriods.length > 1;
-            const year1GroupRef = "refGroup1";
-
-            if (isRamped) {
-                records.push({
-                    "referenceId": year1GroupRef,
-                    "record": {
-                        "attributes": { "type": "QuoteLineGroup", "method": "POST" },
-                        "SortOrder": 1,
-                        "Name": "Year 1",
-                        "QuoteId": targetQuoteId,
-                        "IsRamped": true,
-                        "SegmentType": "Yearly",
-                        "StartDate": firstPeriod.startDate,
-                        "EndDate": firstPeriod.endDate
-                    }
-                });
-            }
-
-            lineItems.forEach((item: any, index: number) => {
-                const startToUse = (this.isLookerSubscription && this.termStartInput) ? this.termStartInput : this.startDate;
-                const subTerm = this.calculateSubscriptionTerm(startToUse, firstPeriod.endDate as string);
-
-                const lineUpdate: any = {
-                    "attributes": { "type": "QuoteLineItem", "method": "PATCH", "id": item.Id },
-                    "SortOrder": 1,
-                    "Term_Starts_On__c": this.termStartsOn,
-                    "Operation_Type__c": this.operationType,
-                    "Billing_Frequency__c": this.billingFrequency,
-                    "SubscriptionTerm": subTerm,
-                    "SubscriptionTermUnit": "Months",
-                    "PeriodBoundary": "Anniversary"
-                };
-
-                if (isRamped) {
-                    lineUpdate["QuoteLineGroupId"] = `@{${year1GroupRef}.id}`;
-                }
-
-                if (this.isLookerSubscription && this.termStartInput) {
-                    lineUpdate["StartDate"] = this.termStartInput;
-                } else if (this.startDate) {
-                    lineUpdate["StartDate"] = this.startDate;
-                }
-
-                if (firstPeriod.endDate) {
-                    lineUpdate["EndDate"] = firstPeriod.endDate;
-                }
-
-                records.push({
-                    "referenceId": `refLineUpdate_${index}`,
-                    "record": lineUpdate
-                });
-            });
-
-            if (mainLineId) {
-                let childIdx = 1;
-                const selectedPlatform = this.productOptions.find((p: any) => p.name === firstPeriod.productName);
-                const groupId = isRamped ? `@{${year1GroupRef}.id}` : null;
-
-                if (selectedPlatform && selectedPlatform.productId) {
-                    this.addGraphRecords(records, childIdx++, selectedPlatform, firstPeriod, mainLineId, 1, targetQuoteId, 'NotIncludedInBundlePrice', firstPeriod.discount || 0, '_P1', groupId, relationshipTypeId);
-                }
-                firstPeriod.userRows.forEach(row => {
-                    if (row.type !== 'Non-prod' && (row.quantity || 0) > 0 && row.productId) {
-                        this.addGraphRecords(records, childIdx++, row, firstPeriod, mainLineId, row.quantity || 0, targetQuoteId, 'NotIncludedInBundlePrice', row.discount || 0, '_P1', groupId, relationshipTypeId);
-                    }
-                });
-                const nonProdRow = firstPeriod.userRows.find(r => r.type === 'Non-prod');
-                if (nonProdRow && (nonProdRow.quantity || 0) > 0 && selectedPlatform?.nonProdProductId) {
-                    const matchingItem = {
-                        ...nonProdRow,
-                        productId: selectedPlatform.nonProdProductId,
-                        pricebookEntryId: (selectedPlatform as any).nonProdPricebookEntryId
-                    };
-                    this.addGraphRecords(records, childIdx++, matchingItem, firstPeriod, mainLineId, nonProdRow.quantity || 0, targetQuoteId, 'NotIncludedInBundlePrice', nonProdRow.discount || 0, '_P1', groupId, relationshipTypeId);
-                }
-            }
-
-            // --- Ramp Periods (Years 2+) ---
-            if (this.subscriptionPeriods.length > 1) {
-                this.subscriptionPeriods.slice(1).forEach((period, idx) => {
-                    const periodNum = idx + 2;
-                    const groupRef = `refRampGroup_P${periodNum}`;
-                    const bundleParentRef = `refBundleParent_P${periodNum}`;
-
-                    records.push({
-                        "referenceId": groupRef,
-                        "record": {
-                            "attributes": { "type": "QuoteLineGroup", "method": "POST" },
-                            "SortOrder": periodNum,
-                            "QuoteId": targetQuoteId,
-                            "Name": period.name.replace('Period', 'Year'),
-                            "IsRamped": true,
-                            "SegmentType": "Yearly",
-                            "StartDate": period.startDate,
-                            "EndDate": period.endDate
-                        }
-                    });
-
-                    const subTerm = this.calculateSubscriptionTerm(period.startDate as string, period.endDate as string);
-                    const standardFreq = this.billingFrequency ? this.billingFrequency.split(' ')[0] : 'Monthly';
-                    records.push({
-                        "referenceId": bundleParentRef,
-                        "record": {
-                            "attributes": { "type": "QuoteLineItem", "method": "POST" },
-                            "SortOrder": 1,
-                            "QuoteId": targetQuoteId,
-                            "Product2Id": bundleProductId,
-                            "PricebookEntryId": bundlePBEId,
-                            "Quantity": 1,
-                            "BillingFrequency": standardFreq,
-                            "Billing_Frequency__c": this.billingFrequency,
-                            "Operation_Type__c": this.operationType,
-                            "Term_Starts_On__c": this.termStartsOn,
-                            "SubscriptionTerm": subTerm,
-                            "SubscriptionTermUnit": "Months",
-                            "PeriodBoundary": "Anniversary",
-                            "StartDate": period.startDate,
-                            "EndDate": period.endDate,
-                            "QuoteLineGroupId": `@{${groupRef}.id}`
-                        }
-                    });
-
-                    let childIdx = 1;
-                    const selectedPlatform = this.productOptions.find((p: any) => p.name === period.productName);
-                    if (selectedPlatform && selectedPlatform.productId) {
-                        this.addGraphRecords(records, childIdx++, selectedPlatform, period, `@{${bundleParentRef}.id}`, 1, targetQuoteId, "NotIncludedInBundlePrice", period.discount || 0, `_P${periodNum}`, `@{${groupRef}.id}`, relationshipTypeId);
-                    }
-                    period.userRows.forEach(row => {
-                        if (row.type !== 'Non-prod' && (row.quantity || 0) > 0 && row.productId) {
-                            this.addGraphRecords(records, childIdx++, row, period, `@{${bundleParentRef}.id}`, row.quantity || 0, targetQuoteId, "NotIncludedInBundlePrice", row.discount || 0, `_P${periodNum}`, `@{${groupRef}.id}`, relationshipTypeId);
-                        }
-                    });
-
-                    const nonProdRow = period.userRows.find(r => r.type === 'Non-prod');
-                    if (nonProdRow && (nonProdRow.quantity || 0) > 0 && selectedPlatform?.nonProdProductId) {
-                        const matchingItem = {
-                            ...nonProdRow,
-                            productId: selectedPlatform.nonProdProductId,
-                            pricebookEntryId: (selectedPlatform as any).nonProdPricebookEntryId
-                        };
-                        this.addGraphRecords(records, childIdx++, matchingItem, period, `@{${bundleParentRef}.id}`, nonProdRow.quantity || 0, targetQuoteId, "NotIncludedInBundlePrice", nonProdRow.discount || 0, `_P${periodNum}`, `@{${groupRef}.id}`, relationshipTypeId);
-                    }
-                });
-            }
-
-            const finalPayload = {
-                "pricingPref": "System",
-                "catalogRatesPref": "Skip",
-                "configurationPref": {
-                    "configurationMethod": "Skip",
-                    "configurationOptions": {
-                        "validateProductCatalog": true,
-                        "validateAmendRenewCancel": true,
-                        "executeConfigurationRules": true,
-                        "addDefaultConfiguration": false
-                    }
-                },
-                "taxPref": "Skip",
-                "contextDetails": {},
-                "graph": {
-                    "graphId": "updateQuote",
-                    "records": records
-                }
-            };
-
-            console.log('📦 Consolidated Graph Payload:', JSON.stringify(finalPayload, null, 2));
-
-            this.sfApi.placeGraphRequest(finalPayload).subscribe({
-                next: (res) => {
-                    this.isSaving = false;
-                    this.loadingService.hide();
-
-                    this.lastSavedLookerState = JSON.stringify({
-                        periods: this.subscriptionPeriods,
-                        startDate: this.startDate,
-                        expirationDate: this.expirationDate,
-                        termStartInput: this.termStartInput,
-                        termEndDate: this.termEndDate
-                    });
-
-                    if (!skipFeedback) {
-                        this.toastService.show('Quote Data Saved Successfully!', 'success');
-                        this.showSuccessPopup = true;
-                    }
-                    if (onSuccess) onSuccess();
-                },
-
-                error: (err) => {
-                    console.error('❌ Consolidated Sync error:', err);
-                    this.isSaving = false;
-                    this.loadingService.hide();
-                    this.toastService.show('Failed to save quote data.', 'error');
-                }
-            });
-        },
-        error: (err) => {
-            console.error('❌ Error fetching requirements:', err);
+            // 3. Add Nodes
+            return this.sfApi.addNodes(contextId, addedNodes).pipe(
+                switchMap(() => {
+                    // 4. Save Instance
+                    return this.sfApi.saveInstance(contextId);
+                })
+            );
+        })
+    ).subscribe({
+        next: (res: any) => {
             this.isSaving = false;
             this.loadingService.hide();
-            this.toastService.show('Failed to fetch quote details.', 'error');
+
+            this.lastSavedLookerState = JSON.stringify({
+                periods: this.subscriptionPeriods,
+                startDate: this.startDate,
+                expirationDate: this.expirationDate,
+                termStartInput: this.termStartInput,
+                termEndDate: this.termEndDate
+            });
+
+            if (!skipFeedback) {
+                this.toastService.show('Looker Configuration Saved Successfully!', 'success');
+                this.showSuccessPopup = true;
+            }
+            if (onSuccess) onSuccess();
+        },
+        error: (err) => {
+            console.error('❌ Looker Save error:', err);
+            this.isSaving = false;
+            this.loadingService.hide();
+            this.toastService.show(err.message || 'Failed to save looker configuration.', 'error');
         }
     });
   }
 
-  addGraphRecords(records: any[], index: number, item: any, period: SubscriptionPeriod, parentId: string, quantity: number, quoteId: string, pricing: string, discount: number = 0, suffix: string = '', groupId: string | null = null, productRelationshipTypeId: string | null = null) {
-      const refIdStr = index === 1 ? '' : `-${index}`;
-      const refId = `refChildQuoteLineItem${suffix}${refIdStr}`;
+  private buildLookerNodes(quoteId: string): any[] {
+    const nodes: any[] = [];
+    const isRamped = this.subscriptionPeriods.length > 1;
 
-      const standardFreq = this.billingFrequency ? this.billingFrequency.split(' ')[0] : 'Monthly';
+    this.subscriptionPeriods.forEach((period, pIdx) => {
+        const periodNum = pIdx + 1;
+        const groupRefId = `looker_group${periodNum}`;
+        const parentLineRefId = `looker_parent_line_${periodNum.toString().padStart(2, '0')}`;
+        
+        // A. QuoteLineGroup Node (for Yearly Ramp)
+        nodes.push({
+            "path": [quoteId, groupRefId],
+            "addedObject": {
+                "id": groupRefId,
+                "GroupSortOrder": periodNum,
+                "GroupName": `Year ${periodNum}`,
+                "GroupIsRamped__std": isRamped,
+                "GroupSegmentType__std": "Yearly",
+                "GroupStartDate__std": period.startDate,
+                "GroupEndDate__std": period.endDate,
+                "GroupSource": groupRefId,
+                "ParentReference": quoteId,
+                "SalesTransactionGroupParent": quoteId,
+                "businessObjectType": "QuoteLineGroup"
+            }
+        });
 
-      const subTerm = this.calculateSubscriptionTerm(period.startDate as string, period.endDate as string);
-      const record: any = {
-          "referenceId": refId,
-          "record": {
-              "attributes": { "type": "QuoteLineItem", "method": "POST" },
-              "SortOrder": index + 1,
-              "QuoteId": quoteId,
-              "Product2Id": item.productId,
-              "PricebookEntryId": item.pricebookEntryId || this.bundlePricebookEntryId,
-              "Quantity": quantity,
-              "SubscriptionTerm": subTerm,
-              "SubscriptionTermUnit": "Months",
-              "PeriodBoundary": "Anniversary",
-              "BillingFrequency": standardFreq,
-              "Billing_Frequency__c": this.billingFrequency,
-              "Operation_Type__c": this.operationType,
-              "Term_Starts_On__c": this.termStartsOn,
-              "StartDate": period.startDate,
-              "EndDate": period.endDate
-          }
-      };
+        // B. Main Platform Line Node
+        const selectedPlatform = this.productOptions.find((p: any) => p.name === period.productName);
+        const subTerm = this.calculateSubscriptionTerm(period.startDate as string, period.endDate as string);
+        const standardFreq = this.billingFrequency ? this.billingFrequency.split(' ')[0] : 'Monthly';
 
-      if (groupId) {
-          record.record["QuoteLineGroupId"] = groupId;
-      }
-
-      if (discount > 0) {
-          record.record["Discount"] = discount;
-      }
-
-      if (item.lookerInstanceId) {
-            record.record["Looker_Instance_Id__c"] = item.lookerInstanceId;
+        if (selectedPlatform && selectedPlatform.productId) {
+            nodes.push({
+                "path": [quoteId, parentLineRefId],
+                "addedObject": {
+                    "id": parentLineRefId,
+                    "ItemSortOrder": periodNum,
+                    "SalesTransactionItemSource": parentLineRefId,
+                    "SalesTransactionItemParent": quoteId,
+                    "SalesTransactionItemGroup": `@{${groupRefId}.id}`,
+                    "LineItemPath": parentLineRefId,
+                    "Product": selectedPlatform.productId,
+                    "PricebookEntry": selectedPlatform.pricebookEntryId || this.bundlePricebookEntryId,
+                    "ProductSellingModel": "0jPDz000000001OMAQ",
+                    "Quantity": 1,
+                    "StartDate": period.startDate ? new Date(period.startDate).toISOString() : null,
+                    "EndDate": period.endDate ? new Date(period.endDate).toISOString() : null,
+                    "SubscriptionTerm": subTerm,
+                    "SubscriptionTermUnit": "Monthly",
+                    "PeriodBoundary": "Anniversary",
+                    "BillingFrequency": standardFreq,
+                    "Billing_Frequency__c": this.billingFrequency,
+                    "Operation_Type__c": this.operationType,
+                    "Term_Starts_On__c": this.termStartsOn,
+                    "Discount": period.discount || 0,
+                    "businessObjectType": "QuoteLineItem"
+                }
+            });
+        } else {
+            console.warn(`[buildLookerNodes] Skipping platform line for Period ${periodNum}: Platform not found or missing productId.`);
         }
 
-        if (item.gcpProjectId) {
-            record.record["GCP_Project_Id__c"] = item.gcpProjectId;
+        // C. Child User Product Nodes & Relationships
+        period.userRows.forEach((row, rIdx) => {
+            if (row.type !== 'Non-prod' && (row.quantity || 0) > 0 && row.productId) {
+                const childId = `ref_child_${periodNum}_${rIdx}`;
+                const relId = `ref_rel_${periodNum}_${rIdx}`;
+                
+                // User Product Line
+                nodes.push({
+                    "path": [quoteId, childId],
+                    "addedObject": {
+                        "id": childId,
+                        "ItemSortOrder": periodNum * 10 + rIdx,
+                        "SalesTransactionItemSource": childId,
+                        "SalesTransactionItemParent": quoteId,
+                        "SalesTransactionItemGroup": `@{${groupRefId}.id}`,
+                        "Product": row.productId,
+                        "PricebookEntry": row.pricebookEntryId || this.bundlePricebookEntryId,
+                        "ProductSellingModel": "0jPDz000000001OMAQ",
+                        "Quantity": row.quantity || 0,
+                        "StartDate": period.startDate ? new Date(period.startDate).toISOString() : null,
+                        "EndDate": period.endDate ? new Date(period.endDate).toISOString() : null,
+                        "SubscriptionTerm": subTerm,
+                        "SubscriptionTermUnit": "Monthly",
+                        "PeriodBoundary": "Anniversary",
+                        "BillingFrequency": standardFreq,
+                        "Billing_Frequency__c": this.billingFrequency,
+                        "Operation_Type__c": this.operationType,
+                        "Term_Starts_On__c": this.termStartsOn,
+                        "Discount": row.discount || 0,
+                        "Looker_Instance_Id__c": row.lookerInstanceId,
+                        "GCP_Project_Id__c": row.gcpProjectId,
+                        "Looker_Region__c": row.region,
+                        "businessObjectType": "QuoteLineItem"
+                    }
+                });
+
+                // Relationship
+                if (selectedPlatform && selectedPlatform.productId) {
+                    nodes.push({
+                        "path": [quoteId, childId, relId],
+                        "addedObject": {
+                            "id": relId,
+                            "MainItem": parentLineRefId,
+                            "AssociatedItem": childId,
+                            "ProductRelatedComponent": "0dSDz000000041qMAA", // Default Rel Component
+                            "AssociatedItemPricing": "NotIncludedInBundlePrice",
+                            "AssociatedQuantScaleMethod": "Proportional",
+                            "businessObjectType": "QuoteLineRelationship"
+                        }
+                    });
+                }
+            }
+        });
+        
+        // D. Non-Prod Product Logic (if applicable)
+        const nonProdRow = period.userRows.find(r => r.type === 'Non-prod');
+        if (nonProdRow && (nonProdRow.quantity || 0) > 0 && selectedPlatform?.nonProdProductId) {
+            const npChildId = `ref_np_child_${periodNum}`;
+            const npRelId = `ref_np_rel_${periodNum}`;
+            
+            nodes.push({
+                "path": [quoteId, npChildId],
+                "addedObject": {
+                    "id": npChildId,
+                    "ItemSortOrder": periodNum * 10 + 9,
+                    "SalesTransactionItemSource": npChildId,
+                    "SalesTransactionItemParent": quoteId,
+                    "SalesTransactionItemGroup": `@{${groupRefId}.id}`,
+                    "Product": selectedPlatform.nonProdProductId,
+                    "PricebookEntry": (selectedPlatform as any).nonProdPricebookEntryId || this.bundlePricebookEntryId,
+                    "ProductSellingModel": "0jPDz000000001OMAQ",
+                    "Quantity": nonProdRow.quantity || 0,
+                    "StartDate": period.startDate ? new Date(period.startDate).toISOString() : null,
+                    "EndDate": period.endDate ? new Date(period.endDate).toISOString() : null,
+                    "SubscriptionTerm": subTerm,
+                    "SubscriptionTermUnit": "Monthly",
+                    "PeriodBoundary": "Anniversary",
+                    "BillingFrequency": standardFreq,
+                    "Billing_Frequency__c": this.billingFrequency,
+                    "Operation_Type__c": this.operationType,
+                    "Term_Starts_On__c": this.termStartsOn,
+                    "Discount": nonProdRow.discount || 0,
+                    "businessObjectType": "QuoteLineItem"
+                }
+            });
+
+            if (selectedPlatform && selectedPlatform.productId) {
+                nodes.push({
+                    "path": [quoteId, npChildId, npRelId],
+                    "addedObject": {
+                        "id": npRelId,
+                        "MainItem": parentLineRefId,
+                        "AssociatedItem": npChildId,
+                        "ProductRelatedComponent": "0dSDz000000041vMAA",
+                        "AssociatedItemPricing": "NotIncludedInBundlePrice",
+                        "AssociatedQuantScaleMethod": "Proportional",
+                        "businessObjectType": "QuoteLineRelationship"
+                    }
+                });
+            }
         }
+    });
 
-        if (item.region) {
-            record.record["Looker_Region__c"] = item.region;
-        }
-
-      records.push(record);
-
-      if (parentId && productRelationshipTypeId) {
-          records.push({
-              "referenceId": `refRel${suffix}_${index}`,
-              "record": {
-                  "attributes": { "type": "QuoteLineRelationship", "method": "POST" },
-                  "MainQuoteLineId": parentId,
-                  "AssociatedQuoteLineId": `@{${refId}.id}`,
-                  "ProductRelationshipTypeId": productRelationshipTypeId,
-                  "AssociatedQuoteLinePricing": pricing
-              }
-          });
-      }
+    console.log('[buildLookerNodes] Final Nodes:', nodes);
+    return nodes;
   }
 
-  calculateSubscriptionTerm(startDate: string, endDate: string): number {
-      if (!startDate || !endDate) return 1;
-      const start = this.parseDate(startDate);
-      const end = this.parseDate(endDate);
-      if (isNaN(start.getTime()) || isNaN(end.getTime())) return 1;
-
-      const endAdjusted = new Date(end);
-      endAdjusted.setDate(endAdjusted.getDate() + 1);
-
-      let months = (endAdjusted.getFullYear() - start.getFullYear()) * 12 + (endAdjusted.getMonth() - start.getMonth());
-      const temp = new Date(start);
-      temp.setMonth(temp.getMonth() + months);
-
-      if (temp > endAdjusted) {
-          months--;
-          temp.setTime(start.getTime());
-          temp.setMonth(temp.getMonth() + months);
-      }
-
-      const diffTime = endAdjusted.getTime() - temp.getTime();
-      const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
-      if (diffDays === 0) return months;
-
-      const daysInMonth = new Date(temp.getFullYear(), temp.getMonth() + 1, 0).getDate();
-      return (months + (diffDays / daysInMonth));
-  }
-
-  formatTermDisplay(startDate: string, endDate: string): string {
-    if (!startDate || !endDate) return '-';
-    const totalMonths = this.calculateSubscriptionTerm(startDate, endDate);
-    const wholeMonths = Math.floor(totalMonths);
-    const years = Math.floor(wholeMonths / 12);
-    const months = wholeMonths % 12;
-    
-    // Calculate remaining days
-    const start = this.parseDate(startDate);
-    const end = this.parseDate(endDate);
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) return '-';
-
-    const endAdjusted = new Date(end);
-    endAdjusted.setDate(endAdjusted.getDate() + 1);
-    
-    const temp = new Date(start);
-    temp.setMonth(temp.getMonth() + wholeMonths);
-    const diffTime = endAdjusted.getTime() - temp.getTime();
-    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
-
-    let result = "";
-    if (years > 0) result += `${years} year${years > 1 ? 's' : ''}`;
-    if (months > 0) {
-        if (result) result += " ";
-        result += `${months} month${months > 1 ? 's' : ''}`;
-    }
-    if (diffDays > 0) {
-        if (result) result += " ";
-        result += `${diffDays} day${diffDays > 1 ? 's' : ''}`;
-    }
-
-    return result || "0 days";
-  }
-
-  private extractRelationshipId(response: any) {
-      if (!response) return;
-      const relTypes = response.records || response.recentItems || [];
-      const bundleRelType = relTypes.find((r: any) => r.Name === 'Bundle to Bundle Component Relationship');
-
-      if (bundleRelType) {
-          this.productRelationshipTypeId = bundleRelType.Id;
-      } else if (relTypes.length > 0) {
-          this.productRelationshipTypeId = relTypes[0].Id;
-      }
-  }
 
   private validateLookerDates(): boolean {
     if (this.subscriptionPeriods.length === 0) return true;
@@ -1122,6 +964,67 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
     const start = this.parseDate(s); const end = this.parseDate(e);
     const test = new Date(start); test.setFullYear(test.getFullYear() + 1); test.setDate(test.getDate() - 1);
     return test.getTime() <= end.getTime();
+  }
+
+  calculateSubscriptionTerm(startDate: string, endDate: string): number {
+      if (!startDate || !endDate) return 1;
+      const start = this.parseDate(startDate);
+      const end = this.parseDate(endDate);
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) return 1;
+
+      const endAdjusted = new Date(end);
+      endAdjusted.setDate(endAdjusted.getDate() + 1);
+
+      let months = (endAdjusted.getFullYear() - start.getFullYear()) * 12 + (endAdjusted.getMonth() - start.getMonth());
+      const temp = new Date(start);
+      temp.setMonth(temp.getMonth() + months);
+
+      if (temp > endAdjusted) {
+          months--;
+          temp.setTime(start.getTime());
+          temp.setMonth(temp.getMonth() + months);
+      }
+
+      const diffTime = endAdjusted.getTime() - temp.getTime();
+      const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+      if (diffDays === 0) return months;
+
+      const daysInMonth = new Date(temp.getFullYear(), temp.getMonth() + 1, 0).getDate();
+      return (months + (diffDays / daysInMonth));
+  }
+
+  formatTermDisplay(startDate: string, endDate: string): string {
+    if (!startDate || !endDate) return '-';
+    const totalMonths = this.calculateSubscriptionTerm(startDate, endDate);
+    const wholeMonths = Math.floor(totalMonths);
+    const years = Math.floor(wholeMonths / 12);
+    const months = wholeMonths % 12;
+    
+    // Calculate remaining days
+    const start = this.parseDate(startDate);
+    const end = this.parseDate(endDate);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) return '-';
+
+    const endAdjusted = new Date(end);
+    endAdjusted.setDate(endAdjusted.getDate() + 1);
+    
+    const temp = new Date(start);
+    temp.setMonth(temp.getMonth() + wholeMonths);
+    const diffTime = endAdjusted.getTime() - temp.getTime();
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+    let result = "";
+    if (years > 0) result += `${years} year${years > 1 ? 's' : ''}`;
+    if (months > 0) {
+        if (result) result += " ";
+        result += `${months} month${months > 1 ? 's' : ''}`;
+    }
+    if (diffDays > 0) {
+        if (result) result += " ";
+        result += `${diffDays} day${diffDays > 1 ? 's' : ''}`;
+    }
+
+    return result || "0 days";
   }
 
   private checkAndDefaultExpirationDate() {

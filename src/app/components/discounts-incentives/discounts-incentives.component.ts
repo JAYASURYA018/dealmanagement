@@ -2172,7 +2172,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
                     "taxPref": "Skip",
                     "contextDetails": {},
                     "graph": {
-                        "graphId": "createQuoteWithLines",
+                        "graphId": "createQuote",
                         "records": records
                     }
                 };

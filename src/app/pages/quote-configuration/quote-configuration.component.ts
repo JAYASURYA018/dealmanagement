@@ -13,7 +13,7 @@ import { SalesforceApiService } from '../../services/salesforce-api.service';
 import { LoadingService } from '../../services/loading.service';
 import { ToastService } from '../../services/toast.service';
 import { ContextService } from '../../services/context.service';
-import { finalize, take, map, tap } from 'rxjs/operators';
+import { finalize, take, map, tap, switchMap } from 'rxjs/operators';
 
 @Component({
   selector: 'app-quote-configuration',
@@ -67,12 +67,13 @@ export class QuoteConfigurationComponent implements OnInit {
   isLoading = true;
   accountName = '';
   opportunityName = '';
-  quoteNumber = '';
+  quoteName = '';
   quoteId = '';
   opportunityId = '';
 
   products: any[] = [];
   selectedItemId = sessionStorage.getItem('qc_selected_item') || 'quote_details';
+  isEditingName = false;
   annualContractValue = 0;
   isPrimary = false;
 
@@ -373,7 +374,6 @@ export class QuoteConfigurationComponent implements OnInit {
 
     this.quoteDataService.quoteData$
       .pipe(
-        take(1),
         finalize(() => (this.isLoading = false))
       )
       .subscribe({
@@ -395,26 +395,62 @@ export class QuoteConfigurationComponent implements OnInit {
     this.isLoading = true;
     this.loadingService.show();
 
-    this.sfApi.getQuoteProducts(this.quoteId)
-      .pipe(
-        take(1),
-        map((res: any) => ({
-          products: (res?.records ?? []).map((r: any) => ({
+    this.sfApi.loadConfiguratorInstance(this.quoteId).pipe(
+      take(1),
+      switchMap((loadRes: any) => {
+        const contextId = loadRes.contextId;
+        if (!contextId) throw new Error('No contextId received from load-instance');
+        return this.sfApi.getConfiguratorInstance(contextId);
+      }),
+      map((instanceRes: any) => {
+        const records = instanceRes.instance?.records || [];
+        const transactionRecord = instanceRes.transaction?.SalesTransaction?.[0];
+        const quoteRecord = records.find((r: any) => r.attributes?.type === 'Quote') || transactionRecord;
+        
+        const salesTransactionName = instanceRes.SalesTransactionName || 
+                                   instanceRes.instance?.SalesTransactionName || 
+                                   instanceRes.quote?.SalesTransactionName ||
+                                   transactionRecord?.SalesTransactionName ||
+                                   quoteRecord?.SalesTransactionName || 
+                                   quoteRecord?.Name ||
+                                   instanceRes.quote?.Name ||
+                                   instanceRes.Name;
+        
+        return {
+          quoteId: quoteRecord?.id || quoteRecord?.Id,
+          quoteName: salesTransactionName,
+          products: records.filter((r: any) => r.attributes?.type === 'QuoteLineItem').map((r: any) => ({
             id: r.Product2Id,
-            name: r.Name,
-            quoteLineId: r.quoteLineItemId,
+            name: r.Name || r.Product2?.Name,
+            quoteLineId: r.Id,
             categoryId: r.categoryId ?? ''
           }))
-        })),
-        tap((mappedData) => {
-          const existing = this.quoteDataService.getQuoteData();
-          this.quoteDataService.setQuoteData({ ...existing, ...mappedData });
-        }),
-        finalize(() => {
-          this.loadingService.hide();
-          this.isLoading = false;
-        })
-      )
+        };
+      }),
+      tap((mappedData) => {
+        const existing = this.quoteDataService.getQuoteData();
+        
+        // Merge products to avoid losing locally added items that aren't yet in Salesforce records
+        const existingProducts = existing.products || [];
+        const newProducts = mappedData.products || [];
+        
+        const productMap = new Map();
+        existingProducts.forEach((p: any) => productMap.set(p.id, p));
+        newProducts.forEach((p: any) => productMap.set(p.id, p));
+        
+        const mergedProducts = Array.from(productMap.values());
+        
+        this.quoteDataService.setQuoteData({ 
+          ...existing, 
+          ...mappedData, 
+          products: mergedProducts 
+        });
+      }),
+      finalize(() => {
+        this.loadingService.hide();
+        this.isLoading = false;
+      })
+    )
       .subscribe({
         next: (mappedData) => this.applyQuoteData(mappedData),
         error: (err) => this.handleError('Failed to load quote products', err)
@@ -424,10 +460,18 @@ export class QuoteConfigurationComponent implements OnInit {
   applyQuoteData(data: any) {
     if (!data) return;
 
-    this.accountName = data.accountName || 'Acme Corp';
-    this.opportunityName = data.opportunityName || 'Expansion Deal';
-    this.opportunityId = data.opportunityId || '';
-    this.quoteNumber = data.quoteNumber || 'Q-DRAFT';
+    // Use nullish coalescing to preserve existing values if the new data doesn't have them
+    this.accountName = data.accountName || this.accountName || 'Acme Corp';
+    this.opportunityName = data.opportunityName || this.opportunityName || 'Expansion Deal';
+    this.opportunityId = data.opportunityId || this.opportunityId || '';
+    
+    // Explicitly check for quoteName in data, then fall back to current value, then to 'Q-'
+    if (data.quoteName) {
+      this.quoteName = data.quoteName;
+    } else if (!this.quoteName) {
+      this.quoteName = 'Q-';
+    }
+    
     if (data.quoteId) this.quoteId = data.quoteId;
 
     if (data.products && data.products.length > 0) {
