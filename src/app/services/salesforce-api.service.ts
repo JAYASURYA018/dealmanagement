@@ -172,13 +172,14 @@ export class SalesforceApiService {
         const payload = {
             "configuratorOptions": {
                 "executePricing": true,
-                "addDefaultConfiguration": true,
-                "executeConfigurationRules": true,
-                "validateProductCatalog": true
+                "addDefaultConfiguration": false,
+                "executeConfigurationRules": true
             },
             "contextId": contextId,
             "addedNodes": addedNodes
         };
+
+        console.log(`[API Request] ${method}`, JSON.stringify(payload, null, 2));
 
         const headers = new HttpHeaders({
             'Authorization': `Bearer ${token}`,

@@ -11,8 +11,12 @@ export interface ProductItem {
     frequency?: string;
     productId?: string;
     pricebookEntryId?: string;
+    psmId?: string;
+    relComponentId?: string;
     nonProdProductId?: string | null;
     nonProdPricebookEntryId?: string | null;
+    nonProdPsmId?: string | null;
+    nonProdRelComponentId?: string | null;
     nonProdProductName?: string | null;
 }
 
@@ -27,6 +31,8 @@ export interface UserTypeRow {
     frequency?: string;
     productId?: string;
     pricebookEntryId?: string;
+    psmId?: string;
+    relComponentId?: string;
     name?: string;
 }
 
@@ -45,6 +51,13 @@ export interface SubscriptionPeriod {
     userRows: UserTypeRow[];
     productId?: string;
     pricebookEntryId?: string;
+    psmId?: string;
+    relComponentId?: string;
+    nonProdProductId?: string | null;
+    nonProdPricebookEntryId?: string | null;
+    nonProdPsmId?: string | null;
+    nonProdRelComponentId?: string | null;
+    nonProdProductName?: string | null;
     durationDays?: number; // Added
     isManual?: boolean;
 }
@@ -265,12 +278,16 @@ export class SubscriptionPeriodItemComponent implements OnInit {
             this.period.nonProdPrice = selected.nonProdPrice ?? null;
             this.period.productId = selected.productId;
             this.period.pricebookEntryId = selected.pricebookEntryId;
+            (this.period as any).psmId = selected.psmId;
 
             const nonProdRow = this.period.userRows.find(r => r.type === 'Non-prod');
             if (nonProdRow) {
                 nonProdRow.price = selected.nonProdPrice ?? 0;
                 nonProdRow.frequency = selected.frequency;
                 nonProdRow.name = selected.nonProdProductName || '';
+                nonProdRow.productId = selected.nonProdProductId || '';
+                nonProdRow.pricebookEntryId = selected.nonProdPricebookEntryId || '';
+                nonProdRow.psmId = selected.nonProdPsmId || '';
             }
             this.productChanged.emit();
         }
