@@ -114,7 +114,7 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
     // Fallback: If SalesTransactionGroup is missing/empty, synthesize groups from Looker items
     let groups = [...(transaction.SalesTransactionGroup || [])];
     if (groups.length === 0) {
-      const lookerItems = items.filter((item: any) => item.PeriodBoundary === 'Anniversary');
+      const lookerItems = items.filter((item: any) => item.ParentSalesTransactionItem !== null);
       const periodMap = new Map<string, any>();
       
       lookerItems.forEach((item: any) => {
@@ -144,7 +144,7 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
       // Fallback: Match by date range if SalesTransactionItemGroup is missing
       const groupItems = items.filter((item: any) => {
         const matchesGroup = item.SalesTransactionItemGroup === group.id || 
-                            (item.PeriodBoundary === 'Anniversary' && 
+                            (item.ParentSalesTransactionItem !== null && 
                              item.StartDate === group.GroupStartDate__std && 
                              item.EndDate === group.GroupEndDate__std);
         
@@ -175,7 +175,7 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
     const bundleItem = items.find((item: any) => 
        item.ProductCode === 'LookerBundleNewRCA' || 
        item.Product === this.productId ||
-       item.PeriodBoundary === 'Anniversary'
+       item.ParentSalesTransactionItem !== null
     );
     
     const topLevelLookerItems = bundleItem ? [{

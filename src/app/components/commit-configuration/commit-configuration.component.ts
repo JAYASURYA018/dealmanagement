@@ -156,9 +156,10 @@ export class CommitConfigurationComponent implements OnInit {
     // 3. Incentives and Discounts - Group them for display if needed
     const incentives = items.filter((item: any) => item.Incentive__c !== null);
     const discounts = items.filter((item: any) => 
-       item.Incentive__c === null && // Show in discounts ONLY if it doesn't have an incentive
-       item.Discount !== null && 
-       item.ProductCode !== 'LookerBundleNewRCA'
+       item.Incentive__c === null && 
+       item.ProductCode !== 'GCPRCA' && 
+       item.ProductCode !== 'LookerBundleNewRCA' &&
+       item.Product !== this.productId
     );
 
     // Only include periods that actually have items to show in the breakdown sections
