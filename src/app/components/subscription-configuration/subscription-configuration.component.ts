@@ -1,4 +1,4 @@
-import { Component, HostListener, OnInit, OnChanges, inject, ViewChild, Input } from '@angular/core';
+import { Component, HostListener, OnInit, OnChanges, inject, ViewChild, Input, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { QuoteRefreshService } from '../../services/quote-refresh.service';
 import { CartService } from '../../services/cart.service';
@@ -37,10 +37,10 @@ import { SubscriptionPeriodItemComponent, SubscriptionPeriod, ProductItem } from
     `]
 })
 export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
-  
+
   public lastSavedLookerState: string | null = null; // State tracking
   static lastInitTime = 0;
-  
+
   private router = inject(Router);
   private sfApi = inject(SalesforceApiService);
   private contextService = inject(ContextService);
@@ -53,11 +53,24 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
   isSaving: boolean = false;
   isLoading: boolean = true;
   showSuccessPopup: boolean = false;
-  
+
+  // Validation messages from configurator rules
+  validationErrors: { message: string; messageType: string; category: string }[] = [];
+  hasValidationErrors: boolean = false;
+  periodErrors: Map<number, { message: string; messageType: string; category?: string }[]> = new Map();
+  private saveAttemptedWithWarnings: boolean = false;
+  // Maps ref_child_XXX IDs to period indices for error mapping
+  private childRefToPeriodMap: Map<string, number> = new Map();
+  private childRefToProductNameMap: Map<string, string> = new Map();
+
+  @Output() validationMessagesReceived = new EventEmitter<{ productId: string; productName: string; messages: any[] }>();
+
   activeTab: 'details' | 'plans' = 'details';
 
   // Quote Data Properties
   opportunityName: string = '';
+  @Input() accountId: string = '';
+  @Input() startingSortOrder: number = 1;
   @Input() accountName: string = '';
   @Input() quoteId: string = '';
   @Input() remainingQuota: number = 1000;
@@ -66,106 +79,183 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
   get totalContractValue(): number {
     let total = 0;
     if (!this.subscriptionPeriods) return total;
-    
+
     this.subscriptionPeriods.forEach((period: any) => {
       const term = this.calculateSubscriptionTerm(period.startDate, period.endDate);
-      
+
       if (period.productName) {
-         const pTotal = ((period.unitPrice || 0) * term) * (1 - (period.discount || 0) / 100);
-         total += pTotal;
+        const pTotal = ((period.unitPrice || 0) * term) * (1 - (period.discount || 0) / 100);
+        total += pTotal;
       }
-      
+
       if (period.userRows && period.userRows.length > 0) {
-         period.userRows.forEach((row: any) => {
-             const qty = row.quantity || 0;
-             if (qty > 0) {
-                 let price = row.price || 0;
-                 if (row.type === 'Non-prod' && period.nonProdPrice) {
-                     price = period.nonProdPrice;
-                 }
-                 const rowTotal = (price * qty * term) * (1 - (row.discount || 0) / 100);
-                 total += rowTotal;
-             }
-         });
+        period.userRows.forEach((row: any) => {
+          const qty = row.quantity || 0;
+          if (qty > 0) {
+            let price = row.price || 0;
+            if (row.type === 'Non-prod' && period.nonProdPrice) {
+              price = period.nonProdPrice;
+            }
+            const rowTotal = (price * qty * term) * (1 - (row.discount || 0) / 100);
+            total += rowTotal;
+          }
+        });
       }
     });
     return total;
   }
 
-  getPreviewData(previewData: any) {
-    const commitments = this.buildSubscriptionPreview();
-    const productsWithoutDiscounts = this.buildProductsWithoutDiscounts(previewData);
+  getPreviewData(response: any) {
+    const transaction = response?.transaction?.SalesTransaction?.[0];
+    if (!transaction) return null;
+
+    const items = transaction.SalesTransactionItem || [];
     
+    // Fallback: If SalesTransactionGroup is missing/empty, synthesize groups from Looker items
+    let groups = [...(transaction.SalesTransactionGroup || [])];
+    if (groups.length === 0) {
+      const lookerItems = items.filter((item: any) => item.PeriodBoundary === 'Anniversary');
+      const periodMap = new Map<string, any>();
+      
+      lookerItems.forEach((item: any) => {
+        const key = `${item.StartDate}_${item.EndDate}`;
+        if (!periodMap.has(key)) {
+          periodMap.set(key, {
+            id: item.SalesTransactionItemGroup || `synthetic_${key}`,
+            GroupStartDate__std: item.StartDate,
+            GroupEndDate__std: item.EndDate,
+            isSynthetic: true
+          });
+        }
+      });
+      groups = Array.from(periodMap.values());
+    }
+
+    // Sort groups by start date to ensure Years are in chronological order
+    groups.sort((a, b) => {
+      const dateA = new Date(a.GroupStartDate__std).getTime();
+      const dateB = new Date(b.GroupStartDate__std).getTime();
+      return dateA - dateB;
+    });
+
+    // Map groups to previewCommitments (Years)
+    const previewCommitments = groups.map((group: any, idx: number) => {
+      // Filter items for this group
+      // Fallback: Match by date range if SalesTransactionItemGroup is missing
+      const groupItems = items.filter((item: any) => {
+        const matchesGroup = item.SalesTransactionItemGroup === group.id || 
+                            (item.PeriodBoundary === 'Anniversary' && 
+                             item.StartDate === group.GroupStartDate__std && 
+                             item.EndDate === group.GroupEndDate__std);
+        
+        return matchesGroup && 
+               item.ProductCode !== 'LookerBundleNewRCA' && 
+               item.Product !== this.productId;
+      });
+      
+      return {
+        name: `Year ${idx + 1}`,
+        startDate: this.formatDateForDisplay(group.GroupStartDate__std),
+        endDate: this.formatDateForDisplay(group.GroupEndDate__std),
+        amount: group.GroupTotalAmount || groupItems.reduce((sum: number, i: any) => sum + (Number(i.TotalPrice) || 0), 0),
+        items: groupItems.map((item: any) => ({
+          name: item.ProductName || item.ProductCode,
+          operationType: item.Operation_Type__c || 'New',
+          quantity: item.Quantity,
+          startDate: this.formatDateForDisplay(item.StartDate),
+          orderTerm: item.SubscriptionTerm,
+          listPrice: item.ListPrice || item.UnitPrice,
+          discount: item.Discount || 0,
+          total: item.TotalPrice
+        }))
+      };
+    });
+
+    // Deduplicate top-level Looker items (only show the bundle once in "Product Details")
+    const bundleItem = items.find((item: any) => 
+       item.ProductCode === 'LookerBundleNewRCA' || 
+       item.Product === this.productId ||
+       item.PeriodBoundary === 'Anniversary'
+    );
+    
+    const topLevelLookerItems = bundleItem ? [{
+      ...bundleItem,
+      Product_Name_Display: 'Looker New RCA',
+      Quantity: 1,
+      ListPrice: bundleItem.ListPrice || bundleItem.UnitPrice || 0,
+      TotalPrice: transaction.GrandTotal__std || transaction.TotalAmount || 0
+    }] : [];
+
     return {
-      previewData: previewData,
-      previewCommitments: commitments,
-      previewProductsWithoutDiscounts: productsWithoutDiscounts,
+      previewCommitments: previewCommitments,
+      commitmentDetailsOnly: [],
+      previewProductsWithoutDiscounts: topLevelLookerItems,
       isLookerSubscription: true,
-      totalContractValue: this.totalContractValue,
+      totalContractValue: transaction.GrandTotal__std || transaction.TotalAmount,
       totalIncentivesValue: 0,
-      totalTerms: this.calculateSubscriptionTerm(this.termStartInput, this.termEndDate),
-      startDate: this.termStartInput,
-      expirationDate: this.termEndDate
+      totalTerms: previewCommitments.length * 12,
+      startDate: transaction.StartDate,
+      expirationDate: transaction.ExpirationDate__c
     };
   }
 
   private buildSubscriptionPreview(): any[] {
     const previews: any[] = [];
     this.subscriptionPeriods.forEach((period: any, index: number) => {
-        const items: any[] = [];
-        if (period.productName) {
-            const term = this.calculateSubscriptionTerm(period.startDate, period.endDate);
-            const total = (period.unitPrice * term) * (1 - (period.discount || 0) / 100);
+      const items: any[] = [];
+      if (period.productName) {
+        const term = this.calculateSubscriptionTerm(period.startDate, period.endDate);
+        const total = (period.unitPrice * term) * (1 - (period.discount || 0) / 100);
 
-            items.push({
-                name: period.productName,
-                operationType: this.operationType || 'New',
-                quantity: 1,
-                startDate: this.formatDateForDisplay(period.startDate),
-                endDate: period.endDate ? this.formatDateForDisplay(period.endDate) : '-',
-                orderTerm: this.formatTermDisplay(period.startDate, period.endDate),
-                listPrice: period.unitPrice,
-                discount: period.discount || 0,
-                total: total
-            });
-        }
-
-        period.userRows.forEach((userRow: any) => {
-            const qty = userRow.quantity || 0;
-            if (qty > 0) {
-                const term = this.calculateSubscriptionTerm(period.startDate, period.endDate);
-                let price = userRow.price || 0;
-                if (userRow.type === 'Non-prod' && period.nonProdPrice) price = period.nonProdPrice;
-                
-                const total = (price * qty * term) * (1 - (userRow.discount || 0) / 100);
-                const baseName = userRow.name || period.productName || 'Looker';
-                const displayName = baseName.includes(userRow.type) ? baseName : `${baseName} ${userRow.type}`;
-
-                items.push({
-                    name: displayName,
-                    operationType: this.operationType || 'New',
-                    quantity: qty,
-                    startDate: this.formatDateForDisplay(period.startDate),
-                    endDate: period.endDate ? this.formatDateForDisplay(period.endDate) : '-',
-                    orderTerm: this.formatTermDisplay(period.startDate, period.endDate),
-                    listPrice: price,
-                    discount: userRow.discount || 0,
-                    total: total
-                });
-            }
+        items.push({
+          name: period.productName,
+          operationType: this.operationType || 'New',
+          quantity: 1,
+          startDate: this.formatDateForDisplay(period.startDate),
+          endDate: period.endDate ? this.formatDateForDisplay(period.endDate) : '-',
+          orderTerm: this.formatTermDisplay(period.startDate, period.endDate),
+          listPrice: period.unitPrice,
+          discount: period.discount || 0,
+          total: total
         });
+      }
 
-        const periodTotal = items.reduce((sum, item) => sum + (item.total || 0), 0);
-        if (items.length > 0) {
-            previews.push({
-                name: `Year ${index + 1}`,
-                startDate: this.formatDateForDisplay(period.startDate),
-                endDate: this.formatDateForDisplay(period.endDate),
-                months: this.calculateSubscriptionTerm(period.startDate, period.endDate),
-                amount: periodTotal,
-                items
-            });
+      period.userRows.forEach((userRow: any) => {
+        const qty = userRow.quantity || 0;
+        if (qty > 0) {
+          const term = this.calculateSubscriptionTerm(period.startDate, period.endDate);
+          let price = userRow.price || 0;
+          if (userRow.type === 'Non-prod' && period.nonProdPrice) price = period.nonProdPrice;
+
+          const total = (price * qty * term) * (1 - (userRow.discount || 0) / 100);
+          const baseName = userRow.name || period.productName || 'Looker';
+          const displayName = baseName.includes(userRow.type) ? baseName : `${baseName} ${userRow.type}`;
+
+          items.push({
+            name: displayName,
+            operationType: this.operationType || 'New',
+            quantity: qty,
+            startDate: this.formatDateForDisplay(period.startDate),
+            endDate: period.endDate ? this.formatDateForDisplay(period.endDate) : '-',
+            orderTerm: this.formatTermDisplay(period.startDate, period.endDate),
+            listPrice: price,
+            discount: userRow.discount || 0,
+            total: total
+          });
         }
+      });
+
+      const periodTotal = items.reduce((sum, item) => sum + (item.total || 0), 0);
+      if (items.length > 0) {
+        previews.push({
+          name: `Year ${index + 1}`,
+          startDate: this.formatDateForDisplay(period.startDate),
+          endDate: this.formatDateForDisplay(period.endDate),
+          months: this.calculateSubscriptionTerm(period.startDate, period.endDate),
+          amount: periodTotal,
+          items
+        });
+      }
     });
     return previews;
   }
@@ -176,11 +266,11 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
 
     const bundle = previewData.QuoteLineItems.records.find((item: any) => item.Product2Id === this.productId);
     if (bundle) {
-        products.push({
-            ...bundle,
-            Product_Name_Display: bundle.Product2?.Name || this.productName || 'Looker',
-            Quantity: 1
-        });
+      products.push({
+        ...bundle,
+        Product_Name_Display: bundle.Product2?.Name || this.productName || 'Looker',
+        Quantity: 1
+      });
     }
     return products;
   }
@@ -217,7 +307,7 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
   operationType: string = '';
   billingFrequency: string = '';
   termStartsOn: string = '';
-  
+
   isSubscriptionModalOpen: boolean = false;
   currentFrequency: string = 'Yearly';
   subscriptionPeriods: SubscriptionPeriod[] = [];
@@ -226,7 +316,7 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
   operationTypeOptions: string[] = [];
   billingFrequencyOptions: string[] = [];
   termStartsOnOptions: string[] = [];
-  
+
   operationTypeOpen: boolean = false;
   billingFrequencyOpen: boolean = false;
   termStartsOnOpen: boolean = false;
@@ -258,7 +348,7 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
 
   ngOnInit() {
     this.checkAndDefaultExpirationDate();
-    
+
     SubscriptionConfigurationComponent.lastInitTime = Date.now();
 
     this.quoteDataService.quoteData$.subscribe(quoteData => {
@@ -325,34 +415,34 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
           console.log('[loadBundleDetails] Result Object:', result);
           const groups = result.productComponentGroups || result.groups || [];
           console.log('[loadBundleDetails] Found Groups:', groups);
-          
+
           if (result.prices?.length > 0) {
             const monthlyPrice = result.prices.find((p: any) => p.pricingModel?.frequency === 'Months');
             this.bundlePricebookEntryId = monthlyPrice ? monthlyPrice.priceBookEntryId : result.prices[0].priceBookEntryId;
-            this.bundlePsmId = monthlyPrice?.pricingModel?.id || 
-                               result.productSellingModelOptions?.find((o: any) => (o.productSellingModel?.name || '').toLowerCase().includes('monthly'))?.productSellingModelId;
+            this.bundlePsmId = monthlyPrice?.pricingModel?.id ||
+              result.productSellingModelOptions?.find((o: any) => (o.productSellingModel?.name || '').toLowerCase().includes('monthly'))?.productSellingModelId;
           }
           const platformGroup = groups.find((g: any) => {
-              const name = (g.name || '').toLowerCase();
-              return name.includes('platform');
+            const name = (g.name || '').toLowerCase();
+            return name.includes('platform');
           });
           const userGroupMatch = groups.find((g: any) => {
-              const name = (g.name || '').toLowerCase();
-              return name.includes('user');
+            const name = (g.name || '').toLowerCase();
+            return name.includes('user');
           });
           const nonProdGroup = groups.find((g: any) => {
-              const name = (g.name || '').toLowerCase();
-              return name.includes('non-prod') || name.includes('non prod');
+            const name = (g.name || '').toLowerCase();
+            return name.includes('non-prod') || name.includes('non prod');
           });
 
           if (platformGroup) {
             this.productOptions = platformGroup.components.map((c: any) => {
               const priceObj = c.prices?.find((p: any) => {
-                  const freq = (p.pricingModel?.frequency || '').toLowerCase();
-                  return freq === 'months' || freq === 'monthly' || freq.includes('monthly in advance');
+                const freq = (p.pricingModel?.frequency || '').toLowerCase();
+                return freq === 'months' || freq === 'monthly' || freq.includes('monthly in advance');
               });
               if (!priceObj && c.prices?.length > 0) {
-                  console.warn(`[loadBundleDetails] No monthly price match for ${c.name}. Available frequencies:`, c.prices.map((p: any) => p.pricingModel?.frequency));
+                console.warn(`[loadBundleDetails] No monthly price match for ${c.name}. Available frequencies:`, c.prices.map((p: any) => p.pricingModel?.frequency));
               }
 
               let nonProdMatch = null;
@@ -367,8 +457,8 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
                 });
               }
               const npPriceObj = nonProdMatch?.prices?.find((p: any) => {
-                  const freq = (p.pricingModel?.frequency || '').toLowerCase();
-                  return freq === 'months' || freq === 'monthly' || freq.includes('monthly in advance');
+                const freq = (p.pricingModel?.frequency || '').toLowerCase();
+                return freq === 'months' || freq === 'monthly' || freq.includes('monthly in advance');
               });
 
               return {
@@ -379,15 +469,15 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
                 frequency: 'Months',
                 productId: c.productId || c.id,
                 pricebookEntryId: priceObj?.priceBookEntryId,
-                psmId: priceObj?.pricingModel?.productSellingModelId || 
-                       c.productSellingModelOptions?.find((o: any) => o.productSellingModel?.id === priceObj?.pricingModel?.id)?.productSellingModelId ||
-                       c.productSellingModelOptions?.find((o: any) => (o.productSellingModel?.name || '').toLowerCase().includes('monthly'))?.productSellingModelId,
+                psmId: priceObj?.pricingModel?.productSellingModelId ||
+                  c.productSellingModelOptions?.find((o: any) => o.productSellingModel?.id === priceObj?.pricingModel?.id)?.productSellingModelId ||
+                  c.productSellingModelOptions?.find((o: any) => (o.productSellingModel?.name || '').toLowerCase().includes('monthly'))?.productSellingModelId,
                 relComponentId: c.productRelatedComponent?.id,
                 nonProdProductId: nonProdMatch?.productId || nonProdMatch?.id,
                 nonProdPricebookEntryId: npPriceObj?.priceBookEntryId,
                 nonProdPsmId: npPriceObj?.pricingModel?.productSellingModelId ||
-                              nonProdMatch?.productSellingModelOptions?.find((o: any) => o.productSellingModel?.id === npPriceObj?.pricingModel?.id)?.productSellingModelId ||
-                              nonProdMatch?.productSellingModelOptions?.find((o: any) => (o.productSellingModel?.name || '').toLowerCase().includes('monthly'))?.productSellingModelId,
+                  nonProdMatch?.productSellingModelOptions?.find((o: any) => o.productSellingModel?.id === npPriceObj?.pricingModel?.id)?.productSellingModelId ||
+                  nonProdMatch?.productSellingModelOptions?.find((o: any) => (o.productSellingModel?.name || '').toLowerCase().includes('monthly'))?.productSellingModelId,
                 nonProdRelComponentId: nonProdMatch?.productRelatedComponent?.id,
                 nonProdProductName: nonProdMatch?.name
               };
@@ -397,18 +487,18 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
           if (userGroupMatch) {
             userGroupMatch.components.forEach((c: any) => {
               const priceObj = c.prices?.find((p: any) => {
-                  const freq = (p.pricingModel?.frequency || '').toLowerCase();
-                  return freq === 'months' || freq === 'monthly' || freq.includes('monthly in advance');
+                const freq = (p.pricingModel?.frequency || '').toLowerCase();
+                return freq === 'months' || freq === 'monthly' || freq.includes('monthly in advance');
               });
               if (!priceObj && c.prices?.length > 0) {
-                  console.warn(`[loadBundleDetails] No monthly price match for User Product ${c.name}. Available frequencies:`, c.prices.map((p: any) => p.pricingModel?.frequency));
+                console.warn(`[loadBundleDetails] No monthly price match for User Product ${c.name}. Available frequencies:`, c.prices.map((p: any) => p.pricingModel?.frequency));
               }
               const price = priceObj ? priceObj.price : 0;
               const pid = c.productId || c.id;
               const pbe = priceObj?.priceBookEntryId;
-              const psm = priceObj?.pricingModel?.productSellingModelId || 
-                          c.productSellingModelOptions?.find((o: any) => o.productSellingModel?.id === priceObj?.pricingModel?.id)?.productSellingModelId ||
-                          c.productSellingModelOptions?.find((o: any) => (o.productSellingModel?.name || '').toLowerCase().includes('monthly'))?.productSellingModelId;
+              const psm = priceObj?.pricingModel?.productSellingModelId ||
+                c.productSellingModelOptions?.find((o: any) => o.productSellingModel?.id === priceObj?.pricingModel?.id)?.productSellingModelId ||
+                c.productSellingModelOptions?.find((o: any) => (o.productSellingModel?.name || '').toLowerCase().includes('monthly'))?.productSellingModelId;
               const relCompId = c.productRelatedComponent?.id;
 
               const nameLower = (c.name || '').toLowerCase();
@@ -670,10 +760,78 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
     this.onSave();
   }
 
-  onSave(onSuccess?: () => void, skipFeedback: boolean = false) {
+  clearValidationErrors() {
+    this.validationErrors = [];
+    this.hasValidationErrors = false;
+    this.periodErrors.clear();
+    this.childRefToPeriodMap.clear();
+  }
+
+  private parseConfiguratorMessages(response: any): { errors: any[]; warnings: any[]; infos: any[]; all: any[]; hasMessages: boolean; hasConfigurationRules: boolean; hasErrors: boolean; hasConfigurationRuleErrors: boolean } {
+    const errors: any[] = [];
+    const warnings: any[] = [];
+    const infos: any[] = [];
+    const all: any[] = [];
+    let hasConfigurationRules = false;
+    let hasErrors = false;
+    let hasConfigurationRuleErrors = false;
+
+    const messages = response?.configuratorMessages;
+    if (!messages || typeof messages !== 'object') {
+      return { errors, warnings, infos, all, hasMessages: false, hasConfigurationRules: false, hasErrors: false, hasConfigurationRuleErrors: false };
+    }
+
+    // Iterate through all keys in configuratorMessages
+    Object.keys(messages).forEach(key => {
+      const msgArray = messages[key];
+      if (!Array.isArray(msgArray)) return;
+
+      const resolvedProductName = this.resolveProductNameForNode(key);
+
+      msgArray.forEach((msg: any) => {
+        const entry = {
+          message: msg.message,
+          messageType: msg.messageType || 'info',
+          category: msg.category,
+          primaryRecordId: msg.primaryRecordId,
+          relatedRecordId: msg.relatedRecordId || key,
+          productName: resolvedProductName || this.productName
+        };
+
+        if (msg.messageType === 'error') {
+          hasErrors = true;
+        }
+
+        if (msg.category === 'configurationrules') {
+          hasConfigurationRules = true;
+          if (msg.messageType === 'error') {
+            hasConfigurationRuleErrors = true;
+          }
+          
+          // Only show configurationrules on the UI as per user request
+          all.push(entry);
+
+          if (msg.messageType === 'error') {
+            errors.push(entry);
+          } else if (msg.messageType === 'warning') {
+            warnings.push(entry);
+          } else {
+            infos.push(entry);
+          }
+        }
+      });
+    });
+
+    return { errors, warnings, infos, all, hasMessages: all.length > 0, hasConfigurationRules, hasErrors, hasConfigurationRuleErrors };
+  }
+
+  onSave(onSuccess?: (previewData?: any) => void, skipFeedback: boolean = false) {
     if (this.isSaving) return;
     this.syncAllPeriodUserProducts();
-    if (!this.validateLookerDates()) return;
+    if (!this.validateLookerConfig()) return;
+
+    // Clear previous validation errors before saving
+    this.clearValidationErrors();
 
     this.isSaving = true;
     this.loadingService.show();
@@ -682,61 +840,147 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
     const mappingId = this.contextService.quoteEntitiesMappingId;
 
     if (!targetQuoteId) {
-        this.toastService.show('Quote ID not found.', 'error');
-        this.isSaving = false;
-        this.loadingService.hide();
-        return;
+      this.toastService.show('Quote ID not found.', 'error');
+      this.isSaving = false;
+      this.loadingService.hide();
+      return;
     }
 
     if (!mappingId) {
-        this.toastService.show('Context Mapping ID not found. Please reload the page.', 'error');
-        this.isSaving = false;
-        this.loadingService.hide();
-        return;
+      this.toastService.show('Context Mapping ID not found. Please reload the page.', 'error');
+      this.isSaving = false;
+      this.loadingService.hide();
+      return;
     }
 
     // 1. Set Instance
     this.sfApi.setInstance(mappingId, targetQuoteId).pipe(
-        switchMap((setRes: any) => {
-            const contextId = setRes.contextId;
-            if (!contextId) throw new Error('Failed to initialize configurator instance');
+      switchMap((setRes: any) => {
+        const contextId = setRes.contextId;
+        if (!contextId) throw new Error('Failed to initialize configurator instance');
 
-            // 2. Build Looker Nodes
-            const addedNodes = this.buildLookerNodes(targetQuoteId);
+        // 2. Build Looker Nodes
+        const addedNodes = this.buildLookerNodes(targetQuoteId);
 
-            // 3. Add Nodes
-            return this.sfApi.addNodes(contextId, addedNodes).pipe(
-                switchMap(() => {
-                    // 4. Save Instance
-                    return this.sfApi.saveInstance(contextId);
-                })
-            );
-        })
-    ).subscribe({
-        next: (res: any) => {
-            this.isSaving = false;
-            this.loadingService.hide();
+        // 3. Add Nodes
+        return this.sfApi.addNodes(contextId, addedNodes).pipe(
+          switchMap((addNodesRes: any) => {
+            // 3.5. Check for configuratorMessages in the response
+            const parsed = this.parseConfiguratorMessages(addNodesRes);
+            console.log('[Looker Save] Configurator messages parsed:', parsed);
 
-            this.lastSavedLookerState = JSON.stringify({
-                periods: this.subscriptionPeriods,
-                startDate: this.startDate,
-                expirationDate: this.expirationDate,
-                termStartInput: this.termStartInput,
-                termEndDate: this.termEndDate
-            });
+            // Block logic: Only configurationrules category matters
+            // 1st save: block if any configurationrules messages exist
+            // 2nd save: block only if configurationrules messages with error type exist
+            const shouldBlock = parsed.hasConfigurationRuleErrors || (parsed.hasConfigurationRules && !this.saveAttemptedWithWarnings);
 
-            if (!skipFeedback) {
-                this.toastService.show('Looker Configuration Saved Successfully!', 'success');
-                this.showSuccessPopup = true;
+            if (shouldBlock) {
+              if (parsed.hasConfigurationRules && !parsed.hasConfigurationRuleErrors) {
+                this.saveAttemptedWithWarnings = true;
+              }
+              
+              this.validationErrors = parsed.all.map(e => ({
+                message: e.message,
+                messageType: e.messageType,
+                category: e.category
+              }));
+              this.hasValidationErrors = true;
+
+              // Group errors by period
+              this.groupErrorsByPeriod(parsed.all);
+
+              // Emit to parent for sidebar highlighting
+              this.validationMessagesReceived.emit({
+                productId: this.productId || '',
+                productName: this.getActualProductNames(targetQuoteId),
+                messages: parsed.all
+              });
+
+              const blockMsg = parsed.hasConfigurationRuleErrors ? 
+                'Configuration rule errors found. Fix issues and try again.' : 
+                'Review configuration rules and click Save again to proceed.';
+              
+              throw { isValidationError: true, message: blockMsg };
             }
-            if (onSuccess) onSuccess();
-        },
-        error: (err) => {
-            console.error('❌ Looker Save error:', err);
-            this.isSaving = false;
-            this.loadingService.hide();
-            this.toastService.show(err.message || 'Failed to save looker configuration.', 'error');
+            
+            // If we reach here, either clean or user clicked second time with only non-error rules
+            this.saveAttemptedWithWarnings = false;
+            
+            // 4. Save Instance
+            return this.sfApi.saveInstance(contextId).pipe(
+              switchMap(() => {
+                // New Place Action Call after Save and before Load
+                const placePayload = {
+                  "pricingPref": "force",
+                  "graph": {
+                    "graphId": "updateQuote",
+                    "records": [
+                      {
+                        "referenceId": targetQuoteId,
+                        "record": {
+                          "attributes": {
+                            "type": "Quote",
+                            "method": "PATCH",
+                            "id": targetQuoteId
+                          },
+                          "StartDate": this.termStartInput,
+                          "ExpirationDate": this.termEndDate
+                        }
+                      }
+                    ]
+                  }
+                };
+                return this.sfApi.placeSalesTransaction(placePayload);
+              }),
+              switchMap(() => this.sfApi.loadConfiguratorInstance(targetQuoteId)),
+              switchMap((loadRes: any) => {
+                const newContextId = loadRes.contextId;
+                return this.sfApi.getConfiguratorInstance(newContextId);
+              })
+            );
+          })
+        );
+      })
+    ).subscribe({
+      next: (res: any) => {
+        this.isSaving = false;
+        this.loadingService.hide();
+
+        // Clear errors on successful save
+        this.clearValidationErrors();
+        this.validationMessagesReceived.emit({
+          productId: this.productId || '',
+          productName: this.getActualProductNames(targetQuoteId),
+          messages: []
+        });
+
+        this.lastSavedLookerState = JSON.stringify({
+          periods: this.subscriptionPeriods,
+          startDate: this.startDate,
+          expirationDate: this.expirationDate,
+          termStartInput: this.termStartInput,
+          termEndDate: this.termEndDate
+        });
+
+        if (!skipFeedback) {
+          this.toastService.show('Looker Configuration Saved Successfully!', 'success');
+          this.showSuccessPopup = true;
         }
+        if (onSuccess) onSuccess(res);
+      },
+      error: (err) => {
+        this.isSaving = false;
+        this.loadingService.hide();
+
+        // If it's a validation error (we threw it), don't show a generic error
+        if (err?.isValidationError) {
+          console.warn('[Looker Save] Blocked by validation errors.');
+          return;
+        }
+
+        console.error('❌ Looker Save error:', err);
+        this.toastService.show(err.message || 'Failed to save looker configuration.', 'error');
+      }
     });
   }
 
@@ -745,247 +989,277 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
     const isRamped = this.subscriptionPeriods.length > 1;
     let globalChildCounter = 1;
     let globalRelCounter = 1;
-    let globalSortOrder = 1;
+    let globalSortOrder = this.startingSortOrder;
+    // Clear and rebuild the mapping registries
+    this.childRefToPeriodMap.clear();
+    this.childRefToProductNameMap.clear();
 
     this.subscriptionPeriods.forEach((period, pIdx) => {
-        const periodNum = pIdx + 1;
-        const periodSuffix = periodNum.toString().padStart(2, '0');
-        const groupRefId = `looker_group${periodNum}`;
-        const parentLineRefId = `looker_parent_line_${periodSuffix}`;
-        
-        // A. QuoteLineGroup Node - ALWAYS FORCE RAMPED/YEARLY for Looker compliance
+      const periodNum = pIdx + 1;
+      const periodSuffix = periodNum.toString().padStart(2, '0');
+      const groupRefId = `looker_group${periodNum}`;
+      const parentLineRefId = `looker_parent_line_${periodSuffix}`;
+
+      // A. QuoteLineGroup Node - Only create groups when there are multiple periods (ramped)
+      if (isRamped) {
         nodes.push({
-            "path": [quoteId, groupRefId],
-            "addedObject": {
-                "id": groupRefId,
-                "GroupSortOrder": periodNum,
-                "GroupName": `Year ${periodNum}`,
-                "GroupIsRamped__std": true, 
-                "GroupSegmentType__std": "Yearly",
-                "GroupStartDate__std": period.startDate,
-                "GroupEndDate__std": period.endDate,
-                "GroupSource": groupRefId,
-                "ParentReference": quoteId,
-                "SalesTransactionGroupParent": quoteId,
-                "businessObjectType": "QuoteLineGroup"
-            }
+          "path": [quoteId, groupRefId],
+          "addedObject": {
+            "id": groupRefId,
+            "GroupSortOrder": this.startingSortOrder + pIdx,
+            "GroupName": `Year ${periodNum}`,
+            "GroupIsRamped__std": true,
+            "GroupSegmentType__std": "Yearly",
+            "GroupStartDate__std": period.startDate,
+            "GroupEndDate__std": period.endDate,
+            "GroupSource": groupRefId,
+            "ParentReference": quoteId,
+            "SalesTransactionGroupParent": quoteId,
+            "businessObjectType": "QuoteLineGroup"
+          }
+        });
+      }
+
+      // B. Main Bundle Line Node (Looker New RCA) - This is the Parent
+      const subTermRaw = this.calculateSubscriptionTerm(period.startDate as string, period.endDate as string);
+      const subTerm = subTermRaw > 0.95 && subTermRaw < 1.05 ? 1 : subTermRaw;
+      const standardFreq = this.billingFrequency ? this.billingFrequency.split(' ')[0] : 'Monthly';
+
+      const startDateIso = period.startDate ? `${period.startDate}T00:00:00.000Z` : null;
+      const endDateIso = period.endDate ? `${period.endDate}T00:00:00.000Z` : null;
+
+      nodes.push({
+        "path": [quoteId, parentLineRefId],
+        "addedObject": {
+          "id": parentLineRefId,
+          "ItemSortOrder": globalSortOrder++,
+          "SalesTransactionItemSource": parentLineRefId,
+          "SalesTransactionItemParent": quoteId,
+          "SalesTransactionItemGroup": isRamped ? `@{${groupRefId}.id}` : null,
+          "LineItemPath": parentLineRefId,
+          "Product": this.productId || '01tDz00000Ea17zIAB',
+          "PricebookEntry": this.bundlePricebookEntryId || '01uDz00000dqXP8IAM',
+          "ProductSellingModel": this.bundlePsmId || "0jPDz000000001OMAQ",
+          "Quantity": 1,
+          "StartDate": startDateIso,
+          "EndDate": endDateIso,
+          "SubscriptionTerm": subTerm,
+          "SubscriptionTermUnit": "Monthly",
+          "PeriodBoundary": "Anniversary",
+          "BillingFrequency": standardFreq,
+          "Billing_Frequency__c": this.billingFrequency,
+          "Operation_Type__c": this.operationType || 'New',
+          "Term_Starts_On__c": this.termStartsOn || 'Fixed Start Date',
+          "businessObjectType": "QuoteLineItem"
+        }
+      });
+
+      // C. Platform Product as a Child
+      if (period.productId && period.pricebookEntryId && period.psmId) {
+        const childSuffix = globalChildCounter.toString().padStart(3, '0');
+        const relSuffix = globalRelCounter.toString().padStart(3, '0');
+        const platChildId = `ref_child_${childSuffix}`;
+        const platRelId = `ref_rel_${relSuffix}`;
+        // Track this child ref to the period index
+        this.childRefToPeriodMap.set(platChildId, pIdx);
+        this.childRefToProductNameMap.set(platChildId, period.productName || 'Platform');
+
+        globalChildCounter++;
+        globalRelCounter++;
+
+        const childObj: any = {
+          "id": platChildId,
+          "ItemSortOrder": globalSortOrder++,
+          "SalesTransactionItemSource": platChildId,
+          "SalesTransactionItemParent": quoteId,
+          "Product": period.productId,
+          "PricebookEntry": period.pricebookEntryId,
+          "ProductSellingModel": period.psmId || "0jPDz000000001OMAQ",
+          "Quantity": 1,
+          "StartDate": startDateIso,
+          "EndDate": endDateIso,
+          "SubscriptionTerm": subTerm,
+          "Discount": period.discount || 0,
+          "SubscriptionTermUnit": "Monthly",
+          "PeriodBoundary": "Anniversary",
+          "BillingFrequency": standardFreq,
+          "Billing_Frequency__c": this.billingFrequency,
+          "Operation_Type__c": this.operationType || 'New',
+          "Term_Starts_On__c": this.termStartsOn || 'Fixed Start Date',
+          "businessObjectType": "QuoteLineItem"
+        };
+
+        nodes.push({
+          "path": [quoteId, platChildId],
+          "addedObject": childObj
         });
 
-        // B. Main Bundle Line Node (Looker New RCA) - This is the Parent
-        const subTermRaw = this.calculateSubscriptionTerm(period.startDate as string, period.endDate as string);
-        const subTerm = subTermRaw > 0.95 && subTermRaw < 1.05 ? 1 : subTermRaw;
-        const standardFreq = this.billingFrequency ? this.billingFrequency.split(' ')[0] : 'Monthly';
-
-        const startDateIso = period.startDate ? `${period.startDate}T00:00:00.000Z` : null;
-        const endDateIso = period.endDate ? `${period.endDate}T00:00:00.000Z` : null;
-
         nodes.push({
-            "path": [quoteId, parentLineRefId],
-            "addedObject": {
-                "id": parentLineRefId,
-                "ItemSortOrder": globalSortOrder++,
-                "SalesTransactionItemSource": parentLineRefId,
-                "SalesTransactionItemParent": quoteId,
-                "SalesTransactionItemGroup": `@{${groupRefId}.id}`,
-                "LineItemPath": parentLineRefId,
-                "Product": this.productId || '01tDz00000Ea17zIAB',
-                "PricebookEntry": this.bundlePricebookEntryId || '01uDz00000dqXP8IAM',
-                "ProductSellingModel": this.bundlePsmId || "0jPDz000000001OMAQ",
-                "Quantity": 1,
-                "StartDate": startDateIso,
-                "EndDate": endDateIso,
-                "SubscriptionTerm": subTerm,
-                "SubscriptionTermUnit": "Monthly",
-                "PeriodBoundary": "Anniversary",
-                "BillingFrequency": standardFreq,
-                "Billing_Frequency__c": this.billingFrequency,
-                "Operation_Type__c": this.operationType || 'New',
-                "Term_Starts_On__c": this.termStartsOn || 'Fixed Start Date',
-                "Looker_Instance_Id__c": "",
-                "GCP_Project_Id__c": "",
-                "businessObjectType": "QuoteLineItem"
-            }
+          "path": [quoteId, platChildId, platRelId],
+          "addedObject": {
+            "id": platRelId,
+            "MainItem": parentLineRefId,
+            "AssociatedItem": platChildId,
+            "ProductRelatedComponent": period.relComponentId,
+            "AssociatedItemPricing": "NotIncludedInBundlePrice",
+            "AssociatedQuantScaleMethod": "Proportional",
+            "businessObjectType": "QuoteLineRelationship"
+          }
         });
+      }
 
-        // C. Platform Product as a Child
-        if (period.productId && period.pricebookEntryId && period.psmId) {
+      // D. Child User Product Nodes & Relationships
+      period.userRows.forEach((row) => {
+        if (row.type !== 'Non-prod' && (row.quantity || 0) > 0) {
+          if (row.productId && row.pricebookEntryId && row.psmId) {
             const childSuffix = globalChildCounter.toString().padStart(3, '0');
             const relSuffix = globalRelCounter.toString().padStart(3, '0');
-            const platChildId = `ref_child_${childSuffix}`;
-            const platRelId = `ref_rel_${relSuffix}`;
-            
+            const childId = `ref_child_${childSuffix}`;
+            const relId = `ref_rel_${relSuffix}`;
+            // Track this child ref to the period index
+            this.childRefToPeriodMap.set(childId, pIdx);
+            this.childRefToProductNameMap.set(childId, row.name || row.type);
+
             globalChildCounter++;
             globalRelCounter++;
 
-            const childObj: any = {
-                "id": platChildId,
-                "ItemSortOrder": globalSortOrder++,
-                "SalesTransactionItemSource": platChildId,
-                "SalesTransactionItemParent": quoteId,
-                "Product": period.productId,
-                "PricebookEntry": period.pricebookEntryId,
-                "ProductSellingModel": period.psmId || "0jPDz000000001OMAQ",
-                "Quantity": 1,
-                "StartDate": startDateIso,
-                "EndDate": endDateIso,
-                "SubscriptionTerm": subTerm,
-                "SubscriptionTermUnit": "Monthly",
-                "PeriodBoundary": "Anniversary",
-                "BillingFrequency": standardFreq,
-                "Billing_Frequency__c": this.billingFrequency,
-                "Operation_Type__c": this.operationType || 'New',
-                "Term_Starts_On__c": this.termStartsOn || 'Fixed Start Date',
-                "Looker_Instance_Id__c": "",
-                "GCP_Project_Id__c": "",
-                "businessObjectType": "QuoteLineItem"
+            // User Product Line
+            const userObj: any = {
+              "id": childId,
+              "ItemSortOrder": globalSortOrder++,
+              "SalesTransactionItemSource": childId,
+              "SalesTransactionItemParent": quoteId,
+              "Product": row.productId,
+              "PricebookEntry": row.pricebookEntryId,
+              "ProductSellingModel": row.psmId || "0jPDz000000001OMAQ",
+              "Quantity": row.quantity || 0,
+              "StartDate": startDateIso,
+              "EndDate": endDateIso,
+              "SubscriptionTerm": subTerm,
+              "Discount": row.discount,
+              "SubscriptionTermUnit": "Monthly",
+              "PeriodBoundary": "Anniversary",
+              "BillingFrequency": standardFreq,
+              "Billing_Frequency__c": this.billingFrequency,
+              "Operation_Type__c": this.operationType || 'New',
+              "Term_Starts_On__c": this.termStartsOn || 'Fixed Start Date',
+              "businessObjectType": "QuoteLineItem"
             };
-            // OMITTING DISCOUNT FOR STRICT POSTMAN ALIGNMENT
+
+            if (row.lookerInstanceId) userObj["Looker_Instance_Id__c"] = row.lookerInstanceId;
+            if (row.gcpProjectId) userObj["GCP_Project_Id__c"] = row.gcpProjectId;
+            if (row.region) userObj["Looker_Region__c"] = row.region;
 
             nodes.push({
-                "path": [quoteId, platChildId],
-                "addedObject": childObj
+              "path": [quoteId, childId],
+              "addedObject": userObj
             });
 
+            // Relationship
             nodes.push({
-                "path": [quoteId, platChildId, platRelId],
-                "addedObject": {
-                    "id": platRelId,
-                    "MainItem": parentLineRefId,
-                    "AssociatedItem": platChildId,
-                    "ProductRelatedComponent": period.relComponentId,
-                    "AssociatedItemPricing": "NotIncludedInBundlePrice",
-                    "AssociatedQuantScaleMethod": "Proportional",
-                    "businessObjectType": "QuoteLineRelationship"
-                }
+              "path": [quoteId, childId, relId],
+              "addedObject": {
+                "id": relId,
+                "MainItem": parentLineRefId,
+                "AssociatedItem": childId,
+                "ProductRelatedComponent": row.relComponentId,
+                "AssociatedItemPricing": "NotIncludedInBundlePrice",
+                "AssociatedQuantScaleMethod": "Proportional",
+                "businessObjectType": "QuoteLineRelationship"
+              }
             });
+          }
         }
+      });
 
-        // D. Child User Product Nodes & Relationships
-        period.userRows.forEach((row) => {
-            if (row.type !== 'Non-prod' && (row.quantity || 0) > 0) {
-                if (row.productId && row.pricebookEntryId && row.psmId) {
-                    const childSuffix = globalChildCounter.toString().padStart(3, '0');
-                    const relSuffix = globalRelCounter.toString().padStart(3, '0');
-                    const childId = `ref_child_${childSuffix}`;
-                    const relId = `ref_rel_${relSuffix}`;
-                    
-                    globalChildCounter++;
-                    globalRelCounter++;
+      // E. Non-Prod Product Logic
+      const nonProdRow = period.userRows.find(r => r.type === 'Non-prod');
+      if (nonProdRow && (nonProdRow.quantity || 0) > 0 && period.nonProdProductId && period.nonProdPricebookEntryId && period.nonProdPsmId) {
+        const childSuffix = globalChildCounter.toString().padStart(3, '0');
+        const relSuffix = globalRelCounter.toString().padStart(3, '0');
+        const npChildId = `ref_child_${childSuffix}`;
+        const npRelId = `ref_rel_${relSuffix}`;
+        // Track this child ref to the period index
+        this.childRefToPeriodMap.set(npChildId, pIdx);
+        this.childRefToProductNameMap.set(npChildId, period.nonProdProductName || nonProdRow.type);
 
-                    // User Product Line
-                    const userObj: any = {
-                        "id": childId,
-                        "ItemSortOrder": globalSortOrder++,
-                        "SalesTransactionItemSource": childId,
-                        "SalesTransactionItemParent": quoteId,
-                        "Product": row.productId,
-                        "PricebookEntry": row.pricebookEntryId,
-                        "ProductSellingModel": row.psmId || "0jPDz000000001OMAQ",
-                        "Quantity": row.quantity || 0,
-                        "StartDate": startDateIso,
-                        "EndDate": endDateIso,
-                        "SubscriptionTerm": subTerm,
-                        "SubscriptionTermUnit": "Monthly",
-                        "PeriodBoundary": "Anniversary",
-                        "BillingFrequency": standardFreq,
-                        "Billing_Frequency__c": this.billingFrequency,
-                        "Operation_Type__c": this.operationType || 'New',
-                        "Term_Starts_On__c": this.termStartsOn || 'Fixed Start Date',
-                        "Looker_Instance_Id__c": row.lookerInstanceId || "",
-                        "GCP_Project_Id__c": row.gcpProjectId || "",
-                        "Looker_Region__c": row.region || "",
-                        "businessObjectType": "QuoteLineItem"
-                    };
-                    // OMITTING DISCOUNT FOR STRICT POSTMAN ALIGNMENT
+        globalChildCounter++;
+        globalRelCounter++;
 
-                    nodes.push({
-                        "path": [quoteId, childId],
-                        "addedObject": userObj
-                    });
+        const npObj: any = {
+          "id": npChildId,
+          "ItemSortOrder": globalSortOrder++,
+          "SalesTransactionItemSource": npChildId,
+          "SalesTransactionItemParent": quoteId,
+          "Product": period.nonProdProductId,
+          "PricebookEntry": period.nonProdPricebookEntryId,
+          "ProductSellingModel": period.nonProdPsmId || "0jPDz000000001OMAQ",
+          "Quantity": nonProdRow.quantity || 0,
+          "StartDate": startDateIso,
+          "EndDate": endDateIso,
+          "SubscriptionTerm": subTerm,
+          "Discount": nonProdRow.discount,
+          "SubscriptionTermUnit": "Monthly",
+          "PeriodBoundary": "Anniversary",
+          "BillingFrequency": standardFreq,
+          "Billing_Frequency__c": this.billingFrequency,
+          "Operation_Type__c": this.operationType || 'New',
+          "Term_Starts_On__c": this.termStartsOn || 'Fixed Start Date',
+          "businessObjectType": "QuoteLineItem"
+        };
 
-                    // Relationship
-                    nodes.push({
-                        "path": [quoteId, childId, relId],
-                        "addedObject": {
-                            "id": relId,
-                            "MainItem": parentLineRefId,
-                            "AssociatedItem": childId,
-                            "ProductRelatedComponent": row.relComponentId,
-                            "AssociatedItemPricing": "NotIncludedInBundlePrice",
-                            "AssociatedQuantScaleMethod": "Proportional",
-                            "businessObjectType": "QuoteLineRelationship"
-                        }
-                    });
-                }
-            }
+        if (nonProdRow.lookerInstanceId) npObj["Looker_Instance_Id__c"] = nonProdRow.lookerInstanceId;
+        if (nonProdRow.gcpProjectId) npObj["GCP_Project_Id__c"] = nonProdRow.gcpProjectId;
+        if (nonProdRow.region) npObj["Looker_Region__c"] = nonProdRow.region;
+
+        nodes.push({
+          "path": [quoteId, npChildId],
+          "addedObject": npObj
         });
 
-        // E. Non-Prod Product Logic
-        const nonProdRow = period.userRows.find(r => r.type === 'Non-prod');
-        if (nonProdRow && (nonProdRow.quantity || 0) > 0 && period.nonProdProductId && period.nonProdPricebookEntryId && period.nonProdPsmId) {
-            const childSuffix = globalChildCounter.toString().padStart(3, '0');
-            const relSuffix = globalRelCounter.toString().padStart(3, '0');
-            const npChildId = `ref_child_${childSuffix}`;
-            const npRelId = `ref_rel_${relSuffix}`;
-            
-            globalChildCounter++;
-            globalRelCounter++;
-
-            const npObj: any = {
-                "id": npChildId,
-                "ItemSortOrder": globalSortOrder++,
-                "SalesTransactionItemSource": npChildId,
-                "SalesTransactionItemParent": quoteId,
-                "Product": period.nonProdProductId,
-                "PricebookEntry": period.nonProdPricebookEntryId,
-                "ProductSellingModel": period.nonProdPsmId || "0jPDz000000001OMAQ",
-                "Quantity": nonProdRow.quantity || 0,
-                "StartDate": startDateIso,
-                "EndDate": endDateIso,
-                "SubscriptionTerm": subTerm,
-                "SubscriptionTermUnit": "Monthly",
-                "PeriodBoundary": "Anniversary",
-                "BillingFrequency": standardFreq,
-                "Billing_Frequency__c": this.billingFrequency,
-                "Operation_Type__c": this.operationType || 'New',
-                "Term_Starts_On__c": this.termStartsOn || 'Fixed Start Date',
-                "businessObjectType": "QuoteLineItem"
-            };
-            // OMITTING DISCOUNT FOR STRICT POSTMAN ALIGNMENT
-
-            nodes.push({
-                "path": [quoteId, npChildId],
-                "addedObject": npObj
-            });
-
-            // Relationship to Platform
-            nodes.push({
-                "path": [quoteId, npChildId, npRelId],
-                "addedObject": {
-                    "id": npRelId,
-                    "MainItem": parentLineRefId,
-                    "AssociatedItem": npChildId,
-                    "ProductRelatedComponent": period.nonProdRelComponentId,
-                    "AssociatedItemPricing": "NotIncludedInBundlePrice",
-                    "AssociatedQuantScaleMethod": "Proportional",
-                    "businessObjectType": "QuoteLineRelationship"
-                }
-            });
-        }
+        // Relationship to Platform
+        nodes.push({
+          "path": [quoteId, npChildId, npRelId],
+          "addedObject": {
+            "id": npRelId,
+            "MainItem": parentLineRefId,
+            "AssociatedItem": npChildId,
+            "ProductRelatedComponent": period.nonProdRelComponentId,
+            "AssociatedItemPricing": "NotIncludedInBundlePrice",
+            "AssociatedQuantScaleMethod": "Proportional",
+            "businessObjectType": "QuoteLineRelationship"
+          }
+        });
+      }
     });
 
     console.log('[buildLookerNodes] Final Nodes:', nodes);
+    console.log('[buildLookerNodes] childRefToPeriodMap:', Object.fromEntries(this.childRefToPeriodMap));
     return nodes;
   }
 
 
-  private validateLookerDates(): boolean {
+  private validateLookerConfig(): boolean {
     if (this.subscriptionPeriods.length === 0) return true;
+
+    for (let i = 0; i < this.subscriptionPeriods.length; i++) {
+      const p = this.subscriptionPeriods[i];
+      const yearLabel = `Year ${i + 1}`;
+
+      // 1. Check if period has a platform product
+      if (!p.productName || p.productName === 'Select') {
+        this.toastService.show(`${yearLabel}: Must select platform product.`, 'error');
+        return false;
+      }
+    }
+
+    // 3. Date check for the last period
     const last = this.subscriptionPeriods[this.subscriptionPeriods.length - 1];
     if (last.endDate !== this.termEndDate) {
       this.toastService.show('The last period end date must match the overall subscription end date.', 'error');
       return false;
     }
+
     return true;
   }
 
@@ -1009,22 +1283,22 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
       }
 
       p.userRows.forEach(r => {
-        if (r.type === 'Viewer') { 
-          r.productId = this.viewerUserProductId; 
+        if (r.type === 'Viewer') {
+          r.productId = this.viewerUserProductId;
           r.pricebookEntryId = this.viewerUserPBEId;
           r.psmId = this.viewerUserPSMId;
           r.relComponentId = this.viewerUserRelCompId;
           r.name = this.viewerUserName;
         }
-        else if (r.type === 'Standard') { 
-          r.productId = this.standardUserProductId; 
+        else if (r.type === 'Standard') {
+          r.productId = this.standardUserProductId;
           r.pricebookEntryId = this.standardUserPBEId;
           r.psmId = this.standardUserPSMId;
           r.relComponentId = this.standardUserRelCompId;
           r.name = this.standardUserName;
         }
-        else if (r.type === 'Developer') { 
-          r.productId = this.developerUserProductId; 
+        else if (r.type === 'Developer') {
+          r.productId = this.developerUserProductId;
           r.pricebookEntryId = this.developerUserPBEId;
           r.psmId = this.developerUserPSMId;
           r.relComponentId = this.developerUserRelCompId;
@@ -1113,31 +1387,31 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
   }
 
   calculateSubscriptionTerm(startDate: string, endDate: string): number {
-      if (!startDate || !endDate) return 1;
-      const start = this.parseDate(startDate);
-      const end = this.parseDate(endDate);
-      if (isNaN(start.getTime()) || isNaN(end.getTime())) return 1;
+    if (!startDate || !endDate) return 1;
+    const start = this.parseDate(startDate);
+    const end = this.parseDate(endDate);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) return 1;
 
-      const endAdjusted = new Date(end);
-      endAdjusted.setDate(endAdjusted.getDate() + 1);
+    const endAdjusted = new Date(end);
+    endAdjusted.setDate(endAdjusted.getDate() + 1);
 
-      let months = (endAdjusted.getFullYear() - start.getFullYear()) * 12 + (endAdjusted.getMonth() - start.getMonth());
-      const temp = new Date(start);
+    let months = (endAdjusted.getFullYear() - start.getFullYear()) * 12 + (endAdjusted.getMonth() - start.getMonth());
+    const temp = new Date(start);
+    temp.setMonth(temp.getMonth() + months);
+
+    if (temp > endAdjusted) {
+      months--;
+      temp.setTime(start.getTime());
       temp.setMonth(temp.getMonth() + months);
+    }
 
-      if (temp > endAdjusted) {
-          months--;
-          temp.setTime(start.getTime());
-          temp.setMonth(temp.getMonth() + months);
-      }
+    const diffTime = endAdjusted.getTime() - temp.getTime();
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+    if (diffDays === 0) return months;
 
-      const diffTime = endAdjusted.getTime() - temp.getTime();
-      const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
-      if (diffDays === 0) return months;
-
-      const daysInMonth = new Date(temp.getFullYear(), temp.getMonth() + 1, 0).getDate();
-      const term = months + (diffDays / daysInMonth);
-      return Math.round(term * 10000) / 10000;
+    const daysInMonth = new Date(temp.getFullYear(), temp.getMonth() + 1, 0).getDate();
+    const term = months + (diffDays / daysInMonth);
+    return Math.round(term * 10000) / 10000;
   }
 
   formatTermDisplay(startDate: string, endDate: string): string {
@@ -1146,7 +1420,7 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
     const wholeMonths = Math.floor(totalMonths);
     const years = Math.floor(wholeMonths / 12);
     const months = wholeMonths % 12;
-    
+
     // Calculate remaining days
     const start = this.parseDate(startDate);
     const end = this.parseDate(endDate);
@@ -1154,7 +1428,7 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
 
     const endAdjusted = new Date(end);
     endAdjusted.setDate(endAdjusted.getDate() + 1);
-    
+
     const temp = new Date(start);
     temp.setMonth(temp.getMonth() + wholeMonths);
     const diffTime = endAdjusted.getTime() - temp.getTime();
@@ -1163,12 +1437,12 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
     let result = "";
     if (years > 0) result += `${years} year${years > 1 ? 's' : ''}`;
     if (months > 0) {
-        if (result) result += " ";
-        result += `${months} month${months > 1 ? 's' : ''}`;
+      if (result) result += " ";
+      result += `${months} month${months > 1 ? 's' : ''}`;
     }
     if (diffDays > 0) {
-        if (result) result += " ";
-        result += `${diffDays} day${diffDays > 1 ? 's' : ''}`;
+      if (result) result += " ";
+      result += `${diffDays} day${diffDays > 1 ? 's' : ''}`;
     }
 
     return result || "0 days";
@@ -1179,26 +1453,26 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
     this.expirationDate = this.toIsoDateString(d);
   }
 
-  @HostListener('document:click') closeAllDropdowns() { 
-    this.operationTypeOpen = this.billingFrequencyOpen = this.termStartsOnOpen = false; 
+  @HostListener('document:click') closeAllDropdowns() {
+    this.operationTypeOpen = this.billingFrequencyOpen = this.termStartsOnOpen = false;
   }
 
-  toggleOperationType() { 
+  toggleOperationType() {
     const wasOpen = this.operationTypeOpen;
     this.closeAllDropdowns();
-    this.operationTypeOpen = !wasOpen; 
+    this.operationTypeOpen = !wasOpen;
   }
 
-  toggleBillingFrequency() { 
+  toggleBillingFrequency() {
     const wasOpen = this.billingFrequencyOpen;
     this.closeAllDropdowns();
-    this.billingFrequencyOpen = !wasOpen; 
+    this.billingFrequencyOpen = !wasOpen;
   }
 
-  toggleTermStartsOn() { 
+  toggleTermStartsOn() {
     const wasOpen = this.termStartsOnOpen;
     this.closeAllDropdowns();
-    this.termStartsOnOpen = !wasOpen; 
+    this.termStartsOnOpen = !wasOpen;
   }
   get sessionKey() {
     return 'subscription_config_' + (this.quoteId || 'draft') + '_' + (this.productId || '');
@@ -1254,4 +1528,174 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
   get isLookerSubscription() { return true; }
   get totalTermLabel() { return this.subscriptionPeriods.length + ' periods'; }
   closeSuccessPopup() { this.showSuccessPopup = false; }
+
+  getPeriodErrors(periodIndex: number): { message: string; messageType: string; category?: string }[] {
+    return this.periodErrors.get(periodIndex) || [];
+  }
+
+  private getPeriodIndexFromRelatedRecordId(relatedRecordId: string): number | null {
+    if (!relatedRecordId) return null;
+
+    // 1. Check against our ref_child_XXX mapping (built during buildLookerNodes)
+    if (this.childRefToPeriodMap.has(relatedRecordId)) {
+      return this.childRefToPeriodMap.get(relatedRecordId)!;
+    }
+
+    // 2. Check looker_parent_line_XX format
+    const match = relatedRecordId.match(/looker_parent_line_(\d+)/);
+    if (match && match[1]) {
+      const periodNum = parseInt(match[1], 10);
+      return periodNum > 0 ? periodNum - 1 : null;
+    }
+
+    // 3. Not mappable to a known period
+    return null;
+  }
+
+  private groupErrorsByPeriod(allMessages: any[]): void {
+    this.periodErrors.clear();
+
+    // Separate messages: those with mappable relatedRecordIds vs unknown
+    const unmappedByKey: Map<string, any[]> = new Map();
+    const bundleLevelMessages: any[] = []; // Messages that apply to all periods
+
+    allMessages.forEach((msg: any) => {
+      const periodIndex = this.getPeriodIndexFromRelatedRecordId(msg.relatedRecordId);
+      if (periodIndex !== null && periodIndex >= 0 && periodIndex < this.subscriptionPeriods.length) {
+        // Directly mappable
+        if (!this.periodErrors.has(periodIndex)) {
+          this.periodErrors.set(periodIndex, []);
+        }
+        this.periodErrors.get(periodIndex)!.push({
+          message: msg.message,
+          messageType: msg.messageType,
+          category: msg.category
+        });
+      } else if (msg.relatedRecordId && msg.relatedRecordId !== msg.primaryRecordId) {
+        // Group by unknown relatedRecordId key for positional mapping
+        if (!unmappedByKey.has(msg.relatedRecordId)) {
+          unmappedByKey.set(msg.relatedRecordId, []);
+        }
+        unmappedByKey.get(msg.relatedRecordId)!.push(msg);
+      } else {
+        // Bundle-level messages (no relatedRecordId or relatedRecordId === primaryRecordId)
+        // These apply to all periods
+        bundleLevelMessages.push({
+          message: msg.message,
+          messageType: msg.messageType,
+          category: msg.category
+        });
+      }
+    });
+
+    // Distribute unmapped groups by position (order of distinct keys = order of periods)
+    if (unmappedByKey.size > 0) {
+      const unmappedKeys = Array.from(unmappedByKey.keys());
+      unmappedKeys.forEach((key, idx) => {
+        const periodIndex = idx < this.subscriptionPeriods.length ? idx : this.subscriptionPeriods.length - 1;
+        const msgs = unmappedByKey.get(key)!;
+        if (!this.periodErrors.has(periodIndex)) {
+          this.periodErrors.set(periodIndex, []);
+        }
+        msgs.forEach(m => {
+          this.periodErrors.get(periodIndex)!.push({
+            message: m.message,
+            messageType: m.messageType,
+            category: m.category
+          });
+        });
+      });
+    }
+
+    // Distribute bundle-level messages (like "Validate:...") to all periods
+    if (bundleLevelMessages.length > 0 && this.subscriptionPeriods.length > 0) {
+      for (let i = 0; i < this.subscriptionPeriods.length; i++) {
+        if (!this.periodErrors.has(i)) {
+          this.periodErrors.set(i, []);
+        }
+        bundleLevelMessages.forEach(m => {
+          this.periodErrors.get(i)!.push(m);
+        });
+      }
+    }
+
+    console.log('[Looker] periodErrors map:', Object.fromEntries(this.periodErrors));
+  }
+
+  private resolveProductNameForNode(nodeId: string): string | null {
+    if (nodeId === this.productId || nodeId === 'Parent_Looker_Product') return this.productName;
+    
+    // Check childRefToProductNameMap first (new map with actual product names)
+    if (this.childRefToProductNameMap.has(nodeId)) {
+      return this.childRefToProductNameMap.get(nodeId) || null;
+    }
+
+    // Fallback: Check childRefToPeriodMap (for User items)
+    if (this.childRefToPeriodMap.has(nodeId)) {
+      const periodIndex = this.childRefToPeriodMap.get(nodeId);
+      return `Year ${periodIndex! + 1}`;
+    }
+
+    // Check looker_parent_line_XX format (for Period Parent items)
+    const match = nodeId.match(/looker_parent_line_(\d+)/);
+    if (match && match[1]) {
+      const pIdx = parseInt(match[1], 10);
+      return `Year ${pIdx}`;
+    }
+    
+    return null;
+  }
+
+
+  getActualProductNames(quoteId: string): string {
+    const productNames = new Set<string>();
+
+    // Get product names from subscription periods
+    if (this.subscriptionPeriods && this.subscriptionPeriods.length > 0) {
+      this.subscriptionPeriods.forEach((period: any) => {
+        if (period.productName) {
+          productNames.add(period.productName);
+        }
+      });
+    }
+
+    // Return comma-separated list of unique product names, or fall back to input productName
+    return productNames.size > 0 ? Array.from(productNames).join(', ') : (this.productName || 'Looker');
+  }
+
+  /**
+   * Dynamically calculates total number of items (Groups + QLIs) in this Looker configuration
+   */
+  getItemCount(): number {
+    let count = 0;
+    const isRamped = this.subscriptionPeriods.length > 1;
+
+    this.subscriptionPeriods.forEach(period => {
+      // 1. Group Node (if ramped)
+      if (isRamped) count++;
+
+      // 2. Main Bundle Line
+      count++;
+
+      // 3. Platform Child (if set)
+      if (period.productId) count++;
+
+      // 4. User Product Children
+      if (period.userRows) {
+        period.userRows.forEach(row => {
+          if (row.type !== 'Non-prod' && (row.quantity || 0) > 0 && row.productId) {
+            count++;
+          }
+        });
+      }
+
+      // 5. Non-Prod Child (if set)
+      const nonProdRow = period.userRows?.find(r => r.type === 'Non-prod');
+      if (nonProdRow && (nonProdRow.quantity || 0) > 0 && period.nonProdProductId) {
+        count++;
+      }
+    });
+
+    return count;
+  }
 }

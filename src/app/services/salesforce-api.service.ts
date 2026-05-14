@@ -193,6 +193,42 @@ export class SalesforceApiService {
     }
 
     /**
+     * Updates nodes in a CPQ configurator instance
+     */
+    updateNodes(contextId: string, updatedNodes: any[]): Observable<any> {
+        const method = 'SalesforceApiService.updateNodes';
+        const token = this.contextService.accessToken;
+        const baseUrl = this.contextService.apiBaseUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com';
+        const url = `${baseUrl}/services/data/v66.0/connect/cpq/configurator/actions/update-nodes`;
+
+        const payload = {
+            "configuratorOptions": {
+                "executePricing": true,
+                "returnProductCatalogData": false,
+                "qualifyAllProductsInTransaction": true,
+                "validateProductCatalog": true,
+                "validateAmendRenewCancel": true,
+                "executeConfigurationRules": true,
+                "addDefaultConfiguration": true
+            },
+            "contextId": contextId,
+            "updatedNodes": updatedNodes
+        };
+
+        console.log(`[API Request] ${method}`, JSON.stringify(payload, null, 2));
+
+        const headers = new HttpHeaders({
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        });
+
+        return this.http.post(url, payload, { headers }).pipe(
+            tap(res => console.log(`[API Response] ${method}`, res)),
+            catchError(err => this.handleError(method, err))
+        );
+    }
+
+    /**
      * Saves a CPQ configurator instance
      */
     saveInstance(contextId: string): Observable<any> {

@@ -225,9 +225,16 @@ export class QuotesContainerComponent implements OnInit {
         this.editPopup = true;
         this.selectedItem = { ...quote };
 
+        console.log('[QuotesContainer] Setting quote data in service:', {
+            quoteId: quote.id,
+            quoteName: quote.name,
+            quoteNumber: quote.number
+        });
+
         this.quoteService.setQuoteData({
             quoteId: quote.id,
             quoteName: quote.name,
+            quoteNumber: quote.number,
             primaryContactName: quote.primaryContact
         });
 

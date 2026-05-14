@@ -238,6 +238,10 @@
                                         Name</th>
                                     <th class="border border-gray-300 px-3 py-2 text-center text-sm font-bold">
                                         Quantity</th>
+                                    <th class="border border-gray-300 px-3 py-2 text-right text-sm font-bold">
+                                        List Price</th>
+                                    <th class="border border-gray-300 px-3 py-2 text-right text-sm font-bold">
+                                        Total Price</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -250,9 +254,13 @@
                                         'Product' }}</td>
                                     <td class="border border-gray-300 px-3 py-2 text-sm text-center">{{
                                         item.Quantity }}</td>
+                                    <td class="border border-gray-300 px-3 py-2 text-sm text-right">{{
+                                        formatCurrency(item.ListPrice) }}</td>
+                                    <td class="border border-gray-300 px-3 py-2 text-sm text-right font-bold">{{
+                                        formatCurrency(item.TotalPrice) }}</td>
                                 </tr>
                                 <tr *ngIf="previewProductsWithoutDiscounts.length === 0">
-                                    <td colspan="3"
+                                    <td colspan="5"
                                         class="border border-gray-300 px-3 py-4 text-center text-sm text-gray-500 italic">
                                         No standard products available</td>
                                 </tr>
@@ -351,7 +359,6 @@
 
                         <!-- Bulk/Individual Products Section -->
                         <div *ngIf="period.bulkIndividualItems.length > 0" class="mb-10 space-y-4">
-                            <h4 class="text-lg font-semibold text-gray-800">Bulk/Individual Products</h4>
                             <div class="overflow-hidden rounded-xl border border-gray-200 shadow-sm">
                                 <table class="w-full border-collapse">
                                     <thead>

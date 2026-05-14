@@ -186,9 +186,27 @@ export class CartComponent implements AfterViewInit, OnChanges {
                 currentProducts.forEach((p: any) => productMap.set(p.id, p));
                 newProductsMapped.forEach((p: any) => productMap.set(p.id, p));
 
+                // Robust deep search for the quote number
+                const findValueByKey = (obj: any, targetKey: string): any => {
+                  if (!obj || typeof obj !== 'object') return null;
+                  if (obj[targetKey] !== undefined && obj[targetKey] !== null) return obj[targetKey];
+                  const keys = Object.keys(obj);
+                  for (const key of keys) {
+                    if (typeof obj[key] === 'object') {
+                      const res = findValueByKey(obj[key], targetKey);
+                      if (res) return res;
+                    }
+                  }
+                  return null;
+                };
+
+                const quoteNum = findValueByKey(data.quote, 'QuoteNumber__c') || 
+                                findValueByKey(data.quote, 'QuoteNumber');
+
                 this.quoteDataService.setQuoteData({
                     quoteId: resolvedQuoteId,
                     quoteName: formatted,
+                    quoteNumber: quoteNum,
                     products: Array.from(productMap.values())
                 });
 

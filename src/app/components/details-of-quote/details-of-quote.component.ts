@@ -202,7 +202,7 @@ export class DetailsOfQuoteComponent implements OnInit {
     this.saveFormToSession();
   }
 
-  onSave(onSuccess?: () => void) {
+  onSave(onSuccess?: (previewData?: any) => void) {
     const quoteId = this.quoteDataService.getQuoteData().quoteId;
     if (!quoteId) {
       this.toastService.show('Quote ID not found', 'error');

@@ -117,7 +117,7 @@ export class ContextService {
 
         // Mock Data for Local Development (Fallback)
         return {
-            accessToken: '00DDz000001qvYA!ARQAQI6ooYUUPJ8BAdL_kZEbiogOIFf5skhFuKlouVr1yaOA8cQHMMsx6XPcX7bneFMuTKGXNWB.UyY9QYJriSK.MhORSMR6',
+            accessToken: '00DDz000001qvYA!ARQAQHeTKjMpHJO0Mo9QZDUVi7.lZvDxh89pr9dhDkOfZ2Bliw4z1mMdsf.LbElpgYjCwkPmrCtq_PPJfWAiuJMtJ2dOSFnI',
             opportunityId: '006MOCK_OPP_ID',
             accountId: '001MOCK_ACC_ID',
             accountName: 'Cymbal (Mock Content)',

@@ -134,6 +134,8 @@ export class SubscriptionPeriodItemComponent implements OnInit {
     @Input() regionOptions: string[] = [];
     @Input() isFirst: boolean = false;
     @Input() isLast: boolean = false;
+    @Input() periodIndex: number = 0;
+    @Input() errors: { message: string; messageType: string; category?: string }[] = [];
 
     minDate: string = new Date().toISOString().split('T')[0];
     private lastValidStartDate: string = '';
@@ -500,5 +502,61 @@ export class SubscriptionPeriodItemComponent implements OnInit {
             row.quantity = 0;
         }
         this.productChanged.emit();
+    }
+
+    getErrorBackgroundColor(messageType: string): string {
+        switch (messageType) {
+            case 'error':
+                return 'bg-red-50';
+            case 'warning':
+                return 'bg-yellow-50';
+            case 'info':
+                return 'bg-blue-50';
+            default:
+                return 'bg-gray-50';
+        }
+    }
+
+    getErrorBorderColor(messageType: string): string {
+        switch (messageType) {
+            case 'error':
+                return 'border-l-4 border-red-500';
+            case 'warning':
+                return 'border-l-4 border-yellow-500';
+            case 'info':
+                return 'border-l-4 border-blue-500';
+            default:
+                return 'border-l-4 border-gray-500';
+        }
+    }
+
+    getErrorTextColor(messageType: string): string {
+        switch (messageType) {
+            case 'error':
+                return 'text-red-700';
+            case 'warning':
+                return 'text-yellow-700';
+            case 'info':
+                return 'text-blue-700';
+            default:
+                return 'text-gray-700';
+        }
+    }
+
+    getErrorIconColor(messageType: string): string {
+        switch (messageType) {
+            case 'error':
+                return 'text-red-600';
+            case 'warning':
+                return 'text-yellow-600';
+            case 'info':
+                return 'text-blue-600';
+            default:
+                return 'text-gray-600';
+        }
+    }
+
+    hasErrors(): boolean {
+        return this.errors && this.errors.some(e => e.messageType === 'error');
     }
 }

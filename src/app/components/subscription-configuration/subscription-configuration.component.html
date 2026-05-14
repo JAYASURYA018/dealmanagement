@@ -167,7 +167,9 @@
                         [frequency]="currentFrequency" [isFirst]="first" [isLast]="last"
                         [subscriptionStartDate]="termStartDate" [subscriptionEndDate]="termEndDate"
                         [previousPeriodEndDate]="i > 0 ? subscriptionPeriods[i-1].endDate : ''"
-                        [remainingQuota]="remainingQuota" (productChanged)="onSubscriptionProductChanged()"
+                        [remainingQuota]="remainingQuota" [periodIndex]="i"
+                        [errors]="getPeriodErrors(i)"
+                        (productChanged)="onSubscriptionProductChanged()"
                         (remove)="removeSubscriptionPeriod(i)">
                     </app-subscription-period-item>
 
