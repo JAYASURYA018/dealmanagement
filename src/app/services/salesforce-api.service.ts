@@ -799,24 +799,7 @@ export class SalesforceApiService {
             'Content-Type': 'application/json'
         });
 
-        // The endpoint expects a specific structure for pricing/tax/etc.
-        // If the payload already has the 'graph' property, we wrap it with defaults if needed.
-        const body = payload.graph ? {
-            "pricingPref": "Skip",
-            "catalogRatesPref": "Skip",
-            "configurationPref": {
-                "configurationMethod": "Skip",
-                "configurationOptions": {
-                    "validateProductCatalog": true,
-                    "validateAmendRenewCancel": true,
-                    "executeConfigurationRules": true,
-                    "addDefaultConfiguration": true
-                }
-            },
-            "taxPref": "Skip",
-            "contextDetails": {},
-            ...payload
-        } : payload;
+        const body = payload;
 
         return this.http.post(url, body, { headers }).pipe(
             tap(response => console.log(`[API Response] ${method}`, response)),

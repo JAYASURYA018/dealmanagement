@@ -155,7 +155,11 @@ export class CommitConfigurationComponent implements OnInit {
 
     // 3. Incentives and Discounts - Group them for display if needed
     const incentives = items.filter((item: any) => item.Incentive__c !== null);
-    const discounts = items.filter((item: any) => item.Discount !== null && item.ProductCode !== 'LookerBundleNewRCA');
+    const discounts = items.filter((item: any) => 
+       item.Incentive__c === null && // Show in discounts ONLY if it doesn't have an incentive
+       item.Discount !== null && 
+       item.ProductCode !== 'LookerBundleNewRCA'
+    );
 
     // Only include periods that actually have items to show in the breakdown sections
     const previewCommitments = commitmentDetails.filter((cd: any) => cd.groupItems.length > 0 || cd.bulkIndividualItems.length > 0);
@@ -840,8 +844,10 @@ export class CommitConfigurationComponent implements OnInit {
                         "method": "PATCH",
                         "id": fullQuoteId
                       },
-                      "StartDate": this.startDate,
-                      "ExpirationDate": this.expirationDate
+                      "StartDate": new Date().toISOString().split('T')[0],
+                      "ExpirationDate": this.expirationDate,
+                      "Total_Commitment_Value__c": this.totalContractValue,
+                      "Term__c": this.totalTerms
                     }
                   }
                 ]
@@ -988,7 +994,7 @@ export class CommitConfigurationComponent implements OnInit {
               "StartDate": record.StartDate ? new Date(record.StartDate).toISOString() : null,
               "EndDate": record.EndDate ? new Date(record.EndDate).toISOString() : null,
               "PeriodBoundary": record.PeriodBoundary || "Anniversary",
-              "ItemSortOrder": globalSortOrder++
+              "ItemSortOrder": (record.SortOrder !== undefined && record.SortOrder !== 0) ? record.SortOrder : globalSortOrder++
             }
           };
 

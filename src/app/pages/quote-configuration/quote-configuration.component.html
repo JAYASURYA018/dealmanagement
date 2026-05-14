@@ -219,16 +219,24 @@
 
             <!-- Left Side: Contract Values -->
             <div class="flex items-center gap-8">
+                <ng-container *ngIf="hasGCPProduct">
+                    <div class="flex flex-col">
+                        <span class="text-[12px] font-medium text-slate-500">Annual Contract Value</span>
+                        <span class="text-md font-bold text-slate-800 tracking-tight leading-none">{{
+                            formatCurrency(annualContractValue) }}</span>
+                    </div>
+                    <div class="h-8 w-[1px] bg-slate-100 mx-2"></div>
+                    <div class="flex flex-col">
+                        <span class="text-[12px] font-medium text-slate-500">Total Contract Value</span>
+                        <span class="text-md font-bold text-slate-800 tracking-tight leading-none">{{
+                            formatCurrency(totalContractValue) }}</span>
+                    </div>
+                    <div class="h-8 w-[1px] bg-slate-100 mx-2"></div>
+                </ng-container>
                 <div class="flex flex-col">
-                    <span class="text-[12px] font-medium text-slate-500">Annual Contract Value</span>
+                    <span class="text-[12px] font-medium text-slate-500">Grand Total</span>
                     <span class="text-md font-bold text-slate-800 tracking-tight leading-none">{{
-                        formatCurrency(annualContractValue) }}</span>
-                </div>
-                <div class="h-8 w-[1px] bg-slate-100 mx-2"></div>
-                <div class="flex flex-col">
-                    <span class="text-[12px] font-medium text-slate-500">Total Contract Value</span>
-                    <span class="text-md font-bold text-slate-800 tracking-tight leading-none">{{
-                        formatCurrency(totalContractValue) }}</span>
+                        formatCurrency(grandTotalValue) }}</span>
                 </div>
             </div>
 

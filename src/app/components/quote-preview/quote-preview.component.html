@@ -78,7 +78,7 @@
                                         {{ i + 1 }}</td>
                                     <td
                                         class="px-4 py-3.5 text-xs font-bold border-r border-gray-100 text-gray-900">
-                                        {{ item.Product2?.Name || item.Product_Name__c || 'Product Name' }}</td>
+                                        {{ item.Product_Name_Display || item.Product2?.Name || item.Product_Name__c || 'Product Name' }}</td>
                                     <td class="px-4 py-3.5 text-xs border-r border-gray-100 text-gray-600">
                                         {{ formatDateForDisplay(item.StartDate) }}</td>
                                     <td class="px-4 py-3.5 text-xs border-r border-gray-100 text-gray-600">
@@ -240,7 +240,7 @@
                                         Quantity</th>
                                     <th class="border border-gray-300 px-3 py-2 text-right text-sm font-bold">
                                         List Price</th>
-                                    <th class="border border-gray-300 px-3 py-2 text-right text-sm font-bold">
+                                    <th *ngIf="!isLookerSubscription" class="border border-gray-300 px-3 py-2 text-right text-sm font-bold">
                                         Total Price</th>
                                 </tr>
                             </thead>
@@ -256,7 +256,7 @@
                                         item.Quantity }}</td>
                                     <td class="border border-gray-300 px-3 py-2 text-sm text-right">{{
                                         formatCurrency(item.ListPrice) }}</td>
-                                    <td class="border border-gray-300 px-3 py-2 text-sm text-right font-bold">{{
+                                    <td *ngIf="!isLookerSubscription" class="border border-gray-300 px-3 py-2 text-sm text-right font-bold">{{
                                         formatCurrency(item.TotalPrice) }}</td>
                                 </tr>
                                 <tr *ngIf="previewProductsWithoutDiscounts.length === 0">
@@ -537,13 +537,10 @@
                     </div>
 
                     <!-- Grand Total at bottom right -->
-                    <div class="flex flex-col items-end pt-4 space-y-2">
-                        <div class="flex items-center gap-6">
-                            <span class="text-sm font-bold text-gray-600 uppercase">Grand Total
-                                (USD):</span>
-                            <span class="text-xl font-black text-gray-900">{{
-                                formatCurrency(totalContractValue)
-                                }}</span>
+                    <div *ngIf="!isLookerSubscription" class="flex justify-end mt-4">
+                        <div class="bg-gray-100 px-6 py-4 rounded-lg flex items-center gap-10 border border-gray-200">
+                            <span class="text-sm font-bold text-gray-600 uppercase">Grand Total</span>
+                            <span class="text-2xl font-black text-[#1a73e8] tracking-tighter">{{ formatCurrency(totalContractValue) }}</span>
                         </div>
                     </div>
                 </ng-container>

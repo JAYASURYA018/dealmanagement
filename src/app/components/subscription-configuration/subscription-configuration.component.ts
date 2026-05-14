@@ -182,7 +182,7 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
       ...bundleItem,
       Product_Name_Display: 'Looker New RCA',
       Quantity: 1,
-      ListPrice: bundleItem.ListPrice || bundleItem.UnitPrice || 0,
+      ListPrice: 0,
       TotalPrice: transaction.GrandTotal__std || transaction.TotalAmount || 0
     }] : [];
 
@@ -923,7 +923,7 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
                             "method": "PATCH",
                             "id": targetQuoteId
                           },
-                          "StartDate": this.termStartInput,
+                          "StartDate": new Date().toISOString().split('T')[0],
                           "ExpirationDate": this.termEndDate
                         }
                       }

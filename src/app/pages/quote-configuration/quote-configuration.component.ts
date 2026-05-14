@@ -80,6 +80,7 @@ export class QuoteConfigurationComponent implements OnInit {
   isEditingName = false;
   annualContractValue = 0;
   totalContractValue = 0;
+  grandTotalValue = 0;
   isPrimary = false;
 
   // Track validation errors per product for sidebar highlighting
@@ -103,6 +104,10 @@ export class QuoteConfigurationComponent implements OnInit {
       grouped.get(key)!.push({ message: item.message, messageType: item.messageType || 'info' });
     });
     return Array.from(grouped.entries()).map(([productName, messages]) => ({ productName, messages }));
+  }
+  
+  get hasGCPProduct(): boolean {
+    return this.products.some(p => p.type === 'commitment' || p.name?.toLowerCase().includes('google cloud platform'));
   }
 
   togglePrimary(event: any) {
@@ -366,6 +371,7 @@ export class QuoteConfigurationComponent implements OnInit {
               // Update footer values from the response
               this.totalContractValue = transaction?.CommitmentAmount__c || 0;
               this.annualContractValue = transaction?.Annual_Commit_Value__c || 0;
+              this.grandTotalValue = transaction?.GrandTotal__std || transaction?.TotalAmount || 0;
             }
             this.savedTabs.add(this.selectedItemId);
             this.lastSaveResults.set(this.selectedItemId, res);
@@ -384,6 +390,7 @@ export class QuoteConfigurationComponent implements OnInit {
               // Update footer values from the response
               this.totalContractValue = transaction?.CommitmentAmount__c || 0;
               this.annualContractValue = transaction?.Annual_Commit_Value__c || 0;
+              this.grandTotalValue = transaction?.GrandTotal__std || transaction?.TotalAmount || 0;
             }
             this.savedTabs.add(this.selectedItemId);
             this.lastSaveResults.set(this.selectedItemId, res);
@@ -587,6 +594,8 @@ export class QuoteConfigurationComponent implements OnInit {
 
         const commitmentAmount = findValueByKey(instanceRes, 'CommitmentAmount__c') || 0;
         const annualCommitValue = findValueByKey(instanceRes, 'Annual_Commit_Value__c') || 0;
+        const grandTotal = findValueByKey(instanceRes, 'GrandTotal__std') || 
+                          findValueByKey(instanceRes, 'TotalAmount') || 0;
 
         return {
           quoteId: quoteRecord?.id || quoteRecord?.Id,
@@ -594,6 +603,7 @@ export class QuoteConfigurationComponent implements OnInit {
           quoteNumber: quotenumber,
           totalContractValue: commitmentAmount,
           annualContractValue: annualCommitValue,
+          grandTotalValue: grandTotal,
           products: records.filter((r: any) => r.attributes?.type === 'QuoteLineItem').map((r: any) => ({
             id: r.Product2Id,
             name: r.Name || r.Product2?.Name,
@@ -656,6 +666,10 @@ export class QuoteConfigurationComponent implements OnInit {
     
     if (data.annualContractValue !== undefined) {
       this.annualContractValue = data.annualContractValue;
+    }
+
+    if (data.grandTotalValue !== undefined) {
+      this.grandTotalValue = data.grandTotalValue;
     }
 
     if (data.quoteId) {
