@@ -58,7 +58,7 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
   validationErrors: { message: string; messageType: string; category: string }[] = [];
   hasValidationErrors: boolean = false;
   periodErrors: Map<number, { message: string; messageType: string; category?: string }[]> = new Map();
-  private saveAttemptedWithWarnings: boolean = false;
+  public saveAttemptedWithWarnings: boolean = false;
   // Maps ref_child_XXX IDs to period indices for error mapping
   private childRefToPeriodMap: Map<string, number> = new Map();
   private childRefToProductNameMap: Map<string, string> = new Map();
@@ -74,6 +74,7 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
   @Input() accountName: string = '';
   @Input() quoteId: string = '';
   @Input() remainingQuota: number = 1000;
+
   primaryContactName: string = '';
   salesChannel: string = '';
   get totalContractValue(): number {
@@ -110,13 +111,13 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
     if (!transaction) return null;
 
     const items = transaction.SalesTransactionItem || [];
-    
+
     // Fallback: If SalesTransactionGroup is missing/empty, synthesize groups from Looker items
     let groups = [...(transaction.SalesTransactionGroup || [])];
     if (groups.length === 0) {
       const lookerItems = items.filter((item: any) => item.ParentSalesTransactionItem !== null);
       const periodMap = new Map<string, any>();
-      
+
       lookerItems.forEach((item: any) => {
         const key = `${item.StartDate}_${item.EndDate}`;
         if (!periodMap.has(key)) {
@@ -143,16 +144,16 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
       // Filter items for this group
       // Fallback: Match by date range if SalesTransactionItemGroup is missing
       const groupItems = items.filter((item: any) => {
-        const matchesGroup = item.SalesTransactionItemGroup === group.id || 
-                            (item.ParentSalesTransactionItem !== null && 
-                             item.StartDate === group.GroupStartDate__std && 
-                             item.EndDate === group.GroupEndDate__std);
-        
-        return matchesGroup && 
-               item.ProductCode !== 'LookerBundleNewRCA' && 
-               item.Product !== this.productId;
+        const matchesGroup = item.SalesTransactionItemGroup === group.id ||
+          (item.ParentSalesTransactionItem !== null &&
+            item.StartDate === group.GroupStartDate__std &&
+            item.EndDate === group.GroupEndDate__std);
+
+        return matchesGroup &&
+          item.ProductCode !== 'LookerBundleNewRCA' &&
+          item.Product !== this.productId;
       });
-      
+
       return {
         name: `Year ${idx + 1}`,
         startDate: this.formatDateForDisplay(group.GroupStartDate__std),
@@ -172,18 +173,18 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
     });
 
     // Deduplicate top-level Looker items (only show the bundle once in "Product Details")
-    const bundleItem = items.find((item: any) => 
-       item.ProductCode === 'LookerBundleNewRCA' || 
-       item.Product === this.productId ||
-       item.ParentSalesTransactionItem !== null
+    const bundleItem = items.find((item: any) =>
+      item.ProductCode === 'LookerBundleNewRCA' ||
+      item.Product === this.productId ||
+      item.ParentSalesTransactionItem !== null
     );
-    
+
     const topLevelLookerItems = bundleItem ? [{
       ...bundleItem,
       Product_Name_Display: 'Looker New RCA',
       Quantity: 1,
       ListPrice: 0,
-      TotalPrice: transaction.GrandTotal__std || transaction.TotalAmount || 0
+      TotalPrice: transaction.QuoteTotal__c || transaction.TotalAmount || 0
     }] : [];
 
     return {
@@ -191,7 +192,7 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
       commitmentDetailsOnly: [],
       previewProductsWithoutDiscounts: topLevelLookerItems,
       isLookerSubscription: true,
-      totalContractValue: transaction.GrandTotal__std || transaction.TotalAmount,
+      totalContractValue: transaction.QuoteTotal__c || transaction.TotalAmount,
       totalIncentivesValue: 0,
       totalTerms: previewCommitments.length * 12,
       startDate: transaction.StartDate,
@@ -345,6 +346,28 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
 
   get termStartDate(): string { return this.termStartInput; }
   set termStartDate(value: string) { this.termStartInput = value; }
+
+  getItemCount(): number {
+    let count = 0;
+    const isRamped = this.subscriptionPeriods.length > 1;
+
+    this.subscriptionPeriods.forEach((period: any) => {
+      if (isRamped) count++; // Group
+      count++; // Bundle Parent
+      if (period.productId) count++; // Platform
+      if (period.userRows) {
+        period.userRows.forEach((row: any) => {
+          if (row.type !== 'Non-prod' && (row.quantity || 0) > 0 && row.productId) {
+            count++;
+          }
+        });
+      }
+      // Non-prod check (simplified fallback)
+      const nonProdRow = period.userRows?.find((r: any) => r.type === 'Non-prod');
+      if (nonProdRow && (nonProdRow.quantity || 0) > 0) count++;
+    });
+    return count || 5;
+  }
 
   ngOnInit() {
     this.checkAndDefaultExpirationDate();
@@ -807,7 +830,7 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
           if (msg.messageType === 'error') {
             hasConfigurationRuleErrors = true;
           }
-          
+
           // Only show configurationrules on the UI as per user request
           all.push(entry);
 
@@ -829,6 +852,9 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
     if (this.isSaving) return;
     this.syncAllPeriodUserProducts();
     if (!this.validateLookerConfig()) return;
+
+    // Clear previous validation errors before saving
+    this.clearValidationErrors();
 
     // Clear previous validation errors before saving
     this.clearValidationErrors();
@@ -878,7 +904,7 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
               if (parsed.hasConfigurationRules && !parsed.hasConfigurationRuleErrors) {
                 this.saveAttemptedWithWarnings = true;
               }
-              
+
               this.validationErrors = parsed.all.map(e => ({
                 message: e.message,
                 messageType: e.messageType,
@@ -896,16 +922,16 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
                 messages: parsed.all
               });
 
-              const blockMsg = parsed.hasConfigurationRuleErrors ? 
-                'Configuration rule errors found. Fix issues and try again.' : 
+              const blockMsg = parsed.hasConfigurationRuleErrors ?
+                'Configuration rule errors found. Fix issues and try again.' :
                 'Review configuration rules and click Save again to proceed.';
-              
+
               throw { isValidationError: true, message: blockMsg };
             }
-            
+
             // If we reach here, either clean or user clicked second time with only non-error rules
             this.saveAttemptedWithWarnings = false;
-            
+
             // 4. Save Instance
             return this.sfApi.saveInstance(contextId).pipe(
               switchMap(() => {
@@ -1624,7 +1650,7 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
 
   private resolveProductNameForNode(nodeId: string): string | null {
     if (nodeId === this.productId || nodeId === 'Parent_Looker_Product') return this.productName;
-    
+
     // Check childRefToProductNameMap first (new map with actual product names)
     if (this.childRefToProductNameMap.has(nodeId)) {
       return this.childRefToProductNameMap.get(nodeId) || null;
@@ -1642,7 +1668,7 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
       const pIdx = parseInt(match[1], 10);
       return `Year ${pIdx}`;
     }
-    
+
     return null;
   }
 
@@ -1663,39 +1689,39 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
     return productNames.size > 0 ? Array.from(productNames).join(', ') : (this.productName || 'Looker');
   }
 
-  /**
-   * Dynamically calculates total number of items (Groups + QLIs) in this Looker configuration
-   */
-  getItemCount(): number {
-    let count = 0;
-    const isRamped = this.subscriptionPeriods.length > 1;
+  // /**
+  //  * Dynamically calculates total number of items (Groups + QLIs) in this Looker configuration
+  //  */
+  // getItemCount(): number {
+  //   let count = 0;
+  //   const isRamped = this.subscriptionPeriods.length > 1;
 
-    this.subscriptionPeriods.forEach(period => {
-      // 1. Group Node (if ramped)
-      if (isRamped) count++;
+  //   this.subscriptionPeriods.forEach(period => {
+  //     // 1. Group Node (if ramped)
+  //     if (isRamped) count++;
 
-      // 2. Main Bundle Line
-      count++;
+  //     // 2. Main Bundle Line
+  //     count++;
 
-      // 3. Platform Child (if set)
-      if (period.productId) count++;
+  //     // 3. Platform Child (if set)
+  //     if (period.productId) count++;
 
-      // 4. User Product Children
-      if (period.userRows) {
-        period.userRows.forEach(row => {
-          if (row.type !== 'Non-prod' && (row.quantity || 0) > 0 && row.productId) {
-            count++;
-          }
-        });
-      }
+  //     // 4. User Product Children
+  //     if (period.userRows) {
+  //       period.userRows.forEach(row => {
+  //         if (row.type !== 'Non-prod' && (row.quantity || 0) > 0 && row.productId) {
+  //           count++;
+  //         }
+  //       });
+  //     }
 
-      // 5. Non-Prod Child (if set)
-      const nonProdRow = period.userRows?.find(r => r.type === 'Non-prod');
-      if (nonProdRow && (nonProdRow.quantity || 0) > 0 && period.nonProdProductId) {
-        count++;
-      }
-    });
+  //     // 5. Non-Prod Child (if set)
+  //     const nonProdRow = period.userRows?.find(r => r.type === 'Non-prod');
+  //     if (nonProdRow && (nonProdRow.quantity || 0) > 0 && period.nonProdProductId) {
+  //       count++;
+  //     }
+  //   });
 
-    return count;
-  }
+  //   return count;
+  // }
 }

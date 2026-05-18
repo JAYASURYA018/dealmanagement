@@ -16,6 +16,7 @@ export interface QuoteData {
     productName: string | null;
     productId: string | null;
     categoryId: string | null;
+    operationType: string | null;
     products: Array<{ id: string, name: string, categoryId: string, quoteLineId?: string }> | null;
 }
 
@@ -34,6 +35,7 @@ const EMPTY_QUOTE_DATA: QuoteData = {
     productName: null,
     productId: null,
     categoryId: null,
+    operationType: null,
     products: null
 };
 

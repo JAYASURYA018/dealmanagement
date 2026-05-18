@@ -1103,6 +1103,28 @@ export class QuoteDetailsComponent implements OnInit {
         const previews: any[] = [];
         this.matchedPreviewItemIds.clear();
 
+        console.log('[Debug] buildPreviewCommitments - previewData:', this.previewData);
+
+        // 0. PROCESS ACTUAL COMMITMENT DETAILS (Custom Object)
+        const savedCommitments = this.previewData?.Commitment_Details__r?.records || [];
+        console.log('[Debug] buildPreviewCommitments - savedCommitments:', savedCommitments);
+
+        if (savedCommitments.length > 0) {
+            savedCommitments.forEach((cm: any) => {
+                previews.push({
+                    name: cm.CommitmentName__c,
+                    startDate: this.formatDateForDisplay(cm.StartDate__c),
+                    endDate: this.formatDateForDisplay(cm.EndDate__c),
+                    months: cm.CommitmentPeriod__c,
+                    amount: cm.CommitmentAmount__c,
+                    type: 'commitment'
+                });
+            });
+            // If we have saved commitments, we might want to still show discounts/incentives 
+            // but as additions or separate sections. For now, let's just ensure these show up.
+        }
+
+
         // 1. PROCESS DISCOUNT PERIODS
         const discountPeriods = this.discountsIncentives?.discountPeriods || [];
         discountPeriods.forEach((period: any, index: number) => {

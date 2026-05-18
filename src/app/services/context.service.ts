@@ -83,7 +83,7 @@ export class ContextService {
 
         if (pkceToken) {
             return {
-                accessToken: pkceToken || '00DDz000001qvYA!ARQAQER0C3cGBYvJGp7BBz28NEzcAHqcboDupE4rLEXodf9SsjC7zJHnZRPgyBm5034L_FzvsWx2JU53QlJijbws914HYiNB',
+                accessToken: pkceToken,
                 apiBaseUrl: pkceInstanceUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com',
                 // Partial mock context still needed for other fields
                 opportunityId: '006Dz00000Q82nrIAB', // Defaulting to one of the valid IDs from user log
@@ -117,7 +117,7 @@ export class ContextService {
 
         // Mock Data for Local Development (Fallback)
         return {
-            accessToken: '00DDz000001qvYA!ARQAQHeTKjMpHJO0Mo9QZDUVi7.lZvDxh89pr9dhDkOfZ2Bliw4z1mMdsf.LbElpgYjCwkPmrCtq_PPJfWAiuJMtJ2dOSFnI',
+            accessToken: '',
             opportunityId: '006MOCK_OPP_ID',
             accountId: '001MOCK_ACC_ID',
             accountName: 'Cymbal (Mock Content)',

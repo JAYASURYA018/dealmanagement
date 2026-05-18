@@ -121,7 +121,7 @@ export class CartComponent implements AfterViewInit, OnChanges {
             switchMap((quoteResult: any) => {
                 const quoteId = quoteResult.salesTransactionId || quoteData.quoteId;
                 if ((quoteResult.isSuccess || quoteResult.success) && quoteId) {
-                    
+
                     // Store initial Quote ID
                     this.quoteDataService.setQuoteData({
                         quoteId: quoteId
@@ -150,25 +150,25 @@ export class CartComponent implements AfterViewInit, OnChanges {
                 // Robustly find the Quote record and the SalesTransactionName
                 const records = data.quote.instance?.records || [];
                 const lineItems: any[] = [];
-                
+
                 // Support the transaction.SalesTransaction structure provided by the user
                 const transactionRecord = data.quote.transaction?.SalesTransaction?.[0];
-                const quoteRecord = records.find((r: any) => r.attributes?.type === 'Quote') || 
-                                   transactionRecord || 
-                                   (data.quote.instance?.records?.[0]) || 
-                                   data.quote;
-                
-                const salesTransactionName = data.quote.SalesTransactionName || 
-                                           data.quote.instance?.SalesTransactionName || 
-                                           data.quote.quote?.SalesTransactionName ||
-                                           transactionRecord?.SalesTransactionName ||
-                                           quoteRecord?.SalesTransactionName;
-                                           
+                const quoteRecord = records.find((r: any) => r.attributes?.type === 'Quote') ||
+                    transactionRecord ||
+                    (data.quote.instance?.records?.[0]) ||
+                    data.quote;
+
+                const salesTransactionName = data.quote.SalesTransactionName ||
+                    data.quote.instance?.SalesTransactionName ||
+                    data.quote.quote?.SalesTransactionName ||
+                    transactionRecord?.SalesTransactionName ||
+                    quoteRecord?.SalesTransactionName;
+
                 const formatted = salesTransactionName || quoteRecord?.Name || data.quote.quote?.Name || 'Q-';
-                
+
                 // The RLM API uses lowercase 'id'
                 const resolvedQuoteId = quoteRecord?.id || quoteRecord?.Id || data.quoteId;
-                
+
                 // Merge existing products with new products if needed
                 const currentProducts = quoteData.products || [];
                 const newProductsMapped = cartItems.map((item: any) => {
@@ -188,25 +188,29 @@ export class CartComponent implements AfterViewInit, OnChanges {
 
                 // Robust deep search for the quote number
                 const findValueByKey = (obj: any, targetKey: string): any => {
-                  if (!obj || typeof obj !== 'object') return null;
-                  if (obj[targetKey] !== undefined && obj[targetKey] !== null) return obj[targetKey];
-                  const keys = Object.keys(obj);
-                  for (const key of keys) {
-                    if (typeof obj[key] === 'object') {
-                      const res = findValueByKey(obj[key], targetKey);
-                      if (res) return res;
+                    if (!obj || typeof obj !== 'object') return null;
+                    if (obj[targetKey] !== undefined && obj[targetKey] !== null) return obj[targetKey];
+                    const keys = Object.keys(obj);
+                    for (const key of keys) {
+                        if (typeof obj[key] === 'object') {
+                            const res = findValueByKey(obj[key], targetKey);
+                            if (res) return res;
+                        }
                     }
-                  }
-                  return null;
+                    return null;
                 };
 
-                const quoteNum = findValueByKey(data.quote, 'QuoteNumber__c') || 
-                                findValueByKey(data.quote, 'QuoteNumber');
+                const quoteNum = findValueByKey(data.quote, 'QuoteNumber__c') ||
+                    findValueByKey(data.quote, 'QuoteNumber');
+
+
+                const operationType = findValueByKey(data.quote, 'OperationType__c') || '';
 
                 this.quoteDataService.setQuoteData({
                     quoteId: resolvedQuoteId,
                     quoteName: formatted,
                     quoteNumber: quoteNum,
+                    operationType: operationType,
                     products: Array.from(productMap.values())
                 });
 

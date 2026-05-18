@@ -76,9 +76,9 @@
                                     <td
                                         class="px-4 py-3.5 text-xs text-center border-r border-gray-100 text-gray-400 font-medium">
                                         {{ i + 1 }}</td>
-                                    <td
-                                        class="px-4 py-3.5 text-xs font-bold border-r border-gray-100 text-gray-900">
-                                        {{ item.Product_Name_Display || item.Product2?.Name || item.Product_Name__c || 'Product Name' }}</td>
+                                    <td class="px-4 py-3.5 text-xs font-bold border-r border-gray-100 text-gray-900">
+                                        {{ item.Product_Name_Display || item.Product2?.Name || item.Product_Name__c ||
+                                        'Product Name' }}</td>
                                     <td class="px-4 py-3.5 text-xs border-r border-gray-100 text-gray-600">
                                         {{ formatDateForDisplay(item.StartDate) }}</td>
                                     <td class="px-4 py-3.5 text-xs border-r border-gray-100 text-gray-600">
@@ -140,11 +140,9 @@
                                     <th
                                         class="border border-gray-300 px-4 py-2 text-left text-sm font-bold text-center">
                                         Total Commitment Period (Months)</th>
-                                    <th
-                                        class="border border-gray-300 px-4 py-2 text-left text-sm font-bold text-right">
+                                    <th class="border border-gray-300 px-4 py-2 text-left text-sm font-bold text-right">
                                         Total Commitment Value</th>
-                                    <th
-                                        class="border border-gray-300 px-4 py-2 text-left text-sm font-bold text-right">
+                                    <th class="border border-gray-300 px-4 py-2 text-left text-sm font-bold text-right">
                                         Total Incentives</th>
                                 </tr>
                             </thead>
@@ -240,7 +238,8 @@
                                         Quantity</th>
                                     <th class="border border-gray-300 px-3 py-2 text-right text-sm font-bold">
                                         List Price</th>
-                                    <th *ngIf="!isLookerSubscription" class="border border-gray-300 px-3 py-2 text-right text-sm font-bold">
+                                    <th *ngIf="!isLookerSubscription"
+                                        class="border border-gray-300 px-3 py-2 text-right text-sm font-bold">
                                         Total Price</th>
                                 </tr>
                             </thead>
@@ -256,7 +255,8 @@
                                         item.Quantity }}</td>
                                     <td class="border border-gray-300 px-3 py-2 text-sm text-right">{{
                                         formatCurrency(item.ListPrice) }}</td>
-                                    <td *ngIf="!isLookerSubscription" class="border border-gray-300 px-3 py-2 text-sm text-right font-bold">{{
+                                    <td *ngIf="!isLookerSubscription"
+                                        class="border border-gray-300 px-3 py-2 text-sm text-right font-bold">{{
                                         formatCurrency(item.TotalPrice) }}</td>
                                 </tr>
                                 <tr *ngIf="previewProductsWithoutDiscounts.length === 0">
@@ -298,14 +298,11 @@
                                             <th
                                                 class="border-r border-white/10 px-3 py-3 text-center text-xs font-bold w-12 text-center">
                                                 #</th>
-                                            <th
-                                                class="border-r border-white/10 px-3 py-3 text-left text-xs font-bold">
+                                            <th class="border-r border-white/10 px-3 py-3 text-left text-xs font-bold">
                                                 Group Product Name</th>
-                                            <th
-                                                class="border-r border-white/10 px-3 py-3 text-left text-xs font-bold">
+                                            <th class="border-r border-white/10 px-3 py-3 text-left text-xs font-bold">
                                                 Start Date</th>
-                                            <th
-                                                class="border-r border-white/10 px-3 py-3 text-left text-xs font-bold">
+                                            <th class="border-r border-white/10 px-3 py-3 text-left text-xs font-bold">
                                                 End Date</th>
                                             <th *ngIf="period.type !== 'incentive'"
                                                 class="border-r border-white/10 px-3 py-3 text-right text-xs font-bold">
@@ -330,11 +327,9 @@
                                             <td
                                                 class="px-3 py-3 text-xs font-bold border-r border-indigo-50 text-gray-900">
                                                 {{ item.Product2?.Name || item.Product_Name__c || 'Product' }}</td>
-                                            <td
-                                                class="px-3 py-3 text-xs border-r border-indigo-50 whitespace-nowrap">
+                                            <td class="px-3 py-3 text-xs border-r border-indigo-50 whitespace-nowrap">
                                                 {{ formatDateForDisplay(item.StartDate) }}</td>
-                                            <td
-                                                class="px-3 py-3 text-xs border-r border-indigo-50 whitespace-nowrap">
+                                            <td class="px-3 py-3 text-xs border-r border-indigo-50 whitespace-nowrap">
                                                 {{ formatDateForDisplay(item.EndDate) }}</td>
                                             <td *ngIf="period.type !== 'incentive'"
                                                 class="px-3 py-3 text-xs text-right border-r border-indigo-50">{{
@@ -366,14 +361,11 @@
                                             <th
                                                 class="border-r border-white/10 px-3 py-3 text-center text-xs font-bold w-12 text-center">
                                                 #</th>
-                                            <th
-                                                class="border-r border-white/10 px-3 py-3 text-left text-xs font-bold">
+                                            <th class="border-r border-white/10 px-3 py-3 text-left text-xs font-bold">
                                                 Product Name</th>
-                                            <th
-                                                class="border-r border-white/10 px-3 py-3 text-left text-xs font-bold">
+                                            <th class="border-r border-white/10 px-3 py-3 text-left text-xs font-bold">
                                                 Start Date</th>
-                                            <th
-                                                class="border-r border-white/10 px-3 py-3 text-left text-xs font-bold">
+                                            <th class="border-r border-white/10 px-3 py-3 text-left text-xs font-bold">
                                                 End Date</th>
                                             <th *ngIf="period.type !== 'incentive'"
                                                 class="border-r border-white/10 px-3 py-3 text-right text-xs font-bold">
@@ -399,11 +391,9 @@
                                                 class="px-3 py-3 text-xs font-bold border-r border-gray-100 text-gray-900">
                                                 {{ item.Product2?.Name || item.Product_Name__c || 'Product' }}
                                             </td>
-                                            <td
-                                                class="px-3 py-3 text-xs border-r border-gray-100 whitespace-nowrap">
+                                            <td class="px-3 py-3 text-xs border-r border-gray-100 whitespace-nowrap">
                                                 {{ formatDateForDisplay(item.StartDate) }}</td>
-                                            <td
-                                                class="px-3 py-3 text-xs border-r border-gray-100 whitespace-nowrap">
+                                            <td class="px-3 py-3 text-xs border-r border-gray-100 whitespace-nowrap">
                                                 {{ formatDateForDisplay(item.EndDate) }}</td>
                                             <td *ngIf="period.type !== 'incentive'"
                                                 class="px-3 py-3 text-xs text-right border-r border-gray-100">{{
@@ -495,8 +485,7 @@
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-gray-100">
-                                        <tr *ngFor="let item of year.items"
-                                            class="hover:bg-gray-50 transition-colors">
+                                        <tr *ngFor="let item of year.items" class="hover:bg-gray-50 transition-colors">
                                             <td class="px-3 py-2.5 text-xs text-gray-700 font-medium">{{
                                                 item.name
                                                 }}
@@ -540,7 +529,8 @@
                     <div *ngIf="!isLookerSubscription" class="flex justify-end mt-4">
                         <div class="bg-gray-100 px-6 py-4 rounded-lg flex items-center gap-10 border border-gray-200">
                             <span class="text-sm font-bold text-gray-600 uppercase">Grand Total</span>
-                            <span class="text-2xl font-black text-[#1a73e8] tracking-tighter">{{ formatCurrency(totalContractValue) }}</span>
+                            <span class="text-2xl font-black text-[#1a73e8] tracking-tighter">{{
+                                formatCurrency(totalContractValue) }}</span>
                         </div>
                     </div>
                 </ng-container>
@@ -570,8 +560,7 @@
         </div>
 
         <!-- Footer -->
-        <div
-            class="sticky bottom-0 bg-white border-t border-gray-200 px-8 py-4 rounded-b-2xl flex justify-end gap-3">
+        <div class="sticky bottom-0 bg-white border-t border-gray-200 px-8 py-4 rounded-b-2xl flex justify-end gap-3">
             <button (click)="closePreview()"
                 class="px-6 py-2 rounded-full text-sm font-bold bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-sm">
                 Close

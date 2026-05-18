@@ -954,7 +954,7 @@ export class SalesforceApiService {
         const token = this.contextService.accessToken;
         const baseUrl = this.contextService.apiBaseUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com';
 
-        const quoteQuery = `SELECT Id, Name, QuoteNumber, Status, GrandTotal, StartDate, ExpirationDate, Pricebook2Id, Opportunity.Name, Opportunity.Sales_Channel__c, Opportunity.Primary_Contact__c, Opportunity.Primary_Contact__r.Name, Account.Name, Account.Website FROM Quote WHERE Id='${quoteId}'`;
+        const quoteQuery = `SELECT Id, Name, QuoteNumber, Status, GrandTotal, StartDate, ExpirationDate, Pricebook2Id, Opportunity.Name, Opportunity.Sales_Channel__c, Opportunity.Primary_Contact__c, Opportunity.Primary_Contact__r.Name, Account.Name, Account.Website, (SELECT Id, CommitmentName__c, CommitmentPeriod__c, CommitmentAmount__c, StartDate__c, EndDate__c FROM Commitment_Details__r) FROM Quote WHERE Id='${quoteId}'`;
         const lineItemQuery = `SELECT Id, QuoteId, Product2Id, PricebookEntryId, Product2.Name, Product2.ProductCode, Product2.Family, Product2.Type, Product2.Description, Quantity, UnitPrice, TotalPrice, ListPrice, StartDate, EndDate, Discount, Incentive__c, NetUnitPrice, SortOrder FROM QuoteLineItem WHERE QuoteId = '${quoteId}' ORDER BY SortOrder ASC, CreatedDate ASC LIMIT 2000`;
 
         const encodedQuoteQuery = encodeURIComponent(quoteQuery);

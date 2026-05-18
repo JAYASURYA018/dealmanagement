@@ -32,12 +32,12 @@ export class DetailsOfQuoteComponent implements OnInit {
   primaryContactName = '';
   primaryContactOpen = false;
   primaryContactOptions: string[] = [];
-  
+
   // Sales Channel State
   salesChannel = '';
   salesChannelOpen = false;
   salesChannelOptions: string[] = [];
-  
+
   // Operation Type State
   operationType = '';
   operationTypeOpen = false;
@@ -83,29 +83,25 @@ export class DetailsOfQuoteComponent implements OnInit {
       // Only pre-fill from quoteData if session has no value
       if (!this.primaryContactName && data.primaryContactName) this.primaryContactName = data.primaryContactName;
       if (!this.salesChannel && data.salesChannel) this.salesChannel = data.salesChannel;
+      if (data.operationType) {
+        this.operationType = data.operationType;
+      }
       
       this.loadAllPicklists();
     });
   }
 
   loadAllPicklists() {
+    // Sales Channel from Quote picklist
     this.sfApi.getQuotePicklistValues().subscribe({
       next: (res) => {
         const picklists = res.picklistFieldValues;
-        
+
         // Sales Channel
         if (picklists.Sales_Channel__c) {
           this.salesChannelOptions = picklists.Sales_Channel__c.values.map((v: any) => v.label);
           if (!this.salesChannel && this.salesChannelOptions.length > 0) {
             this.salesChannel = this.salesChannelOptions[0];
-          }
-        }
-
-        // Operation Type
-        if (picklists.Operation_Type__c) {
-          this.operationTypeOptions = picklists.Operation_Type__c.values.map((v: any) => v.label);
-          if (!this.operationType && this.operationTypeOptions.length > 0) {
-            this.operationType = this.operationTypeOptions[0];
           }
         }
       },

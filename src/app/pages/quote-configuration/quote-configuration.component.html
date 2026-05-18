@@ -16,7 +16,8 @@
 
                 <div class="flex flex-col">
                     <div class="flex items-center gap-2 mb-0.5">
-                        <h1 class="text-md font-bold text-slate-700 tracking-tight leading-none">Q -{{ quoteNumber }}</h1>
+                        <h1 class="text-md font-bold text-slate-700 tracking-tight leading-none">Q -{{ quoteNumber }}
+                        </h1>
                         <span
                             class="px-2 py-0.5 bg-green-500 bg-opacity-10 text-green-600 text-[9px] font-bold rounded-md tracking-wider border border-green-500/20">
                             Draft
@@ -34,6 +35,12 @@
             </div>
 
             <div class="flex items-center gap-6">
+                <a *ngIf="salesforceQuoteUrl" [href]="salesforceQuoteUrl" target="_blank"
+                    class="h-8 px-3 rounded-full bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100 hover:text-blue-700 transition-colors flex items-center gap-1.5 text-[11px] font-bold whitespace-nowrap">
+                    <span>View in Salesforce</span>
+                    <span class="material-icons-outlined text-[14px]">open_in_new</span>
+                </a>
+
                 <!-- Product Quota Badge -->
                 <div
                     class="flex items-center gap-2 bg-white border border-gray-200 rounded-full px-3 py-1 shadow-sm h-8">
@@ -61,19 +68,20 @@
                     </label>
                     <span class="text-[12px] font-medium text-slate-500">Mark as Primary</span>
 
+                    <!-- Error Messages Panel (Red) -->
                     <div *ngIf="hasValidationErrors" class="relative">
-                        <button (click)="toggleValidationPanel($event)"
+                        <button id="validation-toggle-btn" (click)="toggleValidationPanel($event)"
                             class="w-7 h-7 rounded-full border-2 border-red-500 bg-red-50 text-red-600 flex items-center justify-center hover:bg-red-100 transition-colors shadow-md hover:shadow-lg font-bold animate-pulse"
-                            title="Click to view validation errors">
-                            <span class="text-lg font-bold">!</span>
+                            title="Click to view errors">
+                            <span class="material-icons text-[16px]">error</span>
                         </button>
 
-                        <div *ngIf="validationPanelOpen" (click)="$event.stopPropagation()"
+                        <div id="validation-panel" *ngIf="validationPanelOpen" (click)="$event.stopPropagation()"
                             class="absolute right-0 top-9 w-[360px] max-h-[350px] bg-white border-2 border-red-300 rounded-lg shadow-2xl z-[999] p-4 overflow-hidden flex flex-col">
                             <div class="flex items-center justify-between mb-3 pb-2 border-b border-red-200">
                                 <div class="text-[13px] font-bold text-red-700 flex items-center gap-1">
                                     <span class="material-icons-outlined text-[18px]">error</span>
-                                    Validation Errors ({{ submittedErrorMessages.length }})
+                                    Validation Messages ({{ errorMessages.length }})
                                 </div>
                                 <button (click)="toggleValidationPanel($event)"
                                     class="text-slate-400 hover:text-slate-600 p-1">
@@ -81,19 +89,49 @@
                                 </button>
                             </div>
                             <div class="overflow-y-auto custom-scrollbar space-y-2 flex-1 pr-1">
-                                <div *ngFor="let item of submittedErrorMessages; let idx = index"
-                                    class="border-l-4 rounded-md p-3 transition-colors"
-                                    [ngClass]="{
-                                        'border-red-500 bg-red-50 hover:bg-red-100': item.messageType === 'error',
+                                <div *ngFor="let item of errorMessages; let idx = index"
+                                    class="border-l-4 border-red-500 bg-red-50 hover:bg-red-100 rounded-md p-3 transition-colors">
+                                    <div class="text-[13px] font-bold text-black mb-1">
+                                        {{ idx + 1 }}. {{ item.productName || item.productId || 'Product' }}
+                                    </div>
+                                    <p class="text-[12px] leading-tight text-red-700">
+                                        {{ item.message }}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Warnings & Info Panel -->
+                    <div *ngIf="hasValidationWarnings" class="relative">
+                        <button id="warning-toggle-btn" (click)="toggleWarningPanel($event)"
+                            class="w-7 h-7 rounded-full border-2 border-yellow-500 bg-yellow-50 text-yellow-600 flex items-center justify-center hover:bg-yellow-100 transition-colors shadow-md hover:shadow-lg font-bold"
+                            title="Click to view warnings & info">
+                            <span class="material-icons text-[16px]">info</span>
+                        </button>
+
+                        <div id="warning-panel" *ngIf="warningPanelOpen" (click)="$event.stopPropagation()"
+                            class="absolute right-0 top-9 w-[360px] max-h-[350px] bg-white border-2 border-black rounded-lg shadow-2xl z-[999] p-4 overflow-hidden flex flex-col">
+                            <div class="flex items-center justify-between mb-3 pb-2 border-b border-gray-300">
+                                <div class="text-[13px] font-bold text-gray-800 flex items-center gap-1">
+                                    <span class="material-icons-outlined text-[18px] text-yellow-500">info</span>
+                                    Warnings & Info ({{ warningInfoMessages.length }})
+                                </div>
+                                <button (click)="toggleWarningPanel($event)"
+                                    class="text-slate-400 hover:text-slate-600 p-1">
+                                    <span class="material-icons-outlined text-[18px]">close</span>
+                                </button>
+                            </div>
+                            <div class="overflow-y-auto custom-scrollbar space-y-2 flex-1 pr-1">
+                                <div *ngFor="let item of warningInfoMessages; let idx = index"
+                                    class="border-l-4 rounded-md p-3 transition-colors" [ngClass]="{
                                         'border-yellow-500 bg-yellow-50 hover:bg-yellow-100': item.messageType === 'warning',
                                         'border-blue-500 bg-blue-50 hover:bg-blue-100': item.messageType === 'info' || !item.messageType
                                     }">
                                     <div class="text-[13px] font-bold text-black mb-1">
                                         {{ idx + 1 }}. {{ item.productName || item.productId || 'Product' }}
                                     </div>
-                                    <p class="text-[12px] leading-tight"
-                                        [ngClass]="{
-                                            'text-red-700': item.messageType === 'error',
+                                    <p class="text-[12px] leading-tight" [ngClass]="{
                                             'text-yellow-700': item.messageType === 'warning',
                                             'text-blue-700': item.messageType === 'info' || !item.messageType
                                         }">
@@ -287,10 +325,29 @@
             <p class="text-gray-500 mb-2">The quote has been successfully created and saved to the system.</p>
             <p class="text-lg font-bold text-blue-600 mb-6">{{ quoteNumber }}</p>
 
-            <a [href]="getSalesforceLink()"
-                target="_blank" class="text-sm text-blue-500 hover:text-blue-700 underline block mb-4">
+            <a [href]="getSalesforceLink()" target="_blank"
+                class="text-sm text-blue-500 hover:text-blue-700 underline block mb-4">
                 View in Salesforce
             </a>
         </div>
     </div>
+
+    <!-- Warning Confirmation Alert -->
+    <div *ngIf="showWarningAlert"
+        class="fixed inset-0 z-[2000] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-300">
+        <div
+            class="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full text-center transform transition-all animate-in zoom-in-95 duration-300">
+            <div class="w-14 h-14 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span class="material-icons-outlined text-3xl text-yellow-500">warning</span>
+            </div>
+            <p class="text-[14px] text-gray-700 leading-relaxed mb-6">
+                You have some configuration messages. If you want to continue then click on save.
+            </p>
+            <button (click)="onWarningAlertOk()"
+                class="px-8 py-2.5 bg-blue-600 text-white text-[13px] font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-sm">
+                OK
+            </button>
+        </div>
+    </div>
+
 </div>

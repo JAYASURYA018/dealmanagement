@@ -88,9 +88,21 @@ export class QuoteConfigurationComponent implements OnInit {
 
   // Header validation panel state
   hasValidationErrors: boolean = false;
+  hasValidationWarnings: boolean = false;
   validationPanelOpen: boolean = false;
+  warningPanelOpen: boolean = false;
+  showWarningAlert: boolean = false;
+
   submittedErrorMessages: { productId: string; productName: string; message: string; messageType?: string; category?: string }[] = [];
+  errorMessages: any[] = [];
+  warningInfoMessages: any[] = [];
+
   savedTabs: Set<string> = new Set<string>();
+
+  get salesforceQuoteUrl(): string {
+    return this.getSalesforceLink();
+  }
+
   lastSaveResults: Map<string, any> = new Map<string, any>();
   showFinalSuccessPopup: boolean = false;
 
@@ -748,12 +760,22 @@ export class QuoteConfigurationComponent implements OnInit {
     this.validationPanelOpen = !this.validationPanelOpen;
   }
 
+  toggleWarningPanel(event?: Event) {
+    if (event) event.stopPropagation();
+    this.warningPanelOpen = !this.warningPanelOpen;
+    if (this.warningPanelOpen) this.validationPanelOpen = false;
+  }
+
+  onWarningAlertOk() {
+    this.showWarningAlert = false;
+    // User acknowledged warnings, they might try to save again
+  }
+
   @HostListener('document:click')
   onDocumentClick() {
-    // Close validation panel when clicking anywhere outside
-    if (this.validationPanelOpen) {
-      this.validationPanelOpen = false;
-    }
+    // Close panels when clicking anywhere outside
+    this.validationPanelOpen = false;
+    this.warningPanelOpen = false;
   }
 
   onValidationMessagesReceived(event: { productId: string; productName: string; messages: any[] }) {
@@ -763,6 +785,7 @@ export class QuoteConfigurationComponent implements OnInit {
       // Build flat list of error messages for the header panel
       // First remove old errors for this product, then add new ones
       this.submittedErrorMessages = this.submittedErrorMessages.filter(m => m.productId !== event.productId);
+      
       event.messages.forEach(msg => {
         this.submittedErrorMessages.push({
           productId: event.productId,
@@ -773,17 +796,38 @@ export class QuoteConfigurationComponent implements OnInit {
         });
       });
 
-      this.hasValidationErrors = true;
-      this.validationPanelOpen = true;
+      // Split into Errors and Warnings/Info
+      this.errorMessages = this.submittedErrorMessages.filter(m => m.messageType === 'error');
+      this.warningInfoMessages = this.submittedErrorMessages.filter(m => m.messageType !== 'error');
+
+      this.hasValidationErrors = this.errorMessages.length > 0;
+      this.hasValidationWarnings = this.warningInfoMessages.length > 0;
+
+      // Auto-open panel if there are new errors
+      if (this.hasValidationErrors) {
+        this.validationPanelOpen = true;
+        this.warningPanelOpen = false;
+      } else if (this.hasValidationWarnings) {
+        // Optional: show warning alert if only warnings exist
+        this.showWarningAlert = true;
+      }
     } else {
       // Clear errors for this product
       this.productValidationErrors.delete(event.productId);
       this.submittedErrorMessages = this.submittedErrorMessages.filter(m => m.productId !== event.productId);
 
-      // Check if any products still have errors
-      this.hasValidationErrors = this.submittedErrorMessages.length > 0;
+      // Re-split
+      this.errorMessages = this.submittedErrorMessages.filter(m => m.messageType === 'error');
+      this.warningInfoMessages = this.submittedErrorMessages.filter(m => m.messageType !== 'error');
+
+      this.hasValidationErrors = this.errorMessages.length > 0;
+      this.hasValidationWarnings = this.warningInfoMessages.length > 0;
+
       if (!this.hasValidationErrors) {
         this.validationPanelOpen = false;
+      }
+      if (!this.hasValidationWarnings) {
+        this.warningPanelOpen = false;
       }
     }
   }
