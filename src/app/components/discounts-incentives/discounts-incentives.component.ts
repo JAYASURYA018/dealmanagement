@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, OnChanges, SimpleChanges, inject, ElementRef, HostListener, OnDestroy } from '@angular/core';
+﻿import { Component, Input, Output, EventEmitter, OnChanges, SimpleChanges, inject, ElementRef, HostListener, OnDestroy } from '@angular/core';
 import { Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { RcaApiService } from '../../services/rca-api.service';
@@ -32,8 +32,8 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
     @Input() hasIncentiveErrors: boolean = false;
     @Input() discountErrorProductIds: string[] = [];
     @Input() incentiveErrorProductIds: string[] = [];
-    @Output() discountErrorBlockClicked = new EventEmitter<void>();
-    @Output() incentiveErrorBlockClicked = new EventEmitter<void>();
+    @Output() discountErrorBlockClicked = new EventEmitter<string[]>();
+    @Output() incentiveErrorBlockClicked = new EventEmitter<string[]>();
     @Input() set existingLineItems(items: any[]) {
         if (items && items.length > 0) {
             this.loadFromExisting(items);
@@ -178,7 +178,49 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
 
     // Live remaining = global quota (which already factors in current selections via the parent component)
     get liveQuotaRemaining(): number {
-        return this.remainingQuota;
+        return this.modalRemainingQuota;
+    }
+
+    get modalSelectedCount(): number {
+        const map = this.selectorCalledFrom === 'incentives'
+            ? this.persistentIncentiveGroups
+            : new Map([...this.persistentSelectedGroups, ...this.persistentSelectedIndividuals]);
+
+        return Array.from(map.values()).filter((item: any) => item?.selected).length;
+    }
+
+    get modalBaselineSelectedCount(): number {
+        const map = this.selectorCalledFrom === 'incentives'
+            ? this.snapshotIncentiveGroups
+            : new Map([...this.snapshotSelectedGroups, ...this.snapshotSelectedIndividuals]);
+
+        return Array.from(map.values()).filter((item: any) => item?.selected).length;
+    }
+
+    get modalAdditionalSelectedCount(): number {
+        return Math.max(0, this.modalSelectedCount - this.modalBaselineSelectedCount);
+    }
+
+    get modalRemainingQuota(): number {
+        return Math.max(0, this.remainingQuota - this.modalAdditionalSelectedCount);
+    }
+
+    get modalUsedQuotaCount(): number {
+        return Math.min(this.totalCatalogProducts, this.totalCatalogProducts - this.modalRemainingQuota);
+    }
+
+    private wasSelectedAtModalOpen(item: any): boolean {
+        if (!item?.id) return false;
+
+        if (this.selectorCalledFrom === 'incentives') {
+            return !!this.snapshotIncentiveGroups.get(item.id)?.selected;
+        }
+
+        const snapshotMap = this.productTab === 'groups'
+            ? this.snapshotSelectedGroups
+            : this.snapshotSelectedIndividuals;
+
+        return !!snapshotMap.get(item.id)?.selected;
     }
 
     // Dropdown Options
@@ -1715,7 +1757,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
     toggleItem(item: any) {
         // Validation: Limit products
         if (!item.selected) {
-            if (this.liveQuotaRemaining <= 0) {
+            if (this.liveQuotaRemaining <= 0 && !this.wasSelectedAtModalOpen(item)) {
                 this.toastService.show(`Maximum product limit reached. Check the remaining quota in the header.`, 'warning');
                 return;
             }
@@ -1734,6 +1776,8 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
                     this.persistentIncentiveGroups.delete(item.id);
                 }
             }
+            // Persist selections to session so they survive page refresh
+            this.saveCurrentState();
             return;
         }
         const map = this.productTab === 'groups' ? this.persistentSelectedGroups : this.persistentSelectedIndividuals;
@@ -1742,6 +1786,8 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         } else {
             map.delete(item.id);
         }
+        // Persist selections to session so they survive page refresh
+        this.saveCurrentState();
     }
 
     updatePersistentSelected(item: any) {
@@ -1762,6 +1808,8 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
             } else if (item.discount === '') {
                 item.discount = null;
             }
+        } else if (item.incentiveAmount === '' || item.incentiveAmount === null || item.incentiveAmount === undefined) {
+            item.incentiveAmount = 0;
         }
 
         let map: Map<string, any>;
@@ -1771,6 +1819,8 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
             map = this.productTab === 'groups' ? this.persistentSelectedGroups : this.persistentSelectedIndividuals;
         }
         map.set(item.id, item);
+        // Persist value changes to session so they survive page refresh
+        this.saveCurrentState();
     }
 
     clearDiscountZero(item: any) {
@@ -1786,6 +1836,18 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         }
     }
 
+    clearIncentiveZero(item: any) {
+        if (item.incentiveAmount === 0) {
+            item.incentiveAmount = null;
+        }
+    }
+
+    restoreIncentiveZero(item: any) {
+        if (item.incentiveAmount === null || item.incentiveAmount === undefined || item.incentiveAmount === '') {
+            item.incentiveAmount = 0;
+            this.updatePersistentSelected(item);
+        }
+    }
 
     setViewMode(mode: 'all' | 'selected') {
         this.viewMode = mode;
@@ -1868,18 +1930,18 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         }
 
         // remainingQuota is the number of items we can still select RIGHT NOW
-        let availableQuota = this.remainingQuota;
+        let availableQuota = this.modalRemainingQuota;
 
         this.filteredItems.forEach(item => {
             const becomingSelected = !allSelected;
 
             // Check limit when selecting
             if (becomingSelected && !item.selected) {
-                if (availableQuota <= 0) {
+                if (availableQuota <= 0 && !this.wasSelectedAtModalOpen(item)) {
                     blockedByLimit = true;
                     return; // Skip this one
                 }
-                availableQuota--;
+                if (!this.wasSelectedAtModalOpen(item)) availableQuota--;
             } else if (!becomingSelected && item.selected) {
                 availableQuota++;
             }
@@ -1895,6 +1957,8 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         if (blockedByLimit) {
             this.toastService.show(`Selection partially blocked: Maximum product limit reached. Check the remaining quota in the header.`, 'warning');
         }
+        // Persist selections to session so they survive page refresh
+        this.saveCurrentState();
     }
 
     // Management Actions
@@ -2325,10 +2389,18 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
             let displayValue = '';
             let title = '';
             let subtext = '';
+            let granularity = 'Granular';
 
             if (mode === 'discount') {
-                displayValue = uniqueValues.length === 1 ? `${uniqueValues[0]}%` : 'Updated';
-                title = `Granular Discount - Flat Rate (%)`;
+                if (uniqueValues.length === 1) {
+                    granularity = 'Overall';
+                    displayValue = `${uniqueValues[0]}%`;
+                    title = `Overall Discount - Flat Rate (%)`;
+                } else {
+                    granularity = 'Granular';
+                    displayValue = 'Updated';
+                    title = `Granular Discount - Flat Rate (%)`;
+                }
                 subtext = `${edits.length} Products (Edited)`;
 
                 if (this.activeDiscountPeriod) {
@@ -2338,14 +2410,21 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
                         subtext: subtext,
                         value: displayValue,
                         type: 'discount',
-                        granularity: 'Granular',
+                        granularity: granularity,
                         itemCount: edits.length,
                         productIds: editedIds
                     });
                 }
             } else {
-                displayValue = uniqueValues.length === 1 ? `$${uniqueValues[0]}` : `${edits.length} group${edits.length !== 1 ? 's' : ''} with custom amounts`;
-                title = `Incentives`;
+                if (uniqueValues.length === 1) {
+                    granularity = 'Overall';
+                    displayValue = `$${uniqueValues[0]}`;
+                    title = `Incentives`;
+                } else {
+                    granularity = 'Granular';
+                    displayValue = `${edits.length} group${edits.length !== 1 ? 's' : ''} with custom amounts`;
+                    title = `Incentives`;
+                }
                 subtext = `${edits.length} Product Group${edits.length !== 1 ? 's' : ''} (Edited)`;
 
                 if (this.activeIncentivePeriod) {
@@ -2544,6 +2623,11 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         this.incentiveForm.type = 'Select';
     }
     restrictNumeric(event: KeyboardEvent) {
+        const shortcutKey = event.key.toLowerCase();
+        if ((event.ctrlKey || event.metaKey) && ['a', 'c', 'x', 'v', 'z', 'y'].includes(shortcutKey)) {
+            return;
+        }
+
         const allowedKeys = ['Backspace', 'Tab', 'Enter', 'ArrowLeft', 'ArrowRight', 'Delete', 'End', 'Home'];
         if (allowedKeys.includes(event.key)) return;
 

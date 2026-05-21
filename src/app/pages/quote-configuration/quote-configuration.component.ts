@@ -1,4 +1,4 @@
-import { Component, OnInit, HostListener, inject, ViewChild, ViewChildren, QueryList } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, ViewChild, ViewChildren, QueryList, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
@@ -50,7 +50,7 @@ import { DiscountIncentiveStateService } from '../../services/discount-incentive
     }
   `]
 })
-export class QuoteConfigurationComponent implements OnInit {
+export class QuoteConfigurationComponent implements OnInit, OnDestroy {
   @ViewChild(DetailsOfQuoteComponent) detailsComp?: DetailsOfQuoteComponent;
   @ViewChildren(CommitConfigurationComponent) commitComps!: QueryList<CommitConfigurationComponent>;
   @ViewChildren(SubscriptionConfigurationComponent) subComps!: QueryList<SubscriptionConfigurationComponent>;
@@ -65,6 +65,7 @@ export class QuoteConfigurationComponent implements OnInit {
   private activatedRoute = inject(ActivatedRoute);
   private cartService = inject(CartService);
   private discountIncentiveStateService = inject(DiscountIncentiveStateService);
+  private elementRef = inject(ElementRef);
 
   isLoading = true;
   accountName = '';
@@ -93,7 +94,7 @@ export class QuoteConfigurationComponent implements OnInit {
   warningPanelOpen: boolean = false;
   showWarningAlert: boolean = false;
 
-  submittedErrorMessages: { productId: string; productName: string; message: string; messageType?: string; category?: string }[] = [];
+  submittedErrorMessages: { productId: string; productName: string; message: string; messageType?: string; category?: string; isQuoteLevel?: boolean }[] = [];
   errorMessages: any[] = [];
   warningInfoMessages: any[] = [];
 
@@ -106,6 +107,12 @@ export class QuoteConfigurationComponent implements OnInit {
   lastSaveResults: Map<string, any> = new Map<string, any>();
   showFinalSuccessPopup: boolean = false;
 
+  // Session storage key for this quote configuration (footer values + validation state combined)
+  private readonly SESSION_QUOTE_FOOTER_KEY = 'quote_footer';
+  private readonly SESSION_PREVIEW_KEY = 'qc_preview_state';
+  private readonly SESSION_BUTTON_STATES_KEY = 'qc_button_states';
+  private readonly SESSION_SAVE_RESULTS_KEY = 'qc_save_results';
+
   get groupedValidationMessages(): { productName: string; messages: { message: string; messageType: string }[] }[] {
     const grouped = new Map<string, { message: string; messageType: string }[]>();
     this.submittedErrorMessages.forEach(item => {
@@ -117,7 +124,7 @@ export class QuoteConfigurationComponent implements OnInit {
     });
     return Array.from(grouped.entries()).map(([productName, messages]) => ({ productName, messages }));
   }
-  
+
   get hasGCPProduct(): boolean {
     return this.products.some(p => p.type === 'commitment' || p.name?.toLowerCase().includes('google cloud platform'));
   }
@@ -159,53 +166,16 @@ export class QuoteConfigurationComponent implements OnInit {
     // 2. Extra products selected in Commit (via Discounts/Incentives selections)
     if (this.commitComps) {
       this.commitComps.forEach(commit => {
-        if (commit.discountsIncentives) {
-          // Count current selections (in progress)
-          count += (commit.discountsIncentives.persistentSelectedGroups?.size || 0);
-          count += (commit.discountsIncentives.persistentSelectedIndividuals?.size || 0);
-          count += (commit.discountsIncentives.persistentIncentiveGroups?.size || 0);
-
-          // Count already applied discounts
-          commit.discountsIncentives.discountPeriods.forEach((p: any) => {
-            if (p.activeDiscounts) {
-              p.activeDiscounts.forEach((d: any) => count += (d.itemCount || 0));
-            }
-          });
-
-          // Count already applied incentives
-          commit.discountsIncentives.incentivePeriods.forEach((p: any) => {
-            if (p.activeIncentives) {
-              p.activeIncentives.forEach((i: any) => count += (i.itemCount || 0));
-            }
-          });
-        }
+        const commitCount = commit.getItemCount ? commit.getItemCount() : 1;
+        count += Math.max(0, commitCount - 1); // -1 because parent product is already in this.products
       });
     }
 
-    // 3. Subscription selections (Platform product + User quantities)
+    // 3. Extra products selected in Subscription
     if (this.subComps) {
       this.subComps.forEach(sub => {
-        if (sub.subscriptionPeriods && sub.subscriptionPeriods.length > 0) {
-          const firstPeriod = sub.subscriptionPeriods[0];
-
-          // 3a. Count the Platform selection from the picklist if it's set
-          if (firstPeriod.productName) {
-            // Check if this specific product ID is already in our main products list to avoid double counting
-            const isMainProduct = this.products.some(p => p.id === firstPeriod.productId || p.name === firstPeriod.productName);
-            if (!isMainProduct) {
-              count++;
-            }
-          }
-
-          // 3b. Count each active user category
-          if (firstPeriod.userRows) {
-            firstPeriod.userRows.forEach((row: any) => {
-              if ((row.quantity || 0) > 0) {
-                count++;
-              }
-            });
-          }
-        }
+        const subCount = sub.getItemCount ? sub.getItemCount() : 1;
+        count += Math.max(0, subCount - 1); // -1 because parent product is already in this.products
       });
     }
 
@@ -220,6 +190,12 @@ export class QuoteConfigurationComponent implements OnInit {
 
   get isSaveDisabled(): boolean {
     const type = this.getProductType(this.selectedItemId);
+
+    // Disable save button if already saved (for Looker and GCP)
+    if (type !== 'none' && this.savedTabs.has(this.selectedItemId)) {
+      return true;
+    }
+
     if (type === 'commitment') {
       const comp = this.commitComps?.find(c => c.productId === this.selectedItemId);
       return comp?.activeTab !== 'discounts';
@@ -309,7 +285,7 @@ export class QuoteConfigurationComponent implements OnInit {
           show: true,
           data: previewData,
           previewCommitments: pData.previewCommitments,
-          commitmentDetailsOnly: pData.commitmentDetailsOnly || pData.commitmentDetailsSummary || [],
+          commitmentDetailsOnly: pData.commitmentDetailsSummary || pData.commitmentDetailsOnly || [],
           previewProductsWithoutDiscounts: pData.previewProductsWithoutDiscounts,
           isLooker: pData.isLookerSubscription,
           tcv: pData.totalContractValue,
@@ -318,6 +294,9 @@ export class QuoteConfigurationComponent implements OnInit {
           startDate: pData.startDate,
           expirationDate: pData.expirationDate
         };
+
+        // Save preview state to session when opened
+        this.savePreviewStateToSession();
       } else {
         this.toastService.show('No preview data available for this selection.', 'warning');
       }
@@ -328,6 +307,8 @@ export class QuoteConfigurationComponent implements OnInit {
 
   closePreview() {
     this.previewState.show = false;
+
+    this.savePreviewStateToSession();
   }
 
   resetForm() {
@@ -338,11 +319,45 @@ export class QuoteConfigurationComponent implements OnInit {
     this.toastService.show('Quote Details Saved Successfully', 'success');
     this.cartService.clearCart();
     this.quoteDataService.clearQuoteData();
+    this.discountIncentiveStateService.clearState();
+
+    this.clearAllQuoteSessionData();
     this.showFinalSuccessPopup = true;
+  }
+
+  private clearAllQuoteSessionData() {
+    const exactKeysToRemove = [
+      this.SESSION_QUOTE_FOOTER_KEY,
+      this.SESSION_PREVIEW_KEY,
+      this.SESSION_BUTTON_STATES_KEY,
+      this.SESSION_SAVE_RESULTS_KEY,
+      'qc_selected_item'
+    ];
+
+    Object.keys(sessionStorage)
+      .filter(key =>
+        exactKeysToRemove.includes(key) ||
+        key.startsWith('qc_counts_') ||
+        key.startsWith('qc_saved_tabs_') ||
+        key.startsWith(`${this.SESSION_BUTTON_STATES_KEY}_`) ||
+        key.startsWith(`${this.SESSION_SAVE_RESULTS_KEY}_`)
+      )
+      .forEach(key => sessionStorage.removeItem(key));
+
+    this.selectedItemId = 'quote_details';
+    this.annualContractValue = 0;
+    this.totalContractValue = 0;
+    this.grandTotalValue = 0;
+    this.previewState.show = false;
+    this.previewState.data = null;
+    this.savedTabs.clear();
+    this.lastSaveResults.clear();
   }
 
   closeFinalSuccessPopup() {
     this.showFinalSuccessPopup = false;
+
+    this.clearAllQuoteSessionData();
     this.router.navigate(['/']);
   }
 
@@ -355,7 +370,7 @@ export class QuoteConfigurationComponent implements OnInit {
       this.detailsComp?.onSave(onSuccess);
     } else {
       const type = this.getProductType(this.selectedItemId);
-      
+
       // Capture and persist the current footprint before the save clears it
       let currentCount = 0;
       if (type === 'commitment') {
@@ -365,7 +380,7 @@ export class QuoteConfigurationComponent implements OnInit {
         const comp = this.subComps?.find(s => s.productId === this.selectedItemId);
         if (comp) currentCount = comp.getItemCount();
       }
-      
+
       if (currentCount > 0) {
         this.tabMaxCounts.set(this.selectedItemId, currentCount);
         this.saveCountsToSession();
@@ -379,14 +394,19 @@ export class QuoteConfigurationComponent implements OnInit {
               const transaction = res.transaction?.SalesTransaction?.[0];
               res.QuoteNumber = transaction?.QuoteNumber__c || this.quoteNumber.replace('Q-', '');
               res.Name = transaction?.SalesTransactionName || this.quoteName;
-              
+
               // Update footer values from the response
               this.totalContractValue = transaction?.CommitmentAmount__c || 0;
               this.annualContractValue = transaction?.Annual_Commit_Value__c || 0;
-              this.grandTotalValue = transaction?.GrandTotal__std || transaction?.TotalAmount || 0;
+              this.grandTotalValue = transaction?.QuoteTotal__c || transaction?.TotalAmount || 0;
+
+              // Save footer values to session
+              this.saveQuoteFooterToSession();
             }
             this.savedTabs.add(this.selectedItemId);
+            this.saveSavedTabsToSession();
             this.lastSaveResults.set(this.selectedItemId, res);
+            this.saveSaveResultsToSession();
             if (onSuccess) onSuccess(res);
           });
         }
@@ -402,10 +422,15 @@ export class QuoteConfigurationComponent implements OnInit {
               // Update footer values from the response
               this.totalContractValue = transaction?.CommitmentAmount__c || 0;
               this.annualContractValue = transaction?.Annual_Commit_Value__c || 0;
-              this.grandTotalValue = transaction?.GrandTotal__std || transaction?.TotalAmount || 0;
+              this.grandTotalValue = transaction?.QuoteTotal__c || transaction?.TotalAmount || 0;
+
+              // Save footer values to session
+              this.saveQuoteFooterToSession();
             }
             this.savedTabs.add(this.selectedItemId);
+            this.saveSavedTabsToSession();
             this.lastSaveResults.set(this.selectedItemId, res);
+            this.saveSaveResultsToSession();
             if (onSuccess) onSuccess(res);
           }, false);
         }
@@ -426,7 +451,7 @@ export class QuoteConfigurationComponent implements OnInit {
         // 1. Direct calculation for GCP footprint
         const comp = this.commitComps?.find(c => c.productId === product.id);
         if (comp) count = comp.getItemCount();
-        
+
         // Fallback to direct calculation if component hidden or state cleared after save
         if (count <= 1) {
           let pCount = 1; // Parent
@@ -448,7 +473,7 @@ export class QuoteConfigurationComponent implements OnInit {
       // Use the persisted max count to ensure continuity after saves
       const persistedCount = this.tabMaxCounts.get(product.id) || 0;
       const finalCount = Math.max(count, persistedCount);
-      
+
       // Update max count if we found a higher live count
       if (count > persistedCount) {
         this.tabMaxCounts.set(product.id, count);
@@ -486,6 +511,154 @@ export class QuoteConfigurationComponent implements OnInit {
     }
   }
 
+
+  private saveQuoteFooterToSession() {
+    try {
+      // Convert productValidationErrors Map to a serializable object
+      const errorMap: { [key: string]: any[] } = {};
+      this.productValidationErrors.forEach((value, key) => {
+        errorMap[key] = value;
+      });
+
+      sessionStorage.setItem(this.SESSION_QUOTE_FOOTER_KEY, JSON.stringify({
+        // Footer values
+        annualContractValue: this.annualContractValue,
+        totalContractValue: this.totalContractValue,
+        grandTotalValue: this.grandTotalValue,
+        // Validation state
+        productValidationErrors: errorMap,
+        hasValidationErrors: this.hasValidationErrors,
+        hasValidationWarnings: this.hasValidationWarnings,
+        validationPanelOpen: this.validationPanelOpen,
+        warningPanelOpen: this.warningPanelOpen,
+        showWarningAlert: this.showWarningAlert,
+        submittedErrorMessages: this.submittedErrorMessages,
+        errorMessages: this.errorMessages,
+        warningInfoMessages: this.warningInfoMessages
+      }));
+    } catch (e) {
+      console.warn('Failed to save quote footer to session', e);
+    }
+  }
+
+  /** Load combined footer values and validation state from session storage */
+  private loadQuoteFooterFromSession() {
+    try {
+      const raw = sessionStorage.getItem(this.SESSION_QUOTE_FOOTER_KEY);
+      if (raw) {
+        const data = JSON.parse(raw);
+
+        // Restore footer values
+        if (data.annualContractValue !== undefined) this.annualContractValue = data.annualContractValue;
+        if (data.totalContractValue !== undefined) this.totalContractValue = data.totalContractValue;
+        if (data.grandTotalValue !== undefined) this.grandTotalValue = data.grandTotalValue;
+
+        // Restore validation state
+        if (data.productValidationErrors) {
+          Object.keys(data.productValidationErrors).forEach(key => {
+            this.productValidationErrors.set(key, data.productValidationErrors[key]);
+          });
+        }
+
+        if (data.hasValidationErrors !== undefined) this.hasValidationErrors = data.hasValidationErrors;
+        if (data.hasValidationWarnings !== undefined) this.hasValidationWarnings = data.hasValidationWarnings;
+        this.validationPanelOpen = false;
+        this.warningPanelOpen = false;
+        this.showWarningAlert = false;
+        if (data.submittedErrorMessages) this.submittedErrorMessages = data.submittedErrorMessages;
+        if (data.errorMessages) this.errorMessages = data.errorMessages;
+        if (data.warningInfoMessages) this.warningInfoMessages = data.warningInfoMessages;
+      }
+    } catch (e) {
+      console.warn('Failed to load quote footer from session', e);
+    }
+  }
+
+  private savePreviewStateToSession() {
+    try {
+      sessionStorage.setItem(this.SESSION_PREVIEW_KEY, JSON.stringify(this.previewState));
+    } catch (e) {
+      console.warn('Failed to save preview state to session', e);
+    }
+  }
+
+  private loadPreviewStateFromSession() {
+    try {
+      const raw = sessionStorage.getItem(this.SESSION_PREVIEW_KEY);
+      if (raw) {
+        const data = JSON.parse(raw);
+        if (data) {
+          this.previewState = {
+            show: data.show || false,
+            data: data.data || null,
+            previewCommitments: data.previewCommitments || [],
+            commitmentDetailsOnly: data.commitmentDetailsOnly || [],
+            previewProductsWithoutDiscounts: data.previewProductsWithoutDiscounts || [],
+            isLooker: data.isLooker || false,
+            tcv: data.tcv || 0,
+            incentives: data.incentives || 0,
+            terms: data.terms || 0,
+            startDate: data.startDate || '',
+            expirationDate: data.expirationDate || ''
+          };
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load preview state from session', e);
+    }
+  }
+
+  /** Save saved tabs state to session storage */
+  private saveSavedTabsToSession() {
+    try {
+      const tabsArray = Array.from(this.savedTabs);
+      sessionStorage.setItem(`qc_saved_tabs_${this.quoteId}`, JSON.stringify(tabsArray));
+    } catch (e) {
+      console.warn('Failed to save saved tabs to session', e);
+    }
+  }
+
+  /** Load saved tabs state from session storage */
+  private loadSavedTabsFromSession() {
+    try {
+      const raw = sessionStorage.getItem(`qc_saved_tabs_${this.quoteId}`);
+      if (raw) {
+        const tabsArray = JSON.parse(raw);
+        this.savedTabs = new Set(tabsArray);
+      }
+    } catch (e) {
+      console.warn('Failed to load saved tabs from session', e);
+    }
+  }
+
+  /** Save last save results to session storage (for preview panel data) */
+  private saveSaveResultsToSession() {
+    try {
+      const resultsObj: { [key: string]: any } = {};
+      this.lastSaveResults.forEach((value, key) => {
+        resultsObj[key] = value;
+      });
+      sessionStorage.setItem(`${this.SESSION_SAVE_RESULTS_KEY}_${this.quoteId}`, JSON.stringify(resultsObj));
+    } catch (e) {
+      console.warn('Failed to save results to session', e);
+    }
+  }
+
+  /** Load last save results from session storage */
+  private loadSaveResultsFromSession() {
+    try {
+      const raw = sessionStorage.getItem(`${this.SESSION_SAVE_RESULTS_KEY}_${this.quoteId}`);
+      if (raw) {
+        const resultsObj = JSON.parse(raw);
+        Object.keys(resultsObj).forEach(key => {
+          this.lastSaveResults.set(key, resultsObj[key]);
+        });
+      }
+    } catch (e) {
+      console.warn('Failed to load results from session', e);
+    }
+  }
+
   private getLookerCountFromSession(productId: string): number {
     try {
       const sessionKey = 'subscription_config_' + (this.quoteId || 'draft') + '_' + (productId || '');
@@ -520,17 +693,28 @@ export class QuoteConfigurationComponent implements OnInit {
   }
 
   ngOnInit() {
+    document.addEventListener('click', this.onGlobalClick, { capture: true });
     const mode = this.activatedRoute.snapshot.data['mode'] || 'configure';
-    
+
     // Extract quoteId from URL params if available (for session keys)
     this.activatedRoute.queryParams.subscribe(params => {
       if (params['quoteId']) {
         this.quoteId = params['quoteId'];
         this.loadCountsFromSession();
+        this.loadSavedTabsFromSession();
+        this.loadSaveResultsFromSession();
       }
     });
 
+    // Restore session data before loading quote
+    this.loadQuoteFooterFromSession();
+    this.loadPreviewStateFromSession();
+
     mode === 'edit' ? this.modifyQuote() : this.configureQuote();
+  }
+
+  ngOnDestroy() {
+    document.removeEventListener('click', this.onGlobalClick, { capture: true });
   }
 
   private configureQuote() {
@@ -568,10 +752,10 @@ export class QuoteConfigurationComponent implements OnInit {
         const contextId = loadRes.contextId;
         console.log('[QuoteConfiguration] loadRes:', loadRes);
         if (!contextId) throw new Error('No contextId received from load-instance');
-        
+
         // Capture quote number from loadRes if present
         const loadNumber = loadRes.QuoteNumber__c || (loadRes.transaction?.SalesTransaction?.[0]?.QuoteNumber__c);
-        
+
         return this.sfApi.getConfiguratorInstance(contextId).pipe(
           map(instanceRes => ({ instanceRes, loadNumber }))
         );
@@ -595,19 +779,19 @@ export class QuoteConfigurationComponent implements OnInit {
           return null;
         };
 
-        const quotenumber = loadNumber || 
-                           findValueByKey(instanceRes, 'QuoteNumber__c') || 
-                           findValueByKey(instanceRes, 'QuoteNumber') || 
-                           'Q-';
-        
-        const name = findValueByKey(instanceRes, 'SalesTransactionName') || 
-                     findValueByKey(instanceRes, 'Name') || 
-                     'Quote';
+        const quotenumber = loadNumber ||
+          findValueByKey(instanceRes, 'QuoteNumber__c') ||
+          findValueByKey(instanceRes, 'QuoteNumber') ||
+          'Q-';
+
+        const name = findValueByKey(instanceRes, 'SalesTransactionName') ||
+          findValueByKey(instanceRes, 'Name') ||
+          'Quote';
 
         const commitmentAmount = findValueByKey(instanceRes, 'CommitmentAmount__c') || 0;
         const annualCommitValue = findValueByKey(instanceRes, 'Annual_Commit_Value__c') || 0;
-        const grandTotal = findValueByKey(instanceRes, 'GrandTotal__std') || 
-                          findValueByKey(instanceRes, 'TotalAmount') || 0;
+        const grandTotal = findValueByKey(instanceRes, 'QuoteTotal__c') ||
+          findValueByKey(instanceRes, 'TotalAmount') || 0;
 
         return {
           quoteId: quoteRecord?.id || quoteRecord?.Id,
@@ -675,7 +859,7 @@ export class QuoteConfigurationComponent implements OnInit {
     if (data.totalContractValue !== undefined) {
       this.totalContractValue = data.totalContractValue;
     }
-    
+
     if (data.annualContractValue !== undefined) {
       this.annualContractValue = data.annualContractValue;
     }
@@ -684,9 +868,14 @@ export class QuoteConfigurationComponent implements OnInit {
       this.grandTotalValue = data.grandTotalValue;
     }
 
+    // Save footer values to session whenever they're updated
+    this.saveQuoteFooterToSession();
+
     if (data.quoteId) {
       this.quoteId = data.quoteId;
       this.loadCountsFromSession();
+      this.loadSavedTabsFromSession();
+      this.loadSaveResultsFromSession();
     }
 
     if (data.products && data.products.length > 0) {
@@ -756,27 +945,45 @@ export class QuoteConfigurationComponent implements OnInit {
   // --- Validation Error Handling ---
 
   toggleValidationPanel(event?: Event) {
-    if (event) event.stopPropagation();
     this.validationPanelOpen = !this.validationPanelOpen;
+    this.saveQuoteFooterToSession();
   }
 
   toggleWarningPanel(event?: Event) {
-    if (event) event.stopPropagation();
     this.warningPanelOpen = !this.warningPanelOpen;
     if (this.warningPanelOpen) this.validationPanelOpen = false;
+    this.saveQuoteFooterToSession();
   }
 
   onWarningAlertOk() {
     this.showWarningAlert = false;
-    // User acknowledged warnings, they might try to save again
+    // User acknowledged warnings, they must click Save again to proceed
+    this.saveQuoteFooterToSession();
   }
 
-  @HostListener('document:click')
-  onDocumentClick() {
-    // Close panels when clicking anywhere outside
-    this.validationPanelOpen = false;
-    this.warningPanelOpen = false;
-  }
+  private onGlobalClick = (event: Event) => {
+    const target = event.target as Node;
+
+    if (this.validationPanelOpen) {
+      const validationPanel = this.elementRef.nativeElement.querySelector('#validation-panel');
+      const validationBtn = this.elementRef.nativeElement.querySelector('#validation-toggle-btn');
+      if ((!validationPanel || !validationPanel.contains(target)) &&
+        (!validationBtn || !validationBtn.contains(target))) {
+        this.validationPanelOpen = false;
+        this.saveQuoteFooterToSession();
+      }
+    }
+
+    if (this.warningPanelOpen) {
+      const warningPanel = this.elementRef.nativeElement.querySelector('#warning-panel');
+      const warningBtn = this.elementRef.nativeElement.querySelector('#warning-toggle-btn');
+      if ((!warningPanel || !warningPanel.contains(target)) &&
+        (!warningBtn || !warningBtn.contains(target))) {
+        this.warningPanelOpen = false;
+        this.saveQuoteFooterToSession();
+      }
+    }
+  };
 
   onValidationMessagesReceived(event: { productId: string; productName: string; messages: any[] }) {
     if (event.messages && event.messages.length > 0) {
@@ -785,14 +992,15 @@ export class QuoteConfigurationComponent implements OnInit {
       // Build flat list of error messages for the header panel
       // First remove old errors for this product, then add new ones
       this.submittedErrorMessages = this.submittedErrorMessages.filter(m => m.productId !== event.productId);
-      
+
       event.messages.forEach(msg => {
         this.submittedErrorMessages.push({
           productId: event.productId,
           productName: msg.productName || event.productName,
           message: msg.message,
           messageType: msg.messageType || 'info',
-          category: msg.category
+          category: msg.category,
+          isQuoteLevel: !!msg.isQuoteLevel
         });
       });
 
@@ -830,6 +1038,9 @@ export class QuoteConfigurationComponent implements OnInit {
         this.warningPanelOpen = false;
       }
     }
+
+    // Save validation state to session whenever messages are received
+    this.saveQuoteFooterToSession();
   }
 
   hasProductErrors(productId: string): boolean {

@@ -55,7 +55,7 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
   showSuccessPopup: boolean = false;
 
   // Validation messages from configurator rules
-  validationErrors: { message: string; messageType: string; category: string }[] = [];
+  validationErrors: { message: string; messageType: string; category: string; primaryRecordId?: string; relatedRecordId?: string; productName?: string; isQuoteLevel?: boolean }[] = [];
   hasValidationErrors: boolean = false;
   periodErrors: Map<number, { message: string; messageType: string; category?: string }[]> = new Map();
   public saveAttemptedWithWarnings: boolean = false;
@@ -348,25 +348,32 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
   set termStartDate(value: string) { this.termStartInput = value; }
 
   getItemCount(): number {
-    let count = 0;
-    const isRamped = this.subscriptionPeriods.length > 1;
+    let count = 1; // Base Looker product already present in the cart
 
     this.subscriptionPeriods.forEach((period: any) => {
-      if (isRamped) count++; // Group
-      count++; // Bundle Parent
-      if (period.productId) count++; // Platform
+      count++; // Each Looker period consumes one product slot
+      if (period.productId || (period.productName && period.productName !== 'Select')) count++; // Platform
       if (period.userRows) {
         period.userRows.forEach((row: any) => {
-          if (row.type !== 'Non-prod' && (row.quantity || 0) > 0 && row.productId) {
+          if (row.type !== 'Non-prod' && this.hasEnteredQuantity(row.quantity)) {
             count++;
           }
         });
       }
-      // Non-prod check (simplified fallback)
       const nonProdRow = period.userRows?.find((r: any) => r.type === 'Non-prod');
-      if (nonProdRow && (nonProdRow.quantity || 0) > 0) count++;
+      if (nonProdRow && this.hasEnteredQuantity(nonProdRow.quantity)) count++;
     });
-    return count || 5;
+    return count;
+  }
+
+  private hasEnteredQuantity(quantity: any): boolean {
+    return quantity !== null && quantity !== undefined && quantity !== '' && Number(quantity) > 0;
+  }
+
+  private hasBillableLookerProducts(period: any): boolean {
+    if (!period) return false;
+    if (period.productId || (period.productName && period.productName !== 'Select')) return true;
+    return (period.userRows || []).some((row: any) => (row.quantity || 0) > 0);
   }
 
   ngOnInit() {
@@ -543,6 +550,12 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
   }
 
   onSubscriptionPeriodsCreated(frequency: string) {
+    if (this.remainingQuota <= 0) {
+      this.toastService.show('Product catalog limit reached. Cannot add another period.', 'error');
+      this.isSubscriptionModalOpen = false;
+      return;
+    }
+
     this.currentFrequency = frequency;
     this.loadBundleDetails();
 
@@ -604,6 +617,11 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
   }
 
   addOnePeriod(start: string, end: string) {
+    if (this.remainingQuota <= 0) {
+      this.toastService.show('Product catalog limit reached. Cannot add another period.', 'error');
+      return;
+    }
+
     const startDate = start ? this.parseDate(start) : null;
     const endDate = end ? this.parseDate(end) : null;
     this.addPeriodItem(this.subscriptionPeriods.length + 1, startDate, endDate, true);
@@ -788,6 +806,7 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
     this.hasValidationErrors = false;
     this.periodErrors.clear();
     this.childRefToPeriodMap.clear();
+    this.saveValidationErrorsToSession();
   }
 
   private parseConfiguratorMessages(response: any): { errors: any[]; warnings: any[]; infos: any[]; all: any[]; hasMessages: boolean; hasConfigurationRules: boolean; hasErrors: boolean; hasConfigurationRuleErrors: boolean } {
@@ -809,29 +828,33 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
       const msgArray = messages[key];
       if (!Array.isArray(msgArray)) return;
 
-      const resolvedProductName = this.resolveProductNameForNode(key);
-
       msgArray.forEach((msg: any) => {
+        const relatedRecordId = msg.relatedRecordId || key;
+        const resolvedProductName = this.resolveProductNameForNode(relatedRecordId) || this.resolveProductNameForNode(key);
+        const isQuoteLevelMessage = relatedRecordId === msg.primaryRecordId || key === msg.primaryRecordId;
         const entry = {
           message: msg.message,
           messageType: msg.messageType || 'info',
           category: msg.category,
           primaryRecordId: msg.primaryRecordId,
-          relatedRecordId: msg.relatedRecordId || key,
-          productName: resolvedProductName || this.productName
+          relatedRecordId,
+          productName: isQuoteLevelMessage ? '' : (resolvedProductName || this.productName || 'Looker New RCA'),
+          isQuoteLevel: isQuoteLevelMessage
         };
 
         if (msg.messageType === 'error') {
           hasErrors = true;
         }
 
-        if (msg.category === 'configurationrules') {
-          hasConfigurationRules = true;
-          if (msg.messageType === 'error') {
+        const shouldShowMessage = msg.category === 'configurationrules';
+        if (shouldShowMessage) {
+          if (msg.category === 'configurationrules') {
+            hasConfigurationRules = true;
+          }
+          if (msg.messageType === 'error' && msg.category === 'configurationrules') {
             hasConfigurationRuleErrors = true;
           }
 
-          // Only show configurationrules on the UI as per user request
           all.push(entry);
 
           if (msg.messageType === 'error') {
@@ -908,12 +931,17 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
               this.validationErrors = parsed.all.map(e => ({
                 message: e.message,
                 messageType: e.messageType,
-                category: e.category
+                category: e.category,
+                primaryRecordId: e.primaryRecordId,
+                relatedRecordId: e.relatedRecordId,
+                productName: e.productName,
+                isQuoteLevel: e.isQuoteLevel
               }));
               this.hasValidationErrors = true;
 
               // Group errors by period
               this.groupErrorsByPeriod(parsed.all);
+              this.saveValidationErrorsToSession();
 
               // Emit to parent for sidebar highlighting
               this.validationMessagesReceived.emit({
@@ -1012,7 +1040,8 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
 
   private buildLookerNodes(quoteId: string): any[] {
     const nodes: any[] = [];
-    const isRamped = this.subscriptionPeriods.length > 1;
+    const populatedPeriods = this.subscriptionPeriods.filter(period => this.hasBillableLookerProducts(period));
+    const isRamped = populatedPeriods.length > 1;
     let globalChildCounter = 1;
     let globalRelCounter = 1;
     let globalSortOrder = this.startingSortOrder;
@@ -1020,7 +1049,7 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
     this.childRefToPeriodMap.clear();
     this.childRefToProductNameMap.clear();
 
-    this.subscriptionPeriods.forEach((period, pIdx) => {
+    populatedPeriods.forEach((period, pIdx) => {
       const periodNum = pIdx + 1;
       const periodSuffix = periodNum.toString().padStart(2, '0');
       const groupRefId = `looker_group${periodNum}`;
@@ -1266,18 +1295,26 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
 
 
   private validateLookerConfig(): boolean {
-    if (this.subscriptionPeriods.length === 0) return true;
-
-    for (let i = 0; i < this.subscriptionPeriods.length; i++) {
-      const p = this.subscriptionPeriods[i];
-      const yearLabel = `Year ${i + 1}`;
-
-      // 1. Check if period has a platform product
-      if (!p.productName || p.productName === 'Select') {
-        this.toastService.show(`${yearLabel}: Must select platform product.`, 'error');
-        return false;
-      }
+    if (this.subscriptionPeriods.length === 0) {
+      this.toastService.show('Please create at least one subscription period.', 'warning');
+      return false;
     }
+
+    const hasMissingProduct = this.subscriptionPeriods.some(p => !p.productName || p.productName === 'Select');
+    if (hasMissingProduct) {
+      this.toastService.show('you should select a platform product for all periods', 'error');
+      return false;
+    }
+
+
+
+
+
+
+
+
+
+
 
     // 3. Date check for the last period
     const last = this.subscriptionPeriods[this.subscriptionPeriods.length - 1];
@@ -1514,7 +1551,8 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
         termEndDate: this.termEndDate,
         activeTab: this.activeTab,
         subscriptionPeriods: this.subscriptionPeriods,
-        currentFrequency: this.currentFrequency
+        currentFrequency: this.currentFrequency,
+        validation: this.getValidationState()
       };
       sessionStorage.setItem(this.sessionKey, JSON.stringify(state));
     } catch (e) {
@@ -1526,6 +1564,7 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
     try {
       if (!this.sessionKey) return;
       const raw = sessionStorage.getItem(this.sessionKey);
+      let loadedValidation = false;
       if (raw) {
         const state = JSON.parse(raw);
         if (state.operationType) this.operationType = state.operationType;
@@ -1536,9 +1575,69 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
         if (state.activeTab) this.activeTab = state.activeTab;
         if (state.subscriptionPeriods) this.subscriptionPeriods = state.subscriptionPeriods;
         if (state.currentFrequency) this.currentFrequency = state.currentFrequency;
+        if (state.validation) {
+          this.loadValidationErrorsFromSession(state.validation);
+          loadedValidation = true;
+        }
       }
+      if (!loadedValidation) this.loadValidationErrorsFromSession();
     } catch (e) {
       console.warn('Could not load from session', e);
+    }
+  }
+
+  private get validationSessionKey(): string {
+    return 'subscription_validation_' + (this.quoteId || 'draft') + '_' + (this.productId || '');
+  }
+
+  private getValidationState() {
+    const periodErrorsObj: { [key: string]: any } = {};
+    this.periodErrors.forEach((value, key) => {
+      periodErrorsObj[key.toString()] = value;
+    });
+
+    return {
+      validationErrors: this.validationErrors,
+      hasValidationErrors: this.hasValidationErrors,
+      periodErrors: periodErrorsObj,
+      saveAttemptedWithWarnings: this.saveAttemptedWithWarnings
+    };
+  }
+
+  private saveValidationErrorsToSession() {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(this.sessionKey) || '{}');
+      sessionStorage.setItem(this.sessionKey, JSON.stringify({
+        ...saved,
+        validation: this.getValidationState()
+      }));
+      sessionStorage.removeItem(this.validationSessionKey);
+    } catch (e) {
+      console.warn('Could not save validation errors to session', e);
+    }
+  }
+
+  private loadValidationErrorsFromSession(savedValidation?: any) {
+    try {
+      const raw = savedValidation ? null : sessionStorage.getItem(this.validationSessionKey);
+      const validationState = savedValidation || (raw ? JSON.parse(raw) : null);
+      if (validationState) {
+        if (validationState.validationErrors) this.validationErrors = validationState.validationErrors;
+        if (validationState.hasValidationErrors !== undefined) this.hasValidationErrors = validationState.hasValidationErrors;
+        if (validationState.periodErrors) {
+          this.periodErrors.clear();
+          Object.keys(validationState.periodErrors).forEach(key => {
+            this.periodErrors.set(parseInt(key), validationState.periodErrors[key]);
+          });
+        }
+        if (validationState.saveAttemptedWithWarnings !== undefined) this.saveAttemptedWithWarnings = validationState.saveAttemptedWithWarnings;
+        if (this.validationErrors.length > 0 && this.periodErrors.size === 0) {
+          this.groupErrorsByPeriod(this.validationErrors);
+        }
+        if (raw) this.saveValidationErrorsToSession();
+      }
+    } catch (e) {
+      console.warn('Could not load validation errors from session', e);
     }
   }
 
@@ -1581,10 +1680,6 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
   private groupErrorsByPeriod(allMessages: any[]): void {
     this.periodErrors.clear();
 
-    // Separate messages: those with mappable relatedRecordIds vs unknown
-    const unmappedByKey: Map<string, any[]> = new Map();
-    const bundleLevelMessages: any[] = []; // Messages that apply to all periods
-
     allMessages.forEach((msg: any) => {
       const periodIndex = this.getPeriodIndexFromRelatedRecordId(msg.relatedRecordId);
       if (periodIndex !== null && periodIndex >= 0 && periodIndex < this.subscriptionPeriods.length) {
@@ -1597,53 +1692,8 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
           messageType: msg.messageType,
           category: msg.category
         });
-      } else if (msg.relatedRecordId && msg.relatedRecordId !== msg.primaryRecordId) {
-        // Group by unknown relatedRecordId key for positional mapping
-        if (!unmappedByKey.has(msg.relatedRecordId)) {
-          unmappedByKey.set(msg.relatedRecordId, []);
-        }
-        unmappedByKey.get(msg.relatedRecordId)!.push(msg);
-      } else {
-        // Bundle-level messages (no relatedRecordId or relatedRecordId === primaryRecordId)
-        // These apply to all periods
-        bundleLevelMessages.push({
-          message: msg.message,
-          messageType: msg.messageType,
-          category: msg.category
-        });
       }
     });
-
-    // Distribute unmapped groups by position (order of distinct keys = order of periods)
-    if (unmappedByKey.size > 0) {
-      const unmappedKeys = Array.from(unmappedByKey.keys());
-      unmappedKeys.forEach((key, idx) => {
-        const periodIndex = idx < this.subscriptionPeriods.length ? idx : this.subscriptionPeriods.length - 1;
-        const msgs = unmappedByKey.get(key)!;
-        if (!this.periodErrors.has(periodIndex)) {
-          this.periodErrors.set(periodIndex, []);
-        }
-        msgs.forEach(m => {
-          this.periodErrors.get(periodIndex)!.push({
-            message: m.message,
-            messageType: m.messageType,
-            category: m.category
-          });
-        });
-      });
-    }
-
-    // Distribute bundle-level messages (like "Validate:...") to all periods
-    if (bundleLevelMessages.length > 0 && this.subscriptionPeriods.length > 0) {
-      for (let i = 0; i < this.subscriptionPeriods.length; i++) {
-        if (!this.periodErrors.has(i)) {
-          this.periodErrors.set(i, []);
-        }
-        bundleLevelMessages.forEach(m => {
-          this.periodErrors.get(i)!.push(m);
-        });
-      }
-    }
 
     console.log('[Looker] periodErrors map:', Object.fromEntries(this.periodErrors));
   }
@@ -1674,54 +1724,6 @@ export class SubscriptionConfigurationComponent implements OnInit, OnChanges {
 
 
   getActualProductNames(quoteId: string): string {
-    const productNames = new Set<string>();
-
-    // Get product names from subscription periods
-    if (this.subscriptionPeriods && this.subscriptionPeriods.length > 0) {
-      this.subscriptionPeriods.forEach((period: any) => {
-        if (period.productName) {
-          productNames.add(period.productName);
-        }
-      });
-    }
-
-    // Return comma-separated list of unique product names, or fall back to input productName
-    return productNames.size > 0 ? Array.from(productNames).join(', ') : (this.productName || 'Looker');
+    return this.productName || 'Looker New RCA';
   }
-
-  // /**
-  //  * Dynamically calculates total number of items (Groups + QLIs) in this Looker configuration
-  //  */
-  // getItemCount(): number {
-  //   let count = 0;
-  //   const isRamped = this.subscriptionPeriods.length > 1;
-
-  //   this.subscriptionPeriods.forEach(period => {
-  //     // 1. Group Node (if ramped)
-  //     if (isRamped) count++;
-
-  //     // 2. Main Bundle Line
-  //     count++;
-
-  //     // 3. Platform Child (if set)
-  //     if (period.productId) count++;
-
-  //     // 4. User Product Children
-  //     if (period.userRows) {
-  //       period.userRows.forEach(row => {
-  //         if (row.type !== 'Non-prod' && (row.quantity || 0) > 0 && row.productId) {
-  //           count++;
-  //         }
-  //       });
-  //     }
-
-  //     // 5. Non-Prod Child (if set)
-  //     const nonProdRow = period.userRows?.find(r => r.type === 'Non-prod');
-  //     if (nonProdRow && (nonProdRow.quantity || 0) > 0 && period.nonProdProductId) {
-  //       count++;
-  //     }
-  //   });
-
-  //   return count;
-  // }
 }

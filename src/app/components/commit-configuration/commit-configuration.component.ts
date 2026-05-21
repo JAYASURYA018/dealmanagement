@@ -47,21 +47,24 @@ export class CommitConfigurationComponent implements OnInit {
   @Input() quoteId: string = '';
   @Input() remainingQuota: number = 1000;
   @Input() startingSortOrder: number = 1;
-  
+
   activeTab: 'details' | 'discounts' = 'details';
   commitmentPeriods: any[] = [{ months: null, amount: null, isCollapsed: false }];
   activeMenuIndex: number | null = null;
 
   // Validation error state
-  validationErrors: { message: string; messageType: string; category: string; relatedRecordId?: string }[] = [];
+  validationErrors: { message: string; messageType: string; category: string; relatedRecordId?: string; productId?: string }[] = [];
   hasValidationErrors: boolean = false;
   showErrorProductsPanel: boolean = false;
   errorProductItems: any[] = [];
   isDiscountErrorMode: boolean = true;
+  private discountErrorProductIds: string[] = [];
+  private incentiveErrorProductIds: string[] = [];
+  private validationNodeProductIds = new Map<string, string>();
   private saveAttemptedWithWarnings: boolean = false;
 
   @Output() validationMessagesReceived = new EventEmitter<{ productId: string; productName: string; messages: any[] }>();
-  
+
   opportunityName: string = '';
   startDate: string = new Date().toLocaleDateString('en-CA');
   expirationDate: string = '';
@@ -74,26 +77,80 @@ export class CommitConfigurationComponent implements OnInit {
     return `commit_config_${this.productId}`;
   }
 
+  private get validationSessionKey(): string {
+    return `commit_validation_${this.productId}`;
+  }
+
   private saveToSession() {
     sessionStorage.setItem(this.sessionKey, JSON.stringify({
       commitmentPeriods: this.commitmentPeriods,
       startDate: this.startDate,
-      activeTab: this.activeTab
+      activeTab: this.activeTab,
+      validation: this.getValidationState()
     }));
   }
 
   private loadFromSession() {
     try {
       const raw = sessionStorage.getItem(this.sessionKey);
+      let saved: any = null;
       if (raw) {
-        const saved = JSON.parse(raw);
+        saved = JSON.parse(raw);
         if (saved.commitmentPeriods && saved.commitmentPeriods.length > 0) {
           this.commitmentPeriods = saved.commitmentPeriods;
         }
         if (saved.startDate) this.startDate = saved.startDate;
         if (saved.activeTab) this.activeTab = saved.activeTab;
       }
+      this.loadValidationErrorsFromSession(saved?.validation);
     } catch { /* ignore */ }
+  }
+
+  private getValidationState() {
+    return {
+      validationErrors: this.validationErrors,
+      hasValidationErrors: this.hasValidationErrors,
+      showErrorProductsPanel: this.showErrorProductsPanel,
+      errorProductItems: this.errorProductItems,
+      isDiscountErrorMode: this.isDiscountErrorMode,
+      discountErrorProductIds: this.discountErrorProductIds,
+      incentiveErrorProductIds: this.incentiveErrorProductIds,
+      saveAttemptedWithWarnings: this.saveAttemptedWithWarnings
+    };
+  }
+
+  private saveValidationErrorsToSession() {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(this.sessionKey) || '{}');
+      sessionStorage.setItem(this.sessionKey, JSON.stringify({
+        ...saved,
+        validation: this.getValidationState()
+      }));
+      sessionStorage.removeItem(this.validationSessionKey);
+    } catch (e) {
+      console.warn('Could not save validation errors to session', e);
+    }
+  }
+
+  private loadValidationErrorsFromSession(savedValidation?: any) {
+    try {
+      const raw = savedValidation ? null : sessionStorage.getItem(this.validationSessionKey);
+      const validationState = savedValidation || (raw ? JSON.parse(raw) : null);
+      if (validationState) {
+        if (validationState.validationErrors) this.validationErrors = validationState.validationErrors;
+        if (validationState.hasValidationErrors !== undefined) this.hasValidationErrors = validationState.hasValidationErrors;
+        this.showErrorProductsPanel = false;
+        if (validationState.errorProductItems) this.errorProductItems = validationState.errorProductItems;
+        if (validationState.isDiscountErrorMode !== undefined) this.isDiscountErrorMode = validationState.isDiscountErrorMode;
+        if (validationState.discountErrorProductIds) this.discountErrorProductIds = validationState.discountErrorProductIds;
+        if (validationState.incentiveErrorProductIds) this.incentiveErrorProductIds = validationState.incentiveErrorProductIds;
+        if (validationState.saveAttemptedWithWarnings !== undefined) this.saveAttemptedWithWarnings = validationState.saveAttemptedWithWarnings;
+        this.syncErrorProductIdsFromValidation(true);
+        this.saveValidationErrorsToSession();
+      }
+    } catch (e) {
+      console.warn('Could not load validation errors from session', e);
+    }
   }
 
   get totalTerms(): number {
@@ -121,10 +178,10 @@ export class CommitConfigurationComponent implements OnInit {
     if (!transaction) return null;
 
     const items = transaction.SalesTransactionItem || [];
-    
+
     // Find GCP Parent Item
     const parentItem = items.find((item: any) => item.ProductCode === 'GCPRCA' || item.Product === this.productId);
-    
+
     // 1. Commitment Details (Ramped periods)
     const commitmentDetails = (parentItem?.CommitmentDetails__c || []).map((cd: any) => ({
       name: cd.CommitmentName__c || 'Commitment Period',
@@ -138,33 +195,34 @@ export class CommitConfigurationComponent implements OnInit {
     }));
 
     // 2. Standard Products (those that have a commitment amount and aren't Looker)
-    const previewProductsWithoutDiscounts = items.filter((item: any) => 
-       item.CommitmentAmount__c !== null && 
-       item.CommitmentAmount__c !== undefined &&
-       item.PeriodBoundary !== 'Anniversary' && // Looker products use Anniversary
-       !item.SalesTransactionItemGroup // Looker uses groups
+    const previewProductsWithoutDiscounts = items.filter((item: any) =>
+      item.ProductCode === 'GCPRCA' || item.Product === this.productId ||
+      (item.CommitmentAmount__c !== null &&
+      item.CommitmentAmount__c !== undefined &&
+      !item.SalesTransactionItemGroup) // Looker uses groups
     ).map((item: any) => ({
-       Product_Name_Display: item.ProductName || item.ProductCode,
-       Quantity: item.Quantity,
-       ListPrice: item.ListPrice || item.UnitPrice,
-       UnitPrice: item.UnitPrice,
-       TotalPrice: item.TotalPrice,
-       StartDate: item.StartDate,
-       EndDate: item.EndDate
+      Product_Name_Display: item.ProductName || item.ProductCode,
+      Quantity: item.Quantity,
+      ListPrice: item.ListPrice || item.UnitPrice,
+      UnitPrice: item.UnitPrice,
+      TotalPrice: item.TotalPrice,
+      StartDate: item.StartDate,
+      EndDate: item.EndDate
     }));
 
     // 3. Incentives and Discounts - Group them for display if needed
     const incentives = items.filter((item: any) => item.Incentive__c !== null);
-    const discounts = items.filter((item: any) => 
-       item.Incentive__c === null && 
-       item.ProductCode !== 'GCPRCA' && 
-       item.ProductCode !== 'LookerBundleNewRCA' &&
-       item.Product !== this.productId
+    const discounts = items.filter((item: any) =>
+      item.Incentive__c === null &&
+      item.ProductCode !== 'GCPRCA' &&
+      item.ProductCode !== 'LookerBundleNewRCA' &&
+      item.Product !== this.productId &&
+      item.ParentSalesTransactionItem === null
     );
 
     // Only include periods that actually have items to show in the breakdown sections
     const previewCommitments = commitmentDetails.filter((cd: any) => cd.groupItems.length > 0 || cd.bulkIndividualItems.length > 0);
-    
+
     if (discounts.length > 0) {
       previewCommitments.push({
         name: 'Discounts',
@@ -214,97 +272,97 @@ export class CommitConfigurationComponent implements OnInit {
     const state = this.discountIncentiveStateService.getCurrentState();
     const discountPeriods = this.discountsIncentives?.discountPeriods || state.discountPeriods || [];
     discountPeriods.forEach((period: any, index: number) => {
-        const startDateStr = period.startDate;
-        const endDateStr = period.endDate;
-        const individualItems: any[] = [];
-        const groupItems: any[] = [];
+      const startDateStr = period.startDate;
+      const endDateStr = period.endDate;
+      const individualItems: any[] = [];
+      const groupItems: any[] = [];
 
-        if (startDateStr) {
-            const pStart = new Date(startDateStr).getTime();
-            let pEnd: number | null = null;
-            if (endDateStr) pEnd = new Date(endDateStr).setHours(23, 59, 59, 999);
+      if (startDateStr) {
+        const pStart = new Date(startDateStr).getTime();
+        let pEnd: number | null = null;
+        if (endDateStr) pEnd = new Date(endDateStr).setHours(23, 59, 59, 999);
 
-            previewData.QuoteLineItems.records.forEach((item: any) => {
-                if (item.Id && matchedIds.has(item.Id)) return;
-                if (item.Product2Id === this.productId) return; // Skip bundle
+        previewData.QuoteLineItems.records.forEach((item: any) => {
+          if (item.Id && matchedIds.has(item.Id)) return;
+          if (item.Product2Id === this.productId) return; // Skip bundle
 
-                const discount = item.Discount != null ? parseFloat(item.Discount) : 0;
-                if (discount === 0) return;
+          const discount = item.Discount != null ? parseFloat(item.Discount) : 0;
+          if (discount === 0) return;
 
-                const itemStartStr = item.StartDate;
-                if (itemStartStr) {
-                    const itemStart = new Date(itemStartStr).getTime();
-                    const dateMatches = pEnd ? (itemStart >= pStart && itemStart <= pEnd) : (itemStart >= pStart);
-                    
-                    if (dateMatches) {
-                        if (item.Id) matchedIds.add(item.Id);
-                        if (this.isGroupProduct(item)) {
-                            groupItems.push(item);
-                        } else {
-                            individualItems.push(item);
-                        }
-                    }
-                }
-            });
-        }
+          const itemStartStr = item.StartDate;
+          if (itemStartStr) {
+            const itemStart = new Date(itemStartStr).getTime();
+            const dateMatches = pEnd ? (itemStart >= pStart && itemStart <= pEnd) : (itemStart >= pStart);
 
-        previews.push({
-            type: 'discount',
-            name: `Discount Period ${index + 1}`,
-            displayName: `Discount Period ${index + 1}`,
-            startDate: startDateStr ? this.formatDateForDisplay(startDateStr) : '',
-            endDate: endDateStr ? this.formatDateForDisplay(endDateStr) : '',
-            months: period.months,
-            amount: period.amount,
-            bulkIndividualItems: individualItems,
-            groupItems,
+            if (dateMatches) {
+              if (item.Id) matchedIds.add(item.Id);
+              if (this.isGroupProduct(item)) {
+                groupItems.push(item);
+              } else {
+                individualItems.push(item);
+              }
+            }
+          }
         });
+      }
+
+      previews.push({
+        type: 'discount',
+        name: `Discount Period ${index + 1}`,
+        displayName: `Discount Period ${index + 1}`,
+        startDate: startDateStr ? this.formatDateForDisplay(startDateStr) : '',
+        endDate: endDateStr ? this.formatDateForDisplay(endDateStr) : '',
+        months: period.months,
+        amount: period.amount,
+        bulkIndividualItems: individualItems,
+        groupItems,
+      });
     });
 
     // 2. Process Incentive Periods
     const incentivePeriods = this.discountsIncentives?.incentivePeriods || [];
     incentivePeriods.forEach((period: any, index: number) => {
-        const startDateStr = period.startDate;
-        const endDateStr = period.endDate;
-        const individualItems: any[] = [];
-        const groupItems: any[] = [];
+      const startDateStr = period.startDate;
+      const endDateStr = period.endDate;
+      const individualItems: any[] = [];
+      const groupItems: any[] = [];
 
-        if (startDateStr) {
-            const pStart = new Date(startDateStr).getTime();
-            let pEnd: number | null = null;
-            if (endDateStr) pEnd = new Date(endDateStr).setHours(23, 59, 59, 999);
+      if (startDateStr) {
+        const pStart = new Date(startDateStr).getTime();
+        let pEnd: number | null = null;
+        if (endDateStr) pEnd = new Date(endDateStr).setHours(23, 59, 59, 999);
 
-            previewData.QuoteLineItems.records.forEach((item: any) => {
-                if (item.Id && matchedIds.has(item.Id)) return;
-                const incentive = item.Incentive__c ? parseFloat(item.Incentive__c) : 0;
-                if (incentive === 0) return;
+        previewData.QuoteLineItems.records.forEach((item: any) => {
+          if (item.Id && matchedIds.has(item.Id)) return;
+          const incentive = item.Incentive__c ? parseFloat(item.Incentive__c) : 0;
+          if (incentive === 0) return;
 
-                const itemStartStr = item.StartDate;
-                if (itemStartStr) {
-                    const itemStart = new Date(itemStartStr).getTime();
-                    if (itemStart >= pStart && (pEnd ? itemStart <= pEnd : true)) {
-                        if (item.Id) matchedIds.add(item.Id);
-                        if (this.isGroupProduct(item)) {
-                            groupItems.push(item);
-                        } else {
-                            individualItems.push(item);
-                        }
-                    }
-                }
-            });
-        }
-
-        previews.push({
-            type: 'incentive',
-            name: `Incentive Period`,
-            displayName: `Incentive Period`,
-            startDate: startDateStr ? this.formatDateForDisplay(startDateStr) : '',
-            endDate: endDateStr ? this.formatDateForDisplay(endDateStr) : '',
-            months: period.months,
-            amount: period.amount,
-            bulkIndividualItems: individualItems,
-            groupItems,
+          const itemStartStr = item.StartDate;
+          if (itemStartStr) {
+            const itemStart = new Date(itemStartStr).getTime();
+            if (itemStart >= pStart && (pEnd ? itemStart <= pEnd : true)) {
+              if (item.Id) matchedIds.add(item.Id);
+              if (this.isGroupProduct(item)) {
+                groupItems.push(item);
+              } else {
+                individualItems.push(item);
+              }
+            }
+          }
         });
+      }
+
+      previews.push({
+        type: 'incentive',
+        name: `Incentive Period`,
+        displayName: `Incentive Period`,
+        startDate: startDateStr ? this.formatDateForDisplay(startDateStr) : '',
+        endDate: endDateStr ? this.formatDateForDisplay(endDateStr) : '',
+        months: period.months,
+        amount: period.amount,
+        bulkIndividualItems: individualItems,
+        groupItems,
+      });
     });
 
     return previews;
@@ -316,11 +374,11 @@ export class CommitConfigurationComponent implements OnInit {
 
     const bundle = previewData.QuoteLineItems.records.find((item: any) => item.Product2Id === this.productId);
     if (bundle) {
-        products.push({
-            ...bundle,
-            Product_Name_Display: bundle.Product2?.Name || 'Product',
-            Quantity: 1
-        });
+      products.push({
+        ...bundle,
+        Product_Name_Display: bundle.Product2?.Name || 'Product',
+        Quantity: 1
+      });
     }
     return products;
   }
@@ -358,11 +416,11 @@ export class CommitConfigurationComponent implements OnInit {
 
   switchTab(tab: 'details' | 'discounts') {
     if (tab === 'discounts') {
-        const hasValidPeriod = this.commitmentPeriods.some(p => p.months && p.amount);
-        if (!hasValidPeriod) {
-            this.toastService.show('Please provide at least one valid commitment period (Months and Amount) before proceeding.', 'warning');
-            return;
-        }
+      const hasValidPeriod = this.commitmentPeriods.some(p => p.months && p.amount);
+      if (!hasValidPeriod) {
+        this.toastService.show('Please provide at least one valid commitment period (Months and Amount) before proceeding.', 'warning');
+        return;
+      }
     }
     this.activeTab = tab;
     this.saveToSession();
@@ -420,49 +478,49 @@ export class CommitConfigurationComponent implements OnInit {
   getCommitmentDetailsOnly(): any[] {
     const details: any[] = [];
     const quoteStartDateStr = this.startDate || new Date().toISOString().split('T')[0];
-    
+
     // Robust date parsing (handles YYYY-MM-DD or MM/DD/YYYY)
     let currentStartDate: Date;
     if (quoteStartDateStr.includes('-')) {
-        const parts = quoteStartDateStr.split('-');
-        currentStartDate = new Date(Date.UTC(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])));
+      const parts = quoteStartDateStr.split('-');
+      currentStartDate = new Date(Date.UTC(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])));
     } else if (quoteStartDateStr.includes('/')) {
-        const parts = quoteStartDateStr.split('/');
-        // Assuming MM/DD/YYYY if it starts with a small number, else YYYY/MM/DD
-        if (parseInt(parts[0]) <= 12) {
-            currentStartDate = new Date(Date.UTC(parseInt(parts[2]), parseInt(parts[0]) - 1, parseInt(parts[1])));
-        } else {
-            currentStartDate = new Date(Date.UTC(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])));
-        }
+      const parts = quoteStartDateStr.split('/');
+      // Assuming MM/DD/YYYY if it starts with a small number, else YYYY/MM/DD
+      if (parseInt(parts[0]) <= 12) {
+        currentStartDate = new Date(Date.UTC(parseInt(parts[2]), parseInt(parts[0]) - 1, parseInt(parts[1])));
+      } else {
+        currentStartDate = new Date(Date.UTC(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])));
+      }
     } else {
-        currentStartDate = new Date(quoteStartDateStr);
+      currentStartDate = new Date(quoteStartDateStr);
     }
 
     if (isNaN(currentStartDate.getTime())) {
-        currentStartDate = new Date();
-        currentStartDate.setUTCHours(0, 0, 0, 0);
+      currentStartDate = new Date();
+      currentStartDate.setUTCHours(0, 0, 0, 0);
     }
 
     this.commitmentPeriods.forEach((period, index) => {
-        const months = parseInt(String(period.months || '0')) || 0;
-        const amount = Number(period.amount || 0) || 0;
+      const months = parseInt(String(period.months || '0')) || 0;
+      const amount = Number(period.amount || 0) || 0;
 
-        if (months > 0) {
-            const endDate = new Date(currentStartDate);
-            endDate.setUTCMonth(endDate.getUTCMonth() + months);
-            endDate.setUTCDate(endDate.getUTCDate() - 1);
+      if (months > 0) {
+        const endDate = new Date(currentStartDate);
+        endDate.setUTCMonth(endDate.getUTCMonth() + months);
+        endDate.setUTCDate(endDate.getUTCDate() - 1);
 
-            details.push({
-                name: `Period ${index + 1}`,
-                startDate: this.formatUTCDateForDisplay(currentStartDate),
-                endDate: this.formatUTCDateForDisplay(endDate),
-                months: months,
-                amount: amount
-            });
+        details.push({
+          name: `Period ${index + 1}`,
+          startDate: this.formatUTCDateForDisplay(currentStartDate),
+          endDate: this.formatUTCDateForDisplay(endDate),
+          months: months,
+          amount: amount
+        });
 
-            currentStartDate = new Date(endDate);
-            currentStartDate.setUTCDate(currentStartDate.getUTCDate() + 1);
-        }
+        currentStartDate = new Date(endDate);
+        currentStartDate.setUTCDate(currentStartDate.getUTCDate() + 1);
+      }
     });
     return details;
   }
@@ -549,13 +607,13 @@ export class CommitConfigurationComponent implements OnInit {
 
   checkCollapse(index: number, event: any) {
     setTimeout(() => {
-        const activeElem = document.activeElement;
-        const container = event.currentTarget as HTMLElement;
-        if (!container.contains(activeElem)) {
-            if (this.commitmentPeriods[index].months && this.commitmentPeriods[index].amount) {
-                this.commitmentPeriods[index].isCollapsed = true;
-            }
+      const activeElem = document.activeElement;
+      const container = event.currentTarget as HTMLElement;
+      if (!container.contains(activeElem)) {
+        if (this.commitmentPeriods[index].months && this.commitmentPeriods[index].amount) {
+          this.commitmentPeriods[index].isCollapsed = true;
         }
+      }
     }, 100);
   }
 
@@ -581,6 +639,11 @@ export class CommitConfigurationComponent implements OnInit {
   clearValidationErrors() {
     this.validationErrors = [];
     this.hasValidationErrors = false;
+    this.discountErrorProductIds = [];
+    this.incentiveErrorProductIds = [];
+    this.errorProductItems = [];
+    this.showErrorProductsPanel = false;
+    this.saveValidationErrorsToSession();
   }
 
   private parseConfiguratorMessages(response: any, quoteId: string): { errors: any[]; warnings: any[]; infos: any[]; all: any[]; hasMessages: boolean; hasConfigurationRules: boolean; hasErrors: boolean; hasConfigurationRuleErrors: boolean } {
@@ -604,12 +667,20 @@ export class CommitConfigurationComponent implements OnInit {
       const resolvedProductName = this.resolveProductNameForNode(key, quoteId);
 
       msgArray.forEach((msg: any) => {
+        const relatedRecordId = msg.relatedRecordId || key;
+        const resolvedProductId =
+          this.resolveProductIdForNode(relatedRecordId, quoteId) ||
+          this.resolveProductIdForNode(msg.primaryRecordId, quoteId) ||
+          this.resolveProductIdForNode(key, quoteId) ||
+          undefined;
+
         const entry = {
           message: msg.message,
           messageType: msg.messageType || 'info',
           category: msg.category,
           primaryRecordId: msg.primaryRecordId,
-          relatedRecordId: msg.relatedRecordId || key,
+          relatedRecordId,
+          productId: resolvedProductId,
           productName: resolvedProductName || this.productName
         };
 
@@ -640,10 +711,11 @@ export class CommitConfigurationComponent implements OnInit {
     return { errors, warnings, infos, all, hasMessages: all.length > 0, hasConfigurationRules, hasErrors, hasConfigurationRuleErrors };
   }
 
-  openErrorProductsPanel(isDiscount: boolean = true) {
+  openErrorProductsPanel(isDiscount: boolean = true, productIds?: string[]) {
     this.isDiscountErrorMode = isDiscount;
-    this.errorProductItems = this.getErrorProductItems(isDiscount);
+    this.errorProductItems = this.getErrorProductItems(isDiscount, productIds);
     this.showErrorProductsPanel = true;
+    this.saveValidationErrorsToSession();
   }
 
   openFirstErrorProductsPanel() {
@@ -653,26 +725,76 @@ export class CommitConfigurationComponent implements OnInit {
   }
 
   getDiscountErrorProductCount(): number {
-    return this.getErrorProductItems(true).length;
+    return this.getDiscountErrorProductIds().length;
   }
 
   getIncentiveErrorProductCount(): number {
-    return this.getErrorProductItems(false).length;
+    return this.getIncentiveErrorProductIds().length;
   }
 
   getDiscountErrorProductIds(): string[] {
-    return this.getErrorProductItems(true).map(item => item.product2Id || item.id).filter(Boolean);
+    return this.getStoredErrorProductIds(true);
   }
 
   getIncentiveErrorProductIds(): string[] {
-    return this.getErrorProductItems(false).map(item => item.product2Id || item.id).filter(Boolean);
+    return this.getStoredErrorProductIds(false);
   }
 
-  private getErrorProductItems(isDiscount: boolean): any[] {
+  private getStoredErrorProductIds(isDiscount: boolean): string[] {
+    this.syncErrorProductIdsFromValidation();
+    return isDiscount ? this.discountErrorProductIds : this.incentiveErrorProductIds;
+  }
+
+  private syncErrorProductIdsFromValidation(force: boolean = false) {
+    if (!this.validationErrors.length) return;
+    if (!force && (this.discountErrorProductIds.length > 0 || this.incentiveErrorProductIds.length > 0)) return;
+
+    const discountIds = new Set(force ? [] : this.discountErrorProductIds);
+    const incentiveIds = new Set(force ? [] : this.incentiveErrorProductIds);
+    const quoteId = this.quoteId || this.contextService.currentContext?.quoteId || '';
+    const pendingTransactions = this.discountIncentiveStateService.getPendingTransactions(quoteId);
+
+    pendingTransactions.forEach((tx: any, txIndex: number) => {
+      const records = tx.graph?.records || [];
+      records.forEach((rec: any, recIndex: number) => {
+        const record = rec.record || {};
+        if (record.attributes?.type !== 'QuoteLineItem') return;
+
+        const productId = record.Product2Id || record.Id;
+        if (!productId) return;
+
+        const isIncentive = record.Incentive__c !== undefined;
+        const nodeType = isIncentive ? 'Incentive' : 'Discount';
+        const refId = rec.referenceId || `idx_${recIndex}`;
+        const nodeId = `GCP_${nodeType}_Line_${txIndex}_${refId}`;
+
+        const matches = this.validationErrors.some(error => {
+          const relatedId = error.relatedRecordId || '';
+          return error.productId === productId ||
+            relatedId === productId ||
+            relatedId === rec.referenceId ||
+            relatedId === nodeId;
+        });
+
+        if (matches) {
+          (isIncentive ? incentiveIds : discountIds).add(productId);
+        }
+      });
+    });
+
+    this.discountErrorProductIds = Array.from(discountIds);
+    this.incentiveErrorProductIds = Array.from(incentiveIds);
+  }
+
+  private getErrorProductItems(isDiscount: boolean, limitProductIds?: string[]): any[] {
+    this.syncErrorProductIdsFromValidation();
+
     // Build product items from the pending transactions for the error panel
     const quoteId = this.quoteId || this.contextService.currentContext?.quoteId || '';
     const pendingTransactions = this.discountIncentiveStateService.getPendingTransactions(quoteId);
     const items: any[] = [];
+    const storedIds = isDiscount ? this.discountErrorProductIds : this.incentiveErrorProductIds;
+    const limitSet = new Set(limitProductIds?.length ? limitProductIds : storedIds);
 
     pendingTransactions.forEach((tx: any, txIndex: number) => {
       const records = tx.graph?.records || [];
@@ -685,6 +807,9 @@ export class CommitConfigurationComponent implements OnInit {
           const matchesMode = isDiscount ? hasDiscount : hasIncentive;
           if (!matchesMode) return;
 
+          const productId = record.Product2Id || record.Id;
+          if (limitSet.size > 0 && !limitSet.has(productId)) return;
+
           // Find matching validation error for this product
           const productName = record.Product2?.Name ||
             record.ProductName ||
@@ -693,9 +818,10 @@ export class CommitConfigurationComponent implements OnInit {
             record.Product2Id ||
             'Unknown Product';
           const nodeType = isDiscount ? 'Discount' : 'Incentive';
-          const nodeId = `GCP_${nodeType}_Line_${txIndex}_${recIndex}`;
-          const matchedErrors = this.validationErrors.filter(e => 
-            e.message.toLowerCase().includes(productName.toLowerCase()) ||
+          const refId = rec.referenceId || `idx_${recIndex}`;
+          const nodeId = `GCP_${nodeType}_Line_${txIndex}_${refId}`;
+          const matchedErrors = this.validationErrors.filter(e =>
+            e.productId === productId ||
             e.relatedRecordId === record.Product2Id ||
             e.relatedRecordId === rec.referenceId ||
             e.relatedRecordId === nodeId
@@ -722,10 +848,6 @@ export class CommitConfigurationComponent implements OnInit {
     return items;
   }
 
-  closeErrorProductsPanel() {
-    this.showErrorProductsPanel = false;
-  }
-
   onErrorProductsSubmit(payload: any) {
     console.log('[CommitConfiguration] Error products update payload:', payload);
     this.discountIncentiveStateService.applyPendingTransactionChanges(
@@ -734,8 +856,21 @@ export class CommitConfigurationComponent implements OnInit {
       payload.edits || [],
       payload.deletes || []
     );
+
+    // Apply error product changes to UI blocks in DiscountsIncentivesComponent
+    if (this.discountsIncentives) {
+      this.discountsIncentives.applyErrorProductUpdates(payload);
+    }
+
+    this.syncErrorProductIdsFromValidation(true);
+    this.saveValidationErrorsToSession();
+
     this.showErrorProductsPanel = false;
     this.toastService.show('Products updated. Click Save to re-submit.', 'info');
+  }
+
+  closeErrorProductsPanel() {
+    this.showErrorProductsPanel = false;
   }
 
   onSave(onSuccess?: (previewData?: any) => void) {
@@ -759,7 +894,7 @@ export class CommitConfigurationComponent implements OnInit {
 
     // 1. Build all Added Nodes
     const allAddedNodes = this.buildAddedNodes(fullQuoteId);
-    
+
     // 2. Chunk nodes (e.g., 400 per batch)
     const chunks = this.chunkArray(allAddedNodes, 400);
     const contextIds: string[] = [];
@@ -795,9 +930,12 @@ export class CommitConfigurationComponent implements OnInit {
                     message: e.message,
                     messageType: e.messageType,
                     category: e.category,
-                    relatedRecordId: e.relatedRecordId
+                    relatedRecordId: e.relatedRecordId,
+                    productId: e.productId
                   }))];
                   this.hasValidationErrors = true;
+                  this.syncErrorProductIdsFromValidation(true);
+                  this.saveValidationErrorsToSession();
 
                   // Emit to parent for header validation panel
                   this.validationMessagesReceived.emit({
@@ -806,8 +944,8 @@ export class CommitConfigurationComponent implements OnInit {
                     messages: parsed.all
                   });
 
-                  const blockMsg = parsed.hasConfigurationRuleErrors ? 
-                    'Configuration rule errors found. Fix issues and try again.' : 
+                  const blockMsg = parsed.hasConfigurationRuleErrors ?
+                    'Configuration rule errors found. Fix issues and try again.' :
                     'Review configuration rules and click Save again to proceed.';
 
                   throw { isValidationError: true, message: blockMsg };
@@ -902,7 +1040,8 @@ export class CommitConfigurationComponent implements OnInit {
   private buildAddedNodes(quoteId: string): any[] {
     const nodes: any[] = [];
     let globalSortOrder = this.startingSortOrder;
-    
+    this.validationNodeProductIds.clear();
+
     const parentPath = [quoteId, "GCP_Parent_Platform"];
     const parentProductId = this.productId || "01tDz00000Eah7vIAB";
     if (!parentProductId) {
@@ -965,7 +1104,7 @@ export class CommitConfigurationComponent implements OnInit {
 
     // 3. Extract Discount and Incentive Nodes from Pending Transactions
     const pendingTransactions = this.discountIncentiveStateService.getPendingTransactions(quoteId);
-    
+
     pendingTransactions.forEach((tx: any, txIndex: number) => {
       const records = tx.graph?.records || [];
       records.forEach((rec: any, recIndex: number) => {
@@ -975,12 +1114,16 @@ export class CommitConfigurationComponent implements OnInit {
         if (record.attributes?.type === 'QuoteLineItem') {
           const isIncentive = record.Incentive__c !== undefined;
           const nodeType = isIncentive ? 'Incentive' : 'Discount';
-          const nodeId = `GCP_${nodeType}_Line_${txIndex}_${recIndex}`;
-          
+          const refId = rec.referenceId || `idx_${recIndex}`;
+          const nodeId = `GCP_${nodeType}_Line_${txIndex}_${refId}`;
+
           if (!record.Product2Id || !record.PricebookEntryId) {
             console.warn(`[CommitConfiguration] Skipping ${nodeType} node ${nodeId} due to missing Product2Id or PricebookEntryId`, record);
             return;
           }
+
+          this.validationNodeProductIds.set(nodeId, record.Product2Id);
+          if (rec.referenceId) this.validationNodeProductIds.set(rec.referenceId, record.Product2Id);
 
           const node: any = {
             "path": [quoteId, nodeId],
@@ -1022,7 +1165,7 @@ export class CommitConfigurationComponent implements OnInit {
 
     // Check if it's a discount or incentive line node
     const pendingTransactions = this.discountIncentiveStateService.getPendingTransactions(quoteId);
-    
+
     // We need to match the nodeId to the records in pending transactions
     // The nodeId is built as `GCP_${nodeType}_Line_${txIndex}_${recIndex}`
     for (let txIndex = 0; txIndex < pendingTransactions.length; txIndex++) {
@@ -1035,10 +1178,43 @@ export class CommitConfigurationComponent implements OnInit {
 
         const isIncentive = record.Incentive__c !== undefined;
         const nodeType = isIncentive ? 'Incentive' : 'Discount';
-        const expectedNodeId = `GCP_${nodeType}_Line_${txIndex}_${recIndex}`;
+        const refId = rec.referenceId || `idx_${recIndex}`;
+        const expectedNodeId = `GCP_${nodeType}_Line_${txIndex}_${refId}`;
 
         if (expectedNodeId === nodeId) {
           return record.Product2?.Name || record.ProductName || record.Name || null;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  private resolveProductIdForNode(nodeId: string | undefined, quoteId: string): string | null {
+    if (!nodeId || nodeId === 'GCP_Parent_Platform' || nodeId === quoteId) return null;
+
+    const mappedProductId = this.validationNodeProductIds.get(nodeId);
+    if (mappedProductId) return mappedProductId;
+
+    const pendingTransactions = this.discountIncentiveStateService.getPendingTransactions(quoteId);
+    for (let txIndex = 0; txIndex < pendingTransactions.length; txIndex++) {
+      const tx = pendingTransactions[txIndex];
+      const records = tx.graph?.records || [];
+      for (let recIndex = 0; recIndex < records.length; recIndex++) {
+        const rec = records[recIndex];
+        const record = rec.record || {};
+        if (record.attributes?.type !== 'QuoteLineItem') continue;
+
+        const productId = record.Product2Id || record.Id;
+        if (!productId) continue;
+
+        const isIncentive = record.Incentive__c !== undefined;
+        const nodeType = isIncentive ? 'Incentive' : 'Discount';
+        const refId = rec.referenceId || `idx_${recIndex}`;
+        const expectedNodeId = `GCP_${nodeType}_Line_${txIndex}_${refId}`;
+
+        if (nodeId === expectedNodeId || nodeId === rec.referenceId || nodeId === productId) {
+          return productId;
         }
       }
     }
@@ -1062,7 +1238,7 @@ export class CommitConfigurationComponent implements OnInit {
           this.discountsIncentives?.resolveProductDisplayName(record.Product2Id) ||
           record.Product2Id ||
           'Unknown Product';
-        
+
         if (productName) {
           productNames.add(productName);
         }
@@ -1073,21 +1249,51 @@ export class CommitConfigurationComponent implements OnInit {
     return productNames.size > 0 ? Array.from(productNames).join(', ') : (this.productName || 'Google Cloud Platform RCA');
   }
 
+  private lastKnownItemCount: number = 1;
+
   /**
    * Dynamically calculates total number of items (QLIs) in this GCP configuration
    */
   getItemCount(): number {
-    let count = 1; // 1 for parent GCP product
+    let pendingCount = 1; // 1 for parent GCP product
+    let hasPendingTransactions = false;
+
     const pendingTransactions = this.discountIncentiveStateService.getPendingTransactions(this.quoteId);
     pendingTransactions.forEach((tx: any) => {
       const records = tx.graph?.records || [];
+      if (records.length > 0) hasPendingTransactions = true;
       records.forEach((rec: any) => {
         if (rec.record?.attributes?.type === 'QuoteLineItem') {
-          count++;
+          pendingCount++;
         }
       });
     });
-    return count;
+
+    // If user is actively editing and has pending transactions, use and store that count
+    if (hasPendingTransactions) {
+      this.lastKnownItemCount = pendingCount;
+      return pendingCount;
+    }
+
+    // If no pending transactions (e.g. just saved), read the applied state from the child component if visible
+    if (this.discountsIncentives) {
+      let savedCount = 1;
+      this.discountsIncentives.discountPeriods?.forEach((p: any) => {
+        if (p.activeDiscounts) {
+          p.activeDiscounts.forEach((d: any) => savedCount += (d.itemCount || 0));
+        }
+      });
+      this.discountsIncentives.incentivePeriods?.forEach((p: any) => {
+        if (p.activeIncentives) {
+          p.activeIncentives.forEach((i: any) => savedCount += (i.itemCount || 0));
+        }
+      });
+      this.lastKnownItemCount = savedCount;
+      return savedCount;
+    }
+
+    // If no pending transactions and child component is hidden (e.g. switched tabs), return the last known reliable count
+    return this.lastKnownItemCount;
   }
 
 

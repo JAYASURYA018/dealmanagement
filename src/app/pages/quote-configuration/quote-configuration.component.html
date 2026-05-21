@@ -76,7 +76,7 @@
                             <span class="material-icons text-[16px]">error</span>
                         </button>
 
-                        <div id="validation-panel" *ngIf="validationPanelOpen" (click)="$event.stopPropagation()"
+                        <div id="validation-panel" *ngIf="validationPanelOpen"
                             class="absolute right-0 top-9 w-[360px] max-h-[350px] bg-white border-2 border-red-300 rounded-lg shadow-2xl z-[999] p-4 overflow-hidden flex flex-col">
                             <div class="flex items-center justify-between mb-3 pb-2 border-b border-red-200">
                                 <div class="text-[13px] font-bold text-red-700 flex items-center gap-1">
@@ -91,7 +91,7 @@
                             <div class="overflow-y-auto custom-scrollbar space-y-2 flex-1 pr-1">
                                 <div *ngFor="let item of errorMessages; let idx = index"
                                     class="border-l-4 border-red-500 bg-red-50 hover:bg-red-100 rounded-md p-3 transition-colors">
-                                    <div class="text-[13px] font-bold text-black mb-1">
+                                    <div *ngIf="!item.isQuoteLevel" class="text-[13px] font-bold text-black mb-1">
                                         {{ idx + 1 }}. {{ item.productName || item.productId || 'Product' }}
                                     </div>
                                     <p class="text-[12px] leading-tight text-red-700">
@@ -110,7 +110,7 @@
                             <span class="material-icons text-[16px]">info</span>
                         </button>
 
-                        <div id="warning-panel" *ngIf="warningPanelOpen" (click)="$event.stopPropagation()"
+                        <div id="warning-panel" *ngIf="warningPanelOpen"
                             class="absolute right-0 top-9 w-[360px] max-h-[350px] bg-white border-2 border-black rounded-lg shadow-2xl z-[999] p-4 overflow-hidden flex flex-col">
                             <div class="flex items-center justify-between mb-3 pb-2 border-b border-gray-300">
                                 <div class="text-[13px] font-bold text-gray-800 flex items-center gap-1">
@@ -128,7 +128,7 @@
                                         'border-yellow-500 bg-yellow-50 hover:bg-yellow-100': item.messageType === 'warning',
                                         'border-blue-500 bg-blue-50 hover:bg-blue-100': item.messageType === 'info' || !item.messageType
                                     }">
-                                    <div class="text-[13px] font-bold text-black mb-1">
+                                    <div *ngIf="!item.isQuoteLevel" class="text-[13px] font-bold text-black mb-1">
                                         {{ idx + 1 }}. {{ item.productName || item.productId || 'Product' }}
                                     </div>
                                     <p class="text-[12px] leading-tight" [ngClass]="{
@@ -259,13 +259,13 @@
             <div class="flex items-center gap-8">
                 <ng-container *ngIf="hasGCPProduct">
                     <div class="flex flex-col">
-                        <span class="text-[12px] font-medium text-slate-500">Annual Contract Value</span>
+                        <span class="text-[12px] font-medium text-slate-500">Annual Commit Value</span>
                         <span class="text-md font-bold text-slate-800 tracking-tight leading-none">{{
                             formatCurrency(annualContractValue) }}</span>
                     </div>
                     <div class="h-8 w-[1px] bg-slate-100 mx-2"></div>
                     <div class="flex flex-col">
-                        <span class="text-[12px] font-medium text-slate-500">Total Contract Value</span>
+                        <span class="text-[12px] font-medium text-slate-500">Total Commit Value</span>
                         <span class="text-md font-bold text-slate-800 tracking-tight leading-none">{{
                             formatCurrency(totalContractValue) }}</span>
                     </div>
@@ -341,7 +341,7 @@
                 <span class="material-icons-outlined text-3xl text-yellow-500">warning</span>
             </div>
             <p class="text-[14px] text-gray-700 leading-relaxed mb-6">
-                You have some configuration messages. If you want to continue then click on save.
+                You have some Warning or Info messages. Check them and click Save if you want to continue.
             </p>
             <button (click)="onWarningAlertOk()"
                 class="px-8 py-2.5 bg-blue-600 text-white text-[13px] font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-sm">

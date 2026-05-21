@@ -169,8 +169,8 @@
                     [hasIncentiveErrors]="hasValidationErrors && getIncentiveErrorProductCount() > 0"
                     [discountErrorProductIds]="getDiscountErrorProductIds()"
                     [incentiveErrorProductIds]="getIncentiveErrorProductIds()"
-                    (discountErrorBlockClicked)="openErrorProductsPanel(true)"
-                    (incentiveErrorBlockClicked)="openErrorProductsPanel(false)">
+                    (discountErrorBlockClicked)="openErrorProductsPanel(true, $event)"
+                    (incentiveErrorBlockClicked)="openErrorProductsPanel(false, $event)">
                 </app-discounts-incentives>
             </div>
         </div>
