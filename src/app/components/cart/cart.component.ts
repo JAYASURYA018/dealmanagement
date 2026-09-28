@@ -70,7 +70,7 @@ export class CartComponent implements AfterViewInit, OnChanges {
         let apiCall: Observable<any>;
 
         if (quoteData.quoteId) {
-            // Case: Add products to EXISTING Quote
+            // Case: Update EXISTING Quote (Don't add products as lines on continue)
             const records: any[] = [
                 {
                     "referenceId": "refQuote",
@@ -84,24 +84,8 @@ export class CartComponent implements AfterViewInit, OnChanges {
                 }
             ];
 
-            cartItems.forEach((item: any, index) => {
-                records.push({
-                    "referenceId": `refQuoteLine${index}`,
-                    "record": {
-                        "attributes": {
-                            "type": "QuoteLineItem",
-                            "method": "POST"
-                        },
-                        "QuoteId": quoteData.quoteId,
-                        "Product2Id": item.id,
-                        "PricebookEntryId": item.pricebookEntryId || item.defaultPrice?.pricebookEntryId || '01uDz00000dvDfbIAE',
-                        "StartDate": item.startDate || "2026-04-13",
-                        "EndDate": item.endDate || "2026-04-27",
-                        "PeriodBoundary": "Anniversary",
-                        "Quantity": 1
-                    }
-                });
-            });
+            // Removed: cartItems.forEach loop to add QuoteLineItems as per request
+
 
             const payload = {
                 "pricingPref": "System",
@@ -118,7 +102,7 @@ export class CartComponent implements AfterViewInit, OnChanges {
                 "taxPref": "Skip",
                 "contextDetails": {},
                 "graph": {
-                    "graphId": "createQuoteWithLines",
+                    "graphId": "createQuote",
                     "records": records
                 }
             };
@@ -126,10 +110,10 @@ export class CartComponent implements AfterViewInit, OnChanges {
             apiCall = this.salesforceApi.placeSalesTransaction(payload);
         } else {
             // Case: Create NEW Quote (existing logic)
-            apiCall = this.salesforceApi.createQuoteWithLines(
+            apiCall = this.salesforceApi.createQuote(
                 quoteData.opportunityId,
                 quoteData.pricebook2Id,
-                cartItems
+                [] // Don't add products during creation
             );
         }
 
@@ -137,16 +121,22 @@ export class CartComponent implements AfterViewInit, OnChanges {
             switchMap((quoteResult: any) => {
                 const quoteId = quoteResult.salesTransactionId || quoteData.quoteId;
                 if ((quoteResult.isSuccess || quoteResult.success) && quoteId) {
-                    
+
                     // Store initial Quote ID
                     this.quoteDataService.setQuoteData({
                         quoteId: quoteId
                     });
 
-                    return forkJoin({
-                        quote: this.salesforceApi.getQuoteDetails(quoteId),
-                        lines: this.salesforceApi.getQuoteLineItems(quoteId)
-                    });
+                    return this.salesforceApi.loadConfiguratorInstance(quoteId).pipe(
+                        switchMap((loadRes: any) => {
+                            const contextId = loadRes.contextId;
+                            if (!contextId) throw new Error('No contextId received from load-instance');
+                            return forkJoin({
+                                quote: this.salesforceApi.getConfiguratorInstance(contextId),
+                                quoteId: quoteId
+                            });
+                        })
+                    );
                 } else {
                     throw new Error('Quote Operation Failed');
                 }
@@ -157,45 +147,83 @@ export class CartComponent implements AfterViewInit, OnChanges {
             })
         ).subscribe({
             next: (data: any) => {
-                const quoteDetails = data.quote;
-                const lineItems = data.lines.records || [];
+                // Robustly find the Quote record and the SalesTransactionName
+                const records = data.quote.instance?.records || [];
+                const lineItems: any[] = [];
 
-                if (quoteDetails && quoteDetails.QuoteNumber) {
-                    const formatted = `Q-${quoteDetails.QuoteNumber}`;
-                    
-                    // Merge existing products with new products if needed
-                    const currentProducts = quoteData.products || [];
-                    const newProductsMapped = cartItems.map((item: any) => {
-                        const matchingLine = lineItems.find((li: any) => li.Product2Id === item.id);
-                        return {
-                            id: item.id,
-                            name: item.name,
-                            categoryId: item.categoryId,
-                            quoteLineId: matchingLine ? matchingLine.Id : null
-                        };
-                    });
+                // Support the transaction.SalesTransaction structure provided by the user
+                const transactionRecord = data.quote.transaction?.SalesTransaction?.[0];
+                const quoteRecord = records.find((r: any) => r.attributes?.type === 'Quote') ||
+                    transactionRecord ||
+                    (data.quote.instance?.records?.[0]) ||
+                    data.quote;
 
-                    // Avoid duplicate products in the list
-                    const productMap = new Map();
-                    currentProducts.forEach(p => productMap.set(p.id, p));
-                    newProductsMapped.forEach(p => productMap.set(p.id, p));
+                const salesTransactionName = data.quote.SalesTransactionName ||
+                    data.quote.instance?.SalesTransactionName ||
+                    data.quote.quote?.SalesTransactionName ||
+                    transactionRecord?.SalesTransactionName ||
+                    quoteRecord?.SalesTransactionName;
 
-                    this.quoteDataService.setQuoteData({
-                        quoteId: quoteDetails.Id,
-                        quoteNumber: formatted,
-                        products: Array.from(productMap.values())
-                    });
+                const formatted = salesTransactionName || quoteRecord?.Name || data.quote.quote?.Name || 'Q-';
 
-                    if (newProductsMapped.length > 0) {
-                        this.quoteDataService.setQuoteData({
-                            productId: newProductsMapped[0].id,
-                            productName: newProductsMapped[0].name,
-                            categoryId: newProductsMapped[0].categoryId
-                        });
+                // The RLM API uses lowercase 'id'
+                const resolvedQuoteId = quoteRecord?.id || quoteRecord?.Id || data.quoteId;
+
+                // Merge existing products with new products if needed
+                const currentProducts = quoteData.products || [];
+                const newProductsMapped = cartItems.map((item: any) => {
+                    const matchingLine = lineItems.find((li: any) => li.Product2Id === item.id);
+                    return {
+                        id: item.id,
+                        name: item.name,
+                        categoryId: item.categoryId,
+                        quoteLineId: matchingLine ? matchingLine.Id : null
+                    };
+                });
+
+                // Avoid duplicate products in the list
+                const productMap = new Map();
+                currentProducts.forEach((p: any) => productMap.set(p.id, p));
+                newProductsMapped.forEach((p: any) => productMap.set(p.id, p));
+
+                // Robust deep search for the quote number
+                const findValueByKey = (obj: any, targetKey: string): any => {
+                    if (!obj || typeof obj !== 'object') return null;
+                    if (obj[targetKey] !== undefined && obj[targetKey] !== null) return obj[targetKey];
+                    const keys = Object.keys(obj);
+                    for (const key of keys) {
+                        if (typeof obj[key] === 'object') {
+                            const res = findValueByKey(obj[key], targetKey);
+                            if (res) return res;
+                        }
                     }
+                    return null;
+                };
+
+                const quoteNum = findValueByKey(data.quote, 'QuoteNumber__c') ||
+                    findValueByKey(data.quote, 'QuoteNumber');
+
+
+                const operationType = findValueByKey(data.quote, 'OperationType__c') || '';
+
+                this.quoteDataService.setQuoteData({
+                    quoteId: resolvedQuoteId,
+                    quoteName: formatted,
+                    quoteNumber: quoteNum,
+                    operationType: operationType,
+                    products: Array.from(productMap.values())
+                });
+
+                if (newProductsMapped.length > 0) {
+                    this.quoteDataService.setQuoteData({
+                        productId: newProductsMapped[0].id,
+                        productName: newProductsMapped[0].name,
+                        categoryId: newProductsMapped[0].categoryId
+                    });
                 }
 
                 this.searchFilterService.setSearchQuery('');
+                this.cartService.clearCart();
                 this.router.navigate(['/quote-configuration']);
             },
             error: (error: any) => {

@@ -24,7 +24,7 @@
             <div *ngIf="isLookerSubscription">
                 <!-- SUBSCRIPTION DETAILS SECTION (Top Header) -->
                 <h4 class="text-gray-800 text-base font-bold mb-3">Subscription Details</h4>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
 
 
                     <!-- Billing Frequency -->
@@ -47,25 +47,6 @@
                         </div>
                     </div>
 
-                    <!-- Operation Type -->
-                    <div (click)="toggleOperationType(); $event.stopPropagation()"
-                        class="bg-slate-50 p-3 rounded-xl border border-transparent transition-all relative group h-[60px] flex flex-col justify-center shadow-sm">
-                        <label
-                            class="block text-[10px] text-gray-500 mb-0.5 uppercase tracking-wide font-medium">Operation
-                            Type</label>
-                        <div class="flex justify-between items-center">
-                            <div class="text-sm font-medium text-gray-900 truncate">{{ operationType || 'Select' }}
-                            </div>
-                            <span class="material-icons-outlined text-sm text-gray-400">arrow_drop_down</span>
-                        </div>
-                        <div *ngIf="operationTypeOpen" (click)="$event.stopPropagation()"
-                            class="absolute left-0 top-[60px] w-full bg-white rounded-lg shadow-xl border border-gray-100 z-[100] py-2 max-h-[200px] overflow-y-auto slim-scrollbar">
-                            <button *ngFor="let opt of operationTypeOptions" (click)="selectOperationType(opt)"
-                                class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 transition-colors">
-                                {{ opt }}
-                            </button>
-                        </div>
-                    </div>
 
                     <!-- Term Starts on -->
                     <div (click)="toggleTermStartsOn(); $event.stopPropagation()"
@@ -172,8 +153,9 @@
                 <!-- List / Empty State -->
                 <div *ngIf="subscriptionPeriods.length === 0"
                     class="flex flex-col items-center justify-center py-16 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                    <button (click)="openSubscriptionModal()"
-                        class="px-8 py-3 bg-blue-600 text-white rounded-full font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 hover:-translate-y-0.5 transition-all mb-4">
+                    <button (click)="openSubscriptionModal()" [disabled]="remainingQuota <= 0"
+                        [ngClass]="remainingQuota <= 0 ? 'bg-slate-300 text-white cursor-not-allowed shadow-none' : 'bg-blue-600 text-white shadow-lg shadow-blue-200 hover:bg-blue-700 hover:-translate-y-0.5'"
+                        class="px-8 py-3 rounded-full font-bold transition-all mb-4">
                         Create Subscription Periods
                     </button>
                     <p class="text-sm font-medium text-slate-400">You can choose to create yearly or custom periods</p>
@@ -186,14 +168,18 @@
                         [frequency]="currentFrequency" [isFirst]="first" [isLast]="last"
                         [subscriptionStartDate]="termStartDate" [subscriptionEndDate]="termEndDate"
                         [previousPeriodEndDate]="i > 0 ? subscriptionPeriods[i-1].endDate : ''"
-                        [remainingQuota]="remainingQuota" (productChanged)="onSubscriptionProductChanged()"
+                        [remainingQuota]="remainingQuota" [periodIndex]="i"
+                        [errors]="getPeriodErrors(i)"
+                        (productChanged)="onSubscriptionProductChanged()"
                         (remove)="removeSubscriptionPeriod(i)">
                     </app-subscription-period-item>
 
-                    <button (click)="addSubscriptionPeriodDirectly()"
-                        class="flex items-center gap-3 text-blue-600 font-bold text-sm hover:bg-blue-50 py-3 px-6 rounded-2xl transition-all group">
+                    <button (click)="addSubscriptionPeriodDirectly()" [disabled]="remainingQuota <= 0"
+                        [ngClass]="remainingQuota <= 0 ? 'text-slate-400 cursor-not-allowed' : 'text-blue-600 hover:bg-blue-50'"
+                        class="flex items-center gap-3 font-bold text-sm py-3 px-6 rounded-2xl transition-all group">
                         <div
-                            class="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white group-hover:scale-110 transition-transform shadow-md shadow-blue-200">
+                            [ngClass]="remainingQuota <= 0 ? 'bg-slate-300 shadow-none' : 'bg-blue-600 group-hover:scale-110 shadow-md shadow-blue-200'"
+                            class="w-8 h-8 rounded-full flex items-center justify-center text-white transition-transform">
                             <span class="material-icons text-sm">add</span>
                         </div>
                         Add New Period

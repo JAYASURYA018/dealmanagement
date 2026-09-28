@@ -30,8 +30,40 @@ import { ToastService } from '../../services/toast.service';
 export class QuotePreviewComponent {
   @Input() showPreviewPopup: boolean = false;
   @Input() previewData: any = null;
-  @Input() previewCommitments: any[] = [];
-  @Input() commitmentDetailsOnly: any[] = [];
+
+  private _previewCommitments: any[] = [];
+  @Input() 
+  get previewCommitments(): any[] {
+    return this._previewCommitments;
+  }
+  set previewCommitments(value: any[]) {
+    if (value) {
+      this._previewCommitments = [...value].sort((a, b) => {
+        const nameA = a.displayName || a.name || '';
+        const nameB = b.displayName || b.name || '';
+        return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' });
+      });
+    } else {
+      this._previewCommitments = [];
+    }
+  }
+
+  private _commitmentDetailsOnly: any[] = [];
+  @Input()
+  get commitmentDetailsOnly(): any[] {
+    return this._commitmentDetailsOnly;
+  }
+  set commitmentDetailsOnly(value: any[]) {
+    if (value) {
+      this._commitmentDetailsOnly = [...value].sort((a, b) => {
+        const nameA = a.name || '';
+        const nameB = b.name || '';
+        return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' });
+      });
+    } else {
+      this._commitmentDetailsOnly = [];
+    }
+  }
   @Input() previewProductsWithoutDiscounts: any[] = [];
   @Input() accountName: string = '';
   @Input() opportunityName: string = '';

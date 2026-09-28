@@ -63,7 +63,9 @@
             <div class="max-h-[300px] overflow-y-auto pr-1">
                 <div *ngIf="dPeriod.activeDiscounts.length > 0" class="space-y-3">
                     <div *ngFor="let item of dPeriod.activeDiscounts"
-                        class="bg-white border border-gray-100 rounded-xl p-4 flex items-center gap-4 relative shadow-sm group">
+                        (click)="hasDiscountItemErrors(item) ? discountErrorBlockClicked.emit(item.productIds) : null; $event.stopPropagation()"
+                        [ngClass]="hasDiscountItemErrors(item) ? 'border-2 border-red-500 cursor-pointer' : 'border border-gray-100'"
+                        class="bg-white rounded-xl p-4 flex items-center gap-4 relative shadow-sm group">
                         <div class="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600">
                             <span class="material-icons-outlined text-[20px]">local_offer</span>
                         </div>
@@ -158,7 +160,9 @@
             <div class="max-h-[300px] overflow-y-auto pr-1">
                 <div *ngIf="iPeriod.activeIncentives.length > 0" class="space-y-3">
                     <div *ngFor="let item of iPeriod.activeIncentives"
-                        class="bg-white border border-gray-100 rounded-xl p-4 flex items-center gap-4 relative shadow-sm group">
+                        (click)="hasIncentiveItemErrors(item) ? incentiveErrorBlockClicked.emit(item.productIds) : null; $event.stopPropagation()"
+                        [ngClass]="hasIncentiveItemErrors(item) ? 'border-2 border-red-500 cursor-pointer' : 'border border-gray-100'"
+                        class="bg-white rounded-xl p-4 flex items-center gap-4 relative shadow-sm group">
                         <div class="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600">
                             <span class="material-icons-outlined text-[20px]">card_giftcard</span>
                         </div>
@@ -332,7 +336,8 @@
                 <div class="bg-white border border-gray-400 rounded-lg p-2 h-[52px] flex flex-col justify-center focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all"
                     [ngClass]="{'bg-gray-50 opacity-60 pointer-events-none': discountForm.granularity === 'Granular'}">
                     <label class="text-[11px] text-gray-500 mb-0.5">Discount</label>
-                    <input type="number" [(ngModel)]="discountForm.value" (ngModelChange)="saveCurrentState()" (keydown)="restrictNumeric($event)"
+                    <input type="number" [(ngModel)]="discountForm.value" (ngModelChange)="saveCurrentState()"
+                        (keydown)="restrictNumeric($event)"
                         [placeholder]="discountForm.granularity === 'Granular' ? 'See items' : 'Enter'"
                         class="w-full outline-none text-sm font-medium text-gray-900 placeholder-gray-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         [disabled]="discountForm.granularity === 'Granular'">
@@ -742,9 +747,10 @@
                                     <span class="text-[10px] font-bold text-gray-500 mr-0.5">$</span>
                                     <input type="number" [(ngModel)]="item.incentiveAmount"
                                         (ngModelChange)="updatePersistentSelected(item)"
-                                        (keydown)="restrictNumeric($event)"
+                                        (keydown)="restrictNumeric($event)" (focus)="clearIncentiveZero(item)"
+                                        (blur)="restoreIncentiveZero(item)"
                                         class="w-full bg-transparent text-sm font-bold text-gray-900 outline-none text-right [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                        [disabled]="!item.selected" placeholder="0">
+                                        [disabled]="!item.selected">
                                 </div>
                             </div>
                         </td>
@@ -766,17 +772,18 @@
 
             <!-- Left: Quota Bar -->
             <div class="flex items-center gap-3">
-                <div class="flex items-center gap-2 bg-white border border-gray-200 rounded-full px-3 py-1 shadow-sm h-8">
+                <div
+                    class="flex items-center gap-2 bg-white border border-gray-200 rounded-full px-3 py-1 shadow-sm h-8">
                     <span class="material-icons-outlined text-[14px] text-blue-500">inventory_2</span>
                     <span class="text-[11px] font-semibold text-gray-600">
-                        <span class="text-blue-600 font-bold">{{ remainingQuota | number }}</span>
+                        <span class="text-blue-600 font-bold">{{ modalRemainingQuota | number }}</span>
                         / {{ totalCatalogProducts | number }} Products Remaining
                     </span>
                     <!-- Progress bar -->
                     <div class="w-20 h-1.5 bg-gray-200 rounded-full overflow-hidden ml-1">
                         <div class="h-full rounded-full transition-all duration-500"
-                            [style.width.%]="(usedQuotaCount / totalCatalogProducts) * 100"
-                            [ngClass]="remainingQuota <= 0 ? 'bg-red-500' : (usedQuotaCount / totalCatalogProducts > 0.75 ? 'bg-orange-400' : 'bg-blue-500')">
+                            [style.width.%]="(modalUsedQuotaCount / totalCatalogProducts) * 100"
+                            [ngClass]="modalRemainingQuota <= 0 ? 'bg-red-500' : (modalUsedQuotaCount / totalCatalogProducts > 0.75 ? 'bg-orange-400' : 'bg-blue-500')">
                         </div>
                     </div>
                 </div>
@@ -831,5 +838,5 @@
 <!-- Upload Products Modal at root level to avoid clipping -->
 <app-upload-products-modal [isOpen]="showUploadModal" [selectedPeriodName]="activeDiscountPeriod?.name || ''"
     [selectedStartDate]="activeDiscountPeriod?.startDate || ''" [selectedEndDate]="activeDiscountPeriod?.endDate || ''"
-    [remainingQuota]="remainingQuota" (close)="closeUploadModal()" (finish)="handleBulkUpload($event)">
+    [remainingQuota]="modalRemainingQuota" (close)="closeUploadModal()" (finish)="handleBulkUpload($event)">
 </app-upload-products-modal>

@@ -1,4 +1,4 @@
-import { Component, Input, OnChanges, SimpleChanges, inject, ElementRef, HostListener, OnDestroy } from '@angular/core';
+﻿import { Component, Input, Output, EventEmitter, OnChanges, SimpleChanges, inject, ElementRef, HostListener, OnDestroy } from '@angular/core';
 import { Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { RcaApiService } from '../../services/rca-api.service';
@@ -28,6 +28,12 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
     @Input() quoteEndDate: string | null = null;
     @Input() isLookerSubscription: boolean = false;
     @Input() quoteId: string | null = null;
+    @Input() hasDiscountErrors: boolean = false;
+    @Input() hasIncentiveErrors: boolean = false;
+    @Input() discountErrorProductIds: string[] = [];
+    @Input() incentiveErrorProductIds: string[] = [];
+    @Output() discountErrorBlockClicked = new EventEmitter<string[]>();
+    @Output() incentiveErrorBlockClicked = new EventEmitter<string[]>();
     @Input() set existingLineItems(items: any[]) {
         if (items && items.length > 0) {
             this.loadFromExisting(items);
@@ -172,7 +178,49 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
 
     // Live remaining = global quota (which already factors in current selections via the parent component)
     get liveQuotaRemaining(): number {
-        return this.remainingQuota;
+        return this.modalRemainingQuota;
+    }
+
+    get modalSelectedCount(): number {
+        const map = this.selectorCalledFrom === 'incentives'
+            ? this.persistentIncentiveGroups
+            : new Map([...this.persistentSelectedGroups, ...this.persistentSelectedIndividuals]);
+
+        return Array.from(map.values()).filter((item: any) => item?.selected).length;
+    }
+
+    get modalBaselineSelectedCount(): number {
+        const map = this.selectorCalledFrom === 'incentives'
+            ? this.snapshotIncentiveGroups
+            : new Map([...this.snapshotSelectedGroups, ...this.snapshotSelectedIndividuals]);
+
+        return Array.from(map.values()).filter((item: any) => item?.selected).length;
+    }
+
+    get modalAdditionalSelectedCount(): number {
+        return Math.max(0, this.modalSelectedCount - this.modalBaselineSelectedCount);
+    }
+
+    get modalRemainingQuota(): number {
+        return Math.max(0, this.remainingQuota - this.modalAdditionalSelectedCount);
+    }
+
+    get modalUsedQuotaCount(): number {
+        return Math.min(this.totalCatalogProducts, this.totalCatalogProducts - this.modalRemainingQuota);
+    }
+
+    private wasSelectedAtModalOpen(item: any): boolean {
+        if (!item?.id) return false;
+
+        if (this.selectorCalledFrom === 'incentives') {
+            return !!this.snapshotIncentiveGroups.get(item.id)?.selected;
+        }
+
+        const snapshotMap = this.productTab === 'groups'
+            ? this.snapshotSelectedGroups
+            : this.snapshotSelectedIndividuals;
+
+        return !!snapshotMap.get(item.id)?.selected;
     }
 
     // Dropdown Options
@@ -398,6 +446,42 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         }, quoteId);
     }
 
+    resolveProductDisplayName(productId: string): string {
+        if (!productId) return '';
+
+        const sources = [
+            ...Array.from(this.persistentSelectedGroups.values()),
+            ...Array.from(this.persistentSelectedIndividuals.values()),
+            ...Array.from(this.persistentIncentiveGroups.values()),
+            ...this.productGroups,
+            ...this.individualProducts,
+            ...this.dropdownOptions
+        ];
+
+        const match = sources.find((item: any) =>
+            item?.id === productId ||
+            item?.Id === productId ||
+            item?.productId === productId
+        );
+
+        return match?.name || match?.Name || match?.ProductName || '';
+    }
+
+    hasDiscountItemErrors(item: any): boolean {
+        return this.hasItemErrors(item, this.discountErrorProductIds);
+    }
+
+    hasIncentiveItemErrors(item: any): boolean {
+        return this.hasItemErrors(item, this.incentiveErrorProductIds);
+    }
+
+    private hasItemErrors(item: any, errorProductIds: string[]): boolean {
+        if (!errorProductIds?.length) return false;
+        const productIds = item?.productIds || [];
+        if (productIds.length === 0) return false;
+        return productIds.some((id: string) => errorProductIds.includes(id));
+    }
+
     ngOnChanges(changes: any) {
         if (changes['productId'] && changes['productId'].currentValue && changes['productId'].currentValue !== changes['productId'].previousValue) {
             this.dataFetched = false; // Reset if product ID actually changes
@@ -591,7 +675,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         this.activeTab = tab;
         this.periodDropdownOpen = false;
         this.viewMode = 'all'; // Reset view mode when switching tabs
-        
+
         // Reset selections and forms when switching tabs to satisfy "fresh tab" requirement
         this.resetSelections();
         this.persistentIncentiveGroups.clear();
@@ -703,7 +787,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
 
         this.showProductSelector = true;
         // Always reset view mode to 'all' for a fresh start as requested
-        this.viewMode = 'all'; 
+        this.viewMode = 'all';
         // Always start on Product Groups tab
         this.productTab = 'groups';
         // Redundant call removed - picklists only needed for individual tab if subscription
@@ -1673,7 +1757,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
     toggleItem(item: any) {
         // Validation: Limit products
         if (!item.selected) {
-            if (this.liveQuotaRemaining <= 0) {
+            if (this.liveQuotaRemaining <= 0 && !this.wasSelectedAtModalOpen(item)) {
                 this.toastService.show(`Maximum product limit reached. Check the remaining quota in the header.`, 'warning');
                 return;
             }
@@ -1692,6 +1776,8 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
                     this.persistentIncentiveGroups.delete(item.id);
                 }
             }
+            // Persist selections to session so they survive page refresh
+            this.saveCurrentState();
             return;
         }
         const map = this.productTab === 'groups' ? this.persistentSelectedGroups : this.persistentSelectedIndividuals;
@@ -1700,6 +1786,8 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         } else {
             map.delete(item.id);
         }
+        // Persist selections to session so they survive page refresh
+        this.saveCurrentState();
     }
 
     updatePersistentSelected(item: any) {
@@ -1720,6 +1808,8 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
             } else if (item.discount === '') {
                 item.discount = null;
             }
+        } else if (item.incentiveAmount === '' || item.incentiveAmount === null || item.incentiveAmount === undefined) {
+            item.incentiveAmount = 0;
         }
 
         let map: Map<string, any>;
@@ -1729,6 +1819,8 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
             map = this.productTab === 'groups' ? this.persistentSelectedGroups : this.persistentSelectedIndividuals;
         }
         map.set(item.id, item);
+        // Persist value changes to session so they survive page refresh
+        this.saveCurrentState();
     }
 
     clearDiscountZero(item: any) {
@@ -1744,6 +1836,18 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         }
     }
 
+    clearIncentiveZero(item: any) {
+        if (item.incentiveAmount === 0) {
+            item.incentiveAmount = null;
+        }
+    }
+
+    restoreIncentiveZero(item: any) {
+        if (item.incentiveAmount === null || item.incentiveAmount === undefined || item.incentiveAmount === '') {
+            item.incentiveAmount = 0;
+            this.updatePersistentSelected(item);
+        }
+    }
 
     setViewMode(mode: 'all' | 'selected') {
         this.viewMode = mode;
@@ -1826,18 +1930,18 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         }
 
         // remainingQuota is the number of items we can still select RIGHT NOW
-        let availableQuota = this.remainingQuota;
+        let availableQuota = this.modalRemainingQuota;
 
         this.filteredItems.forEach(item => {
             const becomingSelected = !allSelected;
 
             // Check limit when selecting
             if (becomingSelected && !item.selected) {
-                if (availableQuota <= 0) {
+                if (availableQuota <= 0 && !this.wasSelectedAtModalOpen(item)) {
                     blockedByLimit = true;
                     return; // Skip this one
                 }
-                availableQuota--;
+                if (!this.wasSelectedAtModalOpen(item)) availableQuota--;
             } else if (!becomingSelected && item.selected) {
                 availableQuota++;
             }
@@ -1853,6 +1957,8 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         if (blockedByLimit) {
             this.toastService.show(`Selection partially blocked: Maximum product limit reached. Check the remaining quota in the header.`, 'warning');
         }
+        // Persist selections to session so they survive page refresh
+        this.saveCurrentState();
     }
 
     // Management Actions
@@ -2035,6 +2141,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
                 "attributes": { "type": "QuoteLineItem", "method": "POST" },
                 "QuoteId": quoteId,
                 "Product2Id": item.id,
+                "ProductName": item.name,
                 "PricebookEntryId": item.pricebookEntryId || DEFAULT_PBE_ID,
                 "StartDate": this.activeDiscountPeriod?.startDate,
                 "EndDate": this.activeDiscountPeriod?.endDate,
@@ -2071,7 +2178,7 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
 
         // Staging locally instead of immediate API call
         this.discountIncentiveStateService.addPendingTransaction(transactionPayload, quoteId);
-        
+
         const endTime = performance.now();
         const responseTimeSecs = ((endTime - startTime) / 1000).toFixed(2);
         this.toastService.show(`${selectedItems.length} products staged locally (${responseTimeSecs}s)`, 'success');
@@ -2082,14 +2189,14 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         });
 
         // Add to UI summary
-        this.addDiscountToUI('Bulk Upload', 0, selectedItems.length, 'CSV Data', selectedItems.length, responseTimeSecs);
+        this.addDiscountToUI('Bulk Upload', 0, selectedItems.length, 'CSV Data', selectedItems.length, responseTimeSecs, selectedItems.map(item => item.id));
 
         this.saveCurrentState(); // Persist bulk IDs
         this.dataFetched = false;
         this.showProductSelector = false;
         this.router.navigate(['/quote-configuration']);
         console.log('✅ Bulk Upload staged locally. Redirecting to Configure Quote.');
-        
+
         this.isLoading = false;
         this.loadingService.hide();
     }
@@ -2107,103 +2214,104 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         this.loadingService.show();
         const startTime = performance.now();
 
-                const records: any[] = [];
+        const records: any[] = [];
 
-                // A. Add Quote PATCH record
-                records.push({
-                    "referenceId": "refQuote",
-                    "record": {
-                        "attributes": {
-                            "method": "PATCH",
-                            "type": "Quote",
-                            "id": quoteId
-                        }
-                    }
-                });
-
-                // B. Build QuoteLineItems
-                selectedItems.forEach((item, index) => {
-                    let pbeId = item.pricebookEntryId || DEFAULT_PBE_ID;
-                    let productId = item.id;
-                    let sortOrder = item.sortOrder;
-
-                    // Fallback PBE if still missing
-                    pbeId = pbeId || '01uDz00000dqLY8IAM';
-
-                    const lineRefId = `refLine_${index}`;
-                    const lineRecord: any = {
-                        "attributes": { "type": "QuoteLineItem", "method": "POST" },
-                        "QuoteId": quoteId,
-                        "Product2Id": productId,
-                        "PricebookEntryId": pbeId,
-                        "StartDate": this.activeDiscountPeriod?.startDate,
-                        "EndDate": this.activeDiscountPeriod?.endDate,
-                        "PeriodBoundary": "Anniversary",
-                        "Quantity": Number(item.quantity) || 1,
-                        "Discount": Number(item.discount) || 0,
-                        "SortOrder": Number(sortOrder) || 0
-                    };
-
-                    records.push({
-                        "referenceId": lineRefId,
-                        "record": lineRecord
-                    });
-                });
-
-                if (records.length <= 1) {
-                    this.toastService.show('No valid products to add', 'warning');
-                    this.isLoading = false;
-                    this.loadingService.hide();
-                    return;
+        // A. Add Quote PATCH record
+        records.push({
+            "referenceId": "refQuote",
+            "record": {
+                "attributes": {
+                    "method": "PATCH",
+                    "type": "Quote",
+                    "id": quoteId
                 }
+            }
+        });
 
-                const transactionPayload = {
-                    "pricingPref": "System",
-                    "catalogRatesPref": "Skip",
-                    "configurationPref": {
-                        "configurationMethod": "Skip",
-                        "configurationOptions": {
-                            "validateProductCatalog": true,
-                            "validateAmendRenewCancel": true,
-                            "executeConfigurationRules": true,
-                            "addDefaultConfiguration": true
-                        }
-                    },
-                    "taxPref": "Skip",
-                    "contextDetails": {},
-                    "graph": {
-                        "graphId": "createQuoteWithLines",
-                        "records": records
-                    }
-                };
+        // B. Build QuoteLineItems
+        selectedItems.forEach((item, index) => {
+            let pbeId = item.pricebookEntryId || DEFAULT_PBE_ID;
+            let productId = item.id;
+            let sortOrder = item.sortOrder;
 
-                // Stage locally instead of immediate API call
-                this.discountIncentiveStateService.addPendingTransaction(transactionPayload, quoteId);
+            // Fallback PBE if still missing
+            pbeId = pbeId || '01uDz00000dqLY8IAM';
 
-                const endTime = performance.now();
-                const responseTimeSecs = ((endTime - startTime) / 1000).toFixed(2);
-                this.toastService.show(`Changes staged locally. Click Save to confirm. (${responseTimeSecs}s)`, 'success');
-                const selectedGroupCount = this.persistentSelectedGroups.size;
-                const selectedIndividualCount = this.persistentSelectedIndividuals.size;
-                const discValue = this.discountForm.value ? this.discountForm.value + '%' : 'Updated';
+            const lineRefId = `refLine_${index}`;
+            const lineRecord: any = {
+                "attributes": { "type": "QuoteLineItem", "method": "POST" },
+                "QuoteId": quoteId,
+                "Product2Id": productId,
+                "ProductName": item.name,
+                "PricebookEntryId": pbeId,
+                "StartDate": this.activeDiscountPeriod?.startDate,
+                "EndDate": this.activeDiscountPeriod?.endDate,
+                "PeriodBoundary": "Anniversary",
+                "Quantity": Number(item.quantity) || 1,
+                "Discount": Number(item.discount) || 0,
+                "SortOrder": Number(sortOrder) || 0
+            };
 
-                // Count committed items = selected groups + selected individuals (line items added)
-                const committedCount = this.persistentSelectedGroups.size + selectedIndividualCount;
+            records.push({
+                "referenceId": lineRefId,
+                "record": lineRecord
+            });
+        });
 
-                this.addDiscountToUI(this.discountForm.granularity, selectedGroupCount, selectedIndividualCount, discValue, committedCount, responseTimeSecs);
-                this.resetSelections();
-                // Reset dataFetched so that next time the component is opened it can refresh data if needed
-                this.dataFetched = false;
-                this.saveCurrentState(); // Persist discounts locally
+        if (records.length <= 1) {
+            this.toastService.show('No valid products to add', 'warning');
+            this.isLoading = false;
+            this.loadingService.hide();
+            return;
+        }
 
-                this.showProductSelector = false;
-                this.router.navigate(['/quote-configuration']);
-                
-                this.isLoading = false;
-                this.loadingService.hide();
+        const transactionPayload = {
+            "pricingPref": "System",
+            "catalogRatesPref": "Skip",
+            "configurationPref": {
+                "configurationMethod": "Skip",
+                "configurationOptions": {
+                    "validateProductCatalog": true,
+                    "validateAmendRenewCancel": true,
+                    "executeConfigurationRules": true,
+                    "addDefaultConfiguration": true
+                }
+            },
+            "taxPref": "Skip",
+            "contextDetails": {},
+            "graph": {
+                "graphId": "createQuote",
+                "records": records
+            }
+        };
+
+        // Stage locally instead of immediate API call
+        this.discountIncentiveStateService.addPendingTransaction(transactionPayload, quoteId);
+
+        const endTime = performance.now();
+        const responseTimeSecs = ((endTime - startTime) / 1000).toFixed(2);
+        this.toastService.show(`Changes staged locally. Click Save to confirm. (${responseTimeSecs}s)`, 'success');
+        const selectedGroupCount = this.persistentSelectedGroups.size;
+        const selectedIndividualCount = this.persistentSelectedIndividuals.size;
+        const discValue = this.discountForm.value ? this.discountForm.value + '%' : 'Updated';
+
+        // Count committed items = selected groups + selected individuals (line items added)
+        const committedCount = this.persistentSelectedGroups.size + selectedIndividualCount;
+
+        this.addDiscountToUI(this.discountForm.granularity, selectedGroupCount, selectedIndividualCount, discValue, committedCount, responseTimeSecs, selectedItems.map(item => item.id));
+        this.resetSelections();
+        // Reset dataFetched so that next time the component is opened it can refresh data if needed
+        this.dataFetched = false;
+        this.saveCurrentState(); // Persist discounts locally
+
+        this.showProductSelector = false;
+        this.router.navigate(['/quote-configuration']);
+
+        this.isLoading = false;
+        this.loadingService.hide();
     }
 
-    private addDiscountToUI(granularity: string, groupCount: number, individualCount: number, value: string, committedProductCount: number = 0, responseTimeSecs?: string) {
+    private addDiscountToUI(granularity: string, groupCount: number, individualCount: number, value: string, committedProductCount: number = 0, responseTimeSecs?: string, productIds: string[] = []) {
 
         let title = `${granularity} Discount - Flat Rate (%)`;
         let subtext = `${groupCount} Product Groups, ${individualCount} Products ${responseTimeSecs ? '(' + responseTimeSecs + 's)' : ''}`;
@@ -2221,10 +2329,119 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
             type: 'discount',
             granularity: granularity,
             itemCount: committedProductCount,
-            responseTime: responseTimeSecs
+            responseTime: responseTimeSecs,
+            productIds
         };
         if (!this.activeDiscountPeriod) return;
         this.activeDiscountPeriod.activeDiscounts.push(newDiscount); // Add to bottom
+    }
+
+    applyErrorProductUpdates(payload: any) {
+        const mode = payload?.mode; // 'discount' or 'incentive'
+        const edits = payload?.edits || [];
+        const deletes = payload?.deletes || [];
+
+        if (edits.length === 0 && deletes.length === 0) return;
+
+        const editedIds = edits.map((e: any) => e.id);
+        const deletedIds = deletes.map((d: any) => d.id);
+        const affectedIds = new Set([...editedIds, ...deletedIds]);
+
+        // 1. Remove affected IDs from existing blocks, and update their subtext/itemCount
+        const periods = mode === 'discount' ? this.discountPeriods : this.incentivePeriods;
+        periods.forEach((period: any) => {
+            const activeItems = mode === 'discount' ? period.activeDiscounts : period.activeIncentives;
+
+            // Iterate backward to safely remove empty blocks
+            for (let i = activeItems.length - 1; i >= 0; i--) {
+                const item = activeItems[i];
+                if (item.productIds && item.productIds.length > 0) {
+                    const originalCount = item.productIds.length;
+                    item.productIds = item.productIds.filter((id: string) => !affectedIds.has(id));
+
+                    if (item.productIds.length !== originalCount) {
+                        item.itemCount = item.productIds.length;
+                        // Update subtext
+                        if (mode === 'discount') {
+                            const timeMatch = item.subtext?.match(/\(([^)]*s)\)/);
+                            const timeStr = timeMatch ? ` ${timeMatch[0]}` : '';
+                            item.subtext = `${item.itemCount} Products${timeStr}`;
+                        } else {
+                            const timeMatch = item.subtext?.match(/\(([^)]*s)\)/);
+                            const timeStr = timeMatch ? ` ${timeMatch[0]}` : '';
+                            item.subtext = `${item.itemCount} Product Group${item.itemCount !== 1 ? 's' : ''}${timeStr}`;
+                        }
+                    }
+
+                    // Remove the block entirely if no products remain
+                    if (item.productIds.length === 0) {
+                        activeItems.splice(i, 1);
+                    }
+                }
+            }
+        });
+
+        // 2. Add a new block for the EDITED products
+        if (edits.length > 0) {
+            const values = edits.map((e: any) => e.value);
+            const uniqueValues = Array.from(new Set(values));
+
+            let displayValue = '';
+            let title = '';
+            let subtext = '';
+            let granularity = 'Granular';
+
+            if (mode === 'discount') {
+                if (uniqueValues.length === 1) {
+                    granularity = 'Overall';
+                    displayValue = `${uniqueValues[0]}%`;
+                    title = `Overall Discount - Flat Rate (%)`;
+                } else {
+                    granularity = 'Granular';
+                    displayValue = 'Updated';
+                    title = `Granular Discount - Flat Rate (%)`;
+                }
+                subtext = `${edits.length} Products (Edited)`;
+
+                if (this.activeDiscountPeriod) {
+                    this.activeDiscountPeriod.activeDiscounts.push({
+                        id: 'd' + Date.now(),
+                        title: title,
+                        subtext: subtext,
+                        value: displayValue,
+                        type: 'discount',
+                        granularity: granularity,
+                        itemCount: edits.length,
+                        productIds: editedIds
+                    });
+                }
+            } else {
+                if (uniqueValues.length === 1) {
+                    granularity = 'Overall';
+                    displayValue = `$${uniqueValues[0]}`;
+                    title = `Incentives`;
+                } else {
+                    granularity = 'Granular';
+                    displayValue = `${edits.length} group${edits.length !== 1 ? 's' : ''} with custom amounts`;
+                    title = `Incentives`;
+                }
+                subtext = `${edits.length} Product Group${edits.length !== 1 ? 's' : ''} (Edited)`;
+
+                if (this.activeIncentivePeriod) {
+                    this.activeIncentivePeriod.activeIncentives.push({
+                        id: 'i' + Date.now(),
+                        title: title,
+                        subtext: subtext,
+                        value: displayValue,
+                        type: 'incentive',
+                        itemCount: edits.length,
+                        productIds: editedIds
+                    });
+                }
+            }
+        }
+
+        this.saveCurrentState();
     }
 
     addIncentive() {
@@ -2276,81 +2493,83 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
             });
         }
 
-                const records: any[] = [
-                    {
-                        "referenceId": "refQuote",
-                        "record": {
-                            "attributes": { "method": "PATCH", "type": "Quote", "id": quoteId }
-                        }
-                    }
-                ];
+        const records: any[] = [
+            {
+                "referenceId": "refQuote",
+                "record": {
+                    "attributes": { "method": "PATCH", "type": "Quote", "id": quoteId }
+                }
+            }
+        ];
 
-                // Building records
-                resolvedItems.forEach((item, index) => {
-                    const lineRecord: any = {
-                        "attributes": { "type": "QuoteLineItem", "method": "POST" },
-                        "QuoteId": quoteId,
-                        "Product2Id": item.id,
-                        "PricebookEntryId": item.pbeId || '01uDz00000dqLY8IAM',
-                        "StartDate": this.activeIncentivePeriod.startDate,
-                        "EndDate": this.activeIncentivePeriod.endDate,
-                        "PeriodBoundary": "Anniversary",
-                        "Quantity": 1,
-                        "Incentive__c": parseFloat(item.incentiveAmount) || 0,
-                        "SortOrder": Number(item.sortOrder) || 0
-                    };
+        // Building records
+        resolvedItems.forEach((item, index) => {
+            const lineRecord: any = {
+                "attributes": { "type": "QuoteLineItem", "method": "POST" },
+                "QuoteId": quoteId,
+                "Product2Id": item.id,
+                "ProductName": item.name,
+                "PricebookEntryId": item.pbeId || '01uDz00000dqLY8IAM',
+                "StartDate": this.activeIncentivePeriod.startDate,
+                "EndDate": this.activeIncentivePeriod.endDate,
+                "PeriodBoundary": "Anniversary",
+                "Quantity": 1,
+                "Incentive__c": parseFloat(item.incentiveAmount) || 0,
+                "SortOrder": Number(item.sortOrder) || 0
+            };
 
-                    records.push({
-                        "referenceId": `refIncentive_${index}`,
-                        "record": lineRecord
-                    });
-                });
+            records.push({
+                "referenceId": `refIncentive_${index}`,
+                "record": lineRecord
+            });
+        });
 
-                const payload = {
-                    "pricingPref": "Skip",
-                    "catalogRatesPref": "Skip",
-                    "configurationPref": {
-                        "configurationMethod": "Skip",
-                        "configurationOptions": {
-                            "validateProductCatalog": true,
-                            "validateAmendRenewCancel": true,
-                            "executeConfigurationRules": true,
-                            "addDefaultConfiguration": false
-                        }
-                    },
-                    "taxPref": "Skip",
-                    "contextDetails": {},
-                    "graph": {
-                        "graphId": "insert_incentive",
-                        "records": records
-                    }
-                };
+        const payload = {
+            "pricingPref": "Skip",
+            "catalogRatesPref": "Skip",
+            "configurationPref": {
+                "configurationMethod": "Skip",
+                "configurationOptions": {
+                    "validateProductCatalog": true,
+                    "validateAmendRenewCancel": true,
+                    "executeConfigurationRules": true,
+                    "addDefaultConfiguration": false
+                }
+            },
+            "taxPref": "Skip",
+            "contextDetails": {},
+            "graph": {
+                "graphId": "insert_incentive",
+                "records": records
+            }
+        };
 
-                // Stage locally instead of API call
-                this.discountIncentiveStateService.addPendingTransaction(payload, quoteId);
+        // Stage locally instead of API call
+        this.discountIncentiveStateService.addPendingTransaction(payload, quoteId);
 
-                const endTime = performance.now();
-                const responseTimeSecs = ((endTime - startTime) / 1000).toFixed(2);
-                this.toastService.show(`Changes staged locally. Click Save to confirm. (${responseTimeSecs}s)`, 'success');
-                const groupCount = selectedGroups.length;
-                const displayValue = `${groupCount} group${groupCount !== 1 ? 's' : ''} with custom amounts`;
-                this.activeIncentivePeriod.activeIncentives.push({
-                    id: 'i' + Date.now(),
-                    title: this.incentiveForm.type,
-                    subtext: `${groupCount} Product Group${groupCount !== 1 ? 's' : ''} (${responseTimeSecs}s)`,
-                    value: displayValue,
-                    type: 'incentive',
-                    itemCount: groupCount,
-                    responseTime: responseTimeSecs
-                });
-                this.incentiveForm.amount = '';
-                this.persistentIncentiveGroups.clear();
-                this.productGroups.forEach(g => { g.selected = false; });
-                this.dataFetched = false;
-                this.saveCurrentState(); // Persist incentives locally
-                
-                this.isLoading = false;
-                this.loadingService.hide();
+        const endTime = performance.now();
+        const responseTimeSecs = ((endTime - startTime) / 1000).toFixed(2);
+        this.toastService.show(`Changes staged locally. Click Save to confirm. (${responseTimeSecs}s)`, 'success');
+        const groupCount = selectedGroups.length;
+        const displayValue = `${groupCount} group${groupCount !== 1 ? 's' : ''} with custom amounts`;
+        this.activeIncentivePeriod.activeIncentives.push({
+            id: 'i' + Date.now(),
+            title: this.incentiveForm.type,
+            subtext: `${groupCount} Product Group${groupCount !== 1 ? 's' : ''} (${responseTimeSecs}s)`,
+            value: displayValue,
+            type: 'incentive',
+            itemCount: groupCount,
+            responseTime: responseTimeSecs,
+            productIds: resolvedItems.map(item => item.id)
+        });
+        this.incentiveForm.amount = '';
+        this.persistentIncentiveGroups.clear();
+        this.productGroups.forEach(g => { g.selected = false; });
+        this.dataFetched = false;
+        this.saveCurrentState(); // Persist incentives locally
+
+        this.isLoading = false;
+        this.loadingService.hide();
     }
 
     get totalProductsCount(): number {
@@ -2404,6 +2623,11 @@ export class DiscountsIncentivesComponent implements OnChanges, OnDestroy {
         this.incentiveForm.type = 'Select';
     }
     restrictNumeric(event: KeyboardEvent) {
+        const shortcutKey = event.key.toLowerCase();
+        if ((event.ctrlKey || event.metaKey) && ['a', 'c', 'x', 'v', 'z', 'y'].includes(shortcutKey)) {
+            return;
+        }
+
         const allowedKeys = ['Backspace', 'Tab', 'Enter', 'ArrowLeft', 'ArrowRight', 'Delete', 'End', 'Home'];
         if (allowedKeys.includes(event.key)) return;
 

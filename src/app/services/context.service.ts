@@ -20,23 +20,58 @@ export class ContextService {
     private loggingService = inject(LoggingService);
     private http: HttpClient;
 
+    public quoteEntitiesMappingId: string | null = null;
+
     constructor() {
         this.http = new HttpClient(this.httpBackend); // Bypass interceptors for this specific client
         // Listen for data from the Salesforce Bridge
         window.addEventListener('sfcontextready', () => {
             if (window.SF_CONTEXT) {
                 this.contextSubject.next(window.SF_CONTEXT);
+                this.fetchMappingId();
             }
         });
 
         if (window.SF_CONTEXT) {
             this.contextSubject.next(window.SF_CONTEXT);
+            this.fetchMappingId();
         }
 
         // Check availability of token on init
         if (!this.accessToken) {
-            this.fetchSessionToken().subscribe();
+            this.fetchSessionToken().subscribe(() => {
+                this.fetchMappingId();
+            });
+        } else {
+            this.fetchMappingId();
         }
+    }
+
+    /**
+     * Fetches the ContextMapping ID for QuoteEntitiesMapping
+     */
+    private fetchMappingId() {
+        if (!this.accessToken || this.quoteEntitiesMappingId) return;
+
+        const baseUrl = this.apiBaseUrl || 'https://vector--rcaagivant.sandbox.my.salesforce.com';
+        const query = "SELECT Id,Title,ContextDefinitionVersionId,IsDefault,CreatedDate FROM ContextMapping WHERE Title='QuoteEntitiesMapping' AND ContextDefinitionVersionId='11pDz000000000LIAQ'";
+        const url = `${baseUrl}/services/data/v60.0/query/?q=${encodeURIComponent(query)}`;
+
+        const headers = {
+            'Authorization': `Bearer ${this.accessToken}`,
+            'Content-Type': 'application/json'
+        };
+
+        this.http.get(url, { headers }).pipe(
+            map((res: any) => (res.records && res.records.length > 0) ? res.records[0].Id : null),
+            catchError(err => {
+                console.error('Error fetching ContextMapping ID:', err);
+                return of(null);
+            })
+        ).subscribe(id => {
+            this.quoteEntitiesMappingId = id;
+            console.log('✅ ContextService: QuoteEntitiesMapping ID stored:', id);
+        });
     }
 
     private getInitialContext() {

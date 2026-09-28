@@ -9,12 +9,14 @@ export interface QuoteData {
     website: string | null;
     pricebook2Id: string | null;
     quoteId: string | null;
+    quoteName: string | null;
     quoteNumber: string | null;
     primaryContactName: string | null;
     salesChannel: string | null;
     productName: string | null;
     productId: string | null;
     categoryId: string | null;
+    operationType: string | null;
     products: Array<{ id: string, name: string, categoryId: string, quoteLineId?: string }> | null;
 }
 
@@ -26,12 +28,14 @@ const EMPTY_QUOTE_DATA: QuoteData = {
     website: null,
     pricebook2Id: null,
     quoteId: null,
+    quoteName: null,
     quoteNumber: null,
     primaryContactName: null,
     salesChannel: null,
     productName: null,
     productId: null,
     categoryId: null,
+    operationType: null,
     products: null
 };
 

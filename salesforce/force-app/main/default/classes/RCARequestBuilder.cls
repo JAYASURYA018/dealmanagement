@@ -53,7 +53,7 @@ public class RCARequestBuilder {
         String productFamily
     ) {
         Map<String, Object> graph = new Map<String, Object>();
-        graph.put('graphId', 'createQuoteWithLines');
+        graph.put('graphId', 'createQuote');
         
         List<Map<String, Object>> records = new List<Map<String, Object>>();
         

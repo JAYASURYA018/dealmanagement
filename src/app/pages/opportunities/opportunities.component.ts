@@ -151,6 +151,7 @@ export class OpportunitiesComponent implements OnInit {
                         salesChannel: rawOpp.Sales_Channel__c || 'Direct'
                     });
 
+                    this.cartService.clearCart();
                     this.rcaApi.getProducts();
                     this.router.navigate(['/products'], {
                         queryParams: { opportunityId: rawOpp.Id }

@@ -951,7 +951,7 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr *ngFor="let commitment of commitmentDetailsOnly; let i = index"
+                                    <tr *ngFor="let commitment of previewCommitments; let i = index"
                                         class="hover:bg-gray-50">
                                         <td class="border border-gray-300 px-3 py-2 text-sm text-center">{{ i +
                                             1 }}
@@ -970,7 +970,7 @@
                                             {{
                                             formatCurrency(commitment.amount) }}</td>
                                     </tr>
-                                    <tr *ngIf="commitmentDetailsOnly.length === 0">
+                                    <tr *ngIf="previewCommitments.length === 0">
                                         <td colspan="6"
                                             class="border border-gray-300 px-3 py-4 text-center text-sm text-gray-500 italic">
                                             No commitment periods defined</td>
